@@ -12,7 +12,7 @@ This document explains the concept, the problems it addresses, how it integrates
 
 ## The Problem This Tries to Solve
 
-AI generates code far faster than humans can review it. Humans are the bottleneck on shipping changes, and the bottleneck will only tighten as models and agents get better. This work designs a change process that optimizes for the humans still in the loop today, and gets better as the AI in the loop gets better.
+AI generates code far faster than humans can review it. A competent engineer with a good model produces thousands of lines a day; human review is sequential, attention-limited, and scales roughly linearly. Humans are the bottleneck on shipping changes today, and the bottleneck will only tighten — code generation keeps accelerating while reviewer throughput stays roughly flat. This work designs a change process that optimizes for the humans still in the loop today, and gets better as the AI in the loop gets better.
 
 Just as autonomous vehicles will eventually drive themselves and we'll think nothing of it, code review will eventually be done by AI and we'll think nothing of that either. The point of a good process today is to walk us toward that future smoothly — more AI, less human, comfort accumulating along the way.
 
