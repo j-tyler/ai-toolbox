@@ -4,9 +4,9 @@
 
 A `CHANGE_INTENT.md` is a structured document authored by a human (with AI assistance) **before any code is written** for a change. It captures *why* the change is being made and *what externally observable invariants must hold* for the change to be considered correct.
 
-The same document then serves as the completion condition for an implementation agent (via Claude Code's `/goal`), giving the agent a verifiable target and giving the human a structured artifact to review instead of a raw diff.
+The same document then serves two downstream roles. First, it's the completion condition for the implementation agent (e.g., Claude Code's `/goal`), giving the agent a verifiable target to work toward. Second, it's the contract an AI code review pass checks the resulting diff against — before the change ever reaches a human reviewer. The human reviewer then receives a structured artifact, machine-verified evidence the diff matches it, and can spend their attention on the judgment question — *is this the right intent?* — rather than redoing the verification work.
 
-This document explains the concept, the problems it addresses, how it integrates with `/goal`, and how a Claude Code skill could produce these intent documents through structured dialogue.
+This document explains the concept, the problems it addresses, how it integrates with the implementation and review phases downstream, and how a Claude Code skill could produce these intent documents through structured dialogue.
 
 ---
 
@@ -93,7 +93,11 @@ CHANGE_INTENT splits the work so each gets done by the right agent at the right 
 
 ---
 
-## How It Integrates with Claude Code's `/goal`
+## How It Integrates Downstream
+
+The change intent has two downstream consumers. The implementation agent uses it as a *goal* — a completion condition to work toward. An AI code review pass then uses it as a *contract* — checking the resulting diff against what was claimed. Each stage adds an independent layer of verification before the change reaches a human reviewer.
+
+### Implementation phase: the intent as the `/goal` condition
 
 Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a completion condition and have the implementation agent keep working autonomously across turns until that condition is met. After each turn, a separate evaluator model (Haiku by default) reads the conversation transcript and decides whether the condition holds. If yes, the goal clears. If no, the agent continues with the evaluator's reason as guidance for the next turn.
 
@@ -107,16 +111,25 @@ Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a complet
 - `[strengthened]` invariants: a tighter test is added and passes
 - `[modified]` / `[removed]` invariants: explicit demonstration that the new state is correct
 
-The evaluator checks the transcript and confirms.
+The in-loop evaluator checks the transcript and confirms each turn. It's a fast first pass; the more reliable check happens next.
+
+### Review phase: the intent as the AI reviewer's target
+
+After the goal clears, an AI code review pass runs against the resulting diff with the change intent as context. The review pass validates two things on top of the standard checks you'd expect:
+
+1. **Is the intent itself well-described?** Are claims falsifiable, are all relevant categories addressed, is the scope clearly bounded? A vague or incomplete intent is a defect in its own right and should bounce the change back before the diff is even examined.
+2. **Does the diff match the intent?** Every invariant the change claims to establish, preserve, weaken, or remove is reflected in the diff and supported by visible evidence. Nothing externally observable shows up in the diff that isn't covered by the intent or the "out of scope" section.
+
+This is independent from and stronger than the in-loop `/goal` evaluator. The evaluator is a fast Haiku pass over a transcript; the review pass is a slower, stronger model with access to the full diff and repository context. It also runs the usual review checks — concurrency hazards, security boundaries, error handling, comment clarity — but now with the intent as additional context shaping what to focus on.
+
+Only after the review pass approves does the change reach a human reviewer. By then there are two independent machine-verified confirmations that the implementation matches the stated intent, and the human can spend their attention on the judgment question rather than the verification one.
 
 ### Workflow
 
 1. Human (with skill assistance) produces `CHANGE_INTENT.md`
-2. Human starts implementation phase: `/goal` with the invariants as the condition
-3. Implementation agent writes code, runs tests, demonstrates each invariant
-4. Evaluator (Haiku) reads transcript after each turn; checks whether all invariants are demonstrated and no out-of-scope behavior was introduced
-5. When all conditions met, goal clears; control returns to human for final review
-6. Human reviews against the original intent — not "is the code correct" (the machine already verified that) but "is this the right intent" (which is a judgment task)
+2. Implementation phase: `/goal` with the invariants as the condition. Agent writes code, runs tests, and demonstrates each invariant. In-loop evaluator (Haiku) confirms each turn.
+3. When the goal clears, the AI code review pass runs against the diff with the intent as context, validates intent quality and intent-vs-diff alignment, and runs standard review checks.
+4. Once the review pass approves, the change reaches a human reviewer. They focus on the judgment question — *is this the right intent?* — not on verifying the code matches it (that has already been checked twice).
 
 ### Sample `/goal` invocation
 
@@ -128,7 +141,7 @@ The evaluator checks the transcript and confirms.
 - The change does not introduce externally observable behavior outside the listed invariants and the "out of scope" section
 ```
 
-The last line is the **bidirectional check** at the change level: not just "did the agent prove what it was supposed to," but "did the agent stay within scope." If the implementation introduces logging, error handling, side effects, or behavior changes that aren't mentioned in the intent, the evaluator should flag it. Whether the Haiku evaluator can reliably catch this without help is an open question — see Design Tensions below.
+The last line is the **bidirectional check** at the change level: not just "did the agent prove what it was supposed to," but "did the agent stay within scope." This check runs both in-loop (Haiku, fast) and again in the AI review pass (stronger model, full diff visibility). The in-loop pass is a fast first cut; the review pass is the more reliable gate. Whether the Haiku evaluator alone can reliably catch out-of-scope behavior is an open question — see Design Tensions below.
 
 ---
 
@@ -278,13 +291,13 @@ approved for user profile data.
   singleflight behavior.
 ```
 
-The implementation agent then takes this file as the `/goal` condition. After each turn, the evaluator checks:
+The implementation agent then takes this file as the `/goal` condition. After each turn, the in-loop evaluator checks:
 - Does the transcript demonstrate each `[unchanged]` invariant still holds (passing tests visible)?
 - Does the transcript demonstrate each `[new]` invariant (new tests passing, benchmark results)?
 - Is the `[weakened]` invariant's new form visible? Is the old (stronger) assertion gone?
 - Has the implementation introduced any externally observable behavior not in this list and not in "Out of scope"?
 
-When all conditions are met, the goal clears and the human reviews — not the code, but the alignment between the original intent and what was produced.
+When all conditions are met, the goal clears. The AI code review pass then takes the diff with this intent as context, validates the alignment again under a stronger model, and runs the standard checks (concurrency, errors, security, clarity). Only then does the change reach the human reviewer — who focuses not on the code itself but on whether the intent captured here was the right one to ship.
 
 ---
 
@@ -321,8 +334,8 @@ This document covers only the macro layer — change-scoped, human-authored (wit
 
 ## Summary
 
-`CHANGE_INTENT.md` is a per-change artifact authored *before* code, capturing the why and the externally observable invariants the change must satisfy. It's produced through structured dialogue between a human (who provides the intent) and an AI (which provides context from the existing codebase, pushes for category coverage, and enforces falsifiability). The artifact then serves as the `/goal` condition for the implementation phase, giving the implementation agent a verifiable target and giving the human a structured object to review instead of a raw diff.
+`CHANGE_INTENT.md` is a per-change artifact authored *before* code, capturing the why and the externally observable invariants the change must satisfy. It's produced through structured dialogue between a human (who provides the intent) and an AI (which provides context from the existing codebase, pushes for category coverage, and enforces falsifiability). The artifact then serves two downstream roles: it's the `/goal` condition for the implementation phase, and it's the contract an AI code review pass checks the resulting diff against before any human review.
 
-The discipline replaces the fiction of careful per-line human review with a process that's actually verifiable, scoped to each change, and produced by both parties at the level each is good at: humans set intent, AI enforces rigor, and the same artifact bridges both.
+The discipline replaces the fiction of careful per-line human review with a process that's actually verifiable, scoped to each change, and produced by each party at the level it's good at: humans set intent, AI enforces rigor in authoring, the implementation agent works against a clear target, and the review pass verifies the result before the human reviewer ever opens the diff.
 
-**The skill to build:** a structured-dialogue tool that takes a human's seed intent, reads the affected code surface, and walks the human through Socratic elicitation until every relevant category is addressed and every claim is falsifiable. The output is a `CHANGE_INTENT.md` ready to serve as a `/goal` condition.
+**The skill to build:** a structured-dialogue tool that takes a human's seed intent, reads the affected code surface, and walks the human through Socratic elicitation until every relevant category is addressed and every claim is falsifiable. The output is a `CHANGE_INTENT.md` ready to serve as both the `/goal` condition and the AI review pass's target.
