@@ -144,13 +144,30 @@ The invariants section is required when the change touches scope-spanning proper
 
 Note the shape: each one reaches into the codebase beyond a single test — "across all caller paths," "across all mutation sites," "across access paths," "every code path." That's the verb invariants do. ACs don't.
 
-### Optional sections
+### Out of scope
 
-A complete intent document may also include:
+A list of things this change explicitly is *not* doing. This is the only optional section the design defines, because it carries signal nothing else can.
 
-- **Out of scope** — what is *not* being changed. Anchors the bidirectional check (see below).
-- **Alternatives considered** — what other approaches were evaluated and why they were rejected. Saves future engineers from re-litigating the same tradeoff.
-- **Risks** — what could break, what the blast radius is.
+What it does:
+
+- **Signals to the author at authoring time.** Writing an out-of-scope item often prompts "wait, should this actually be in scope?" The reflection happens before code is written, which is the cheapest place for it.
+- **Signals to the implementation agent.** These areas are excluded from the goal, so the agent doesn't drift into them while satisfying the ACs and invariants.
+- **Signals to the AI review pass.** Items listed here were a conscious choice, not an oversight. The review pass doesn't flag the absence of an out-of-scope item as a defect.
+- **Signals to the human reviewer.** If a related item is missing from this list and the reviewer would expect it to be considered, that's a question to ask — the author may not have thought about it.
+
+Examples:
+- "Distributed cache coordination — single-node cache only for now"
+- "Cache eviction policy customization — using `CacheManager` defaults"
+- "Cache warming or pre-population"
+
+Each item is something the author thought about and explicitly excluded.
+
+**Why no other optional sections?** Two shapes common in design docs are deliberately excluded from this artifact:
+
+- *Alternatives considered* pollutes future searches. An old "rejected alternative" anchors new authors on prior reasoning that may no longer apply, creating gravity around decisions that should be re-evaluated when context shifts.
+- *Risks* biases review. A listed risk becomes the reviewer's checklist; unlisted risks get less scrutiny than fresh eyes on the diff would give them. The author writing the change shouldn't shape the reviewer's attention this way.
+
+Both belong in less-permanent artifacts — discussion threads, working design docs, postmortems — not in the change intent.
 
 ---
 
@@ -364,18 +381,6 @@ immediate consistency, is migrated to a new GetUserUncached method.
 - Eviction policy (using CacheManager defaults: LRU with 100k entry limit)
 - Cache warming or pre-population
 - Distributed cache coordination (single-node cache only for now)
-
-## Alternatives considered
-- Write-through cache: rejected because UpdateUser is rare and the added complexity 
-  doesn't pay for itself at the current write rate.
-- Shorter TTL (5s): rejected because cache hit rate modeling showed it would drop 
-  below the 60% target.
-
-## Risks
-- Stale data visible to PaymentService for up to 30s: confirmed acceptable by 
-  product (charge authorization uses separate fresh-data path).
-- Cache stampede on key expiration: mitigated by CacheManager's built-in 
-  singleflight behavior.
 ```
 
 The implementation agent takes this file as the `/goal` condition. For each acceptance criterion, the agent writes a test that exercises the scenario, runs it, and surfaces the passing result. For each invariant, the agent writes spot-check test(s) for specific cases *and* walks the diff to confirm the property holds at every site where it could be violated — every caller path of `GetUser` for the read-after-write window, every access path into the cache for thread safety, every cache-read code path for the backend-unreachable fallback. The in-loop evaluator checks the transcript for both kinds of evidence.
