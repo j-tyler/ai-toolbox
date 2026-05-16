@@ -173,14 +173,24 @@ Both belong in less-permanent artifacts — discussion threads, working design d
 
 ## Why "Before Any Code"
 
-The timing matters. Writing the intent first is a forcing function: the moment you try to state precisely what must hold, you discover where your thinking is fuzzy. Most software bugs aren't reasoning errors; they're cases the author didn't consider. Articulating acceptance criteria and invariants explicitly surfaces those cases at the cheapest possible time, before the code exists.
+Two reasons, both about timing.
 
-It also separates the two cognitive tasks that get conflated in normal code review:
+**It's a forcing function.** The moment you try to state precisely what must hold, you discover where your thinking is fuzzy. Most software bugs aren't reasoning errors; they're cases the author didn't consider. Articulating acceptance criteria and invariants explicitly surfaces those cases at the cheapest possible time, before the code exists.
 
-1. **Deciding what should be true** — a high-judgment task humans are good at
-2. **Verifying that code matches what should be true** — a mostly mechanical task machines are good at
+**It's the last point where a deciding agent is in the loop.** Once the change intent is set, the implementation runs autonomously — the agent writes code, runs tests, walks the diff, demonstrates the criteria — and the deciding agent is not involved again until review. If a decision about *what the change should be* hasn't been made by then, it doesn't get made. The intent file is the contract between the deciding step and the doing step; once signed, the doing is on its own.
+
+This split also separates the two cognitive tasks that get conflated in normal code review:
+
+1. **Deciding what should be true** — high-judgment work
+2. **Verifying that code matches what should be true** — mostly mechanical work
 
 Change intent splits the work so each gets done by the right agent at the right time.
+
+### The deciding agent doesn't have to be a human
+
+Everything in this design works if an AI orchestrator fills the dialogue role instead of a person. The orchestrator brings the intent, the authoring skill brings the structure and rigor, the result is a change intent file ready for the implementation phase — same artifact, same downstream pipeline.
+
+This is what lets the discipline carry forward into the autonomous trajectory. As humans gradually exit the loop (the Waymo-style arc described at the top of this document), the artifact and process don't change: the orchestrator-implementer-reviewer chain runs end-to-end without a human, each step a different agent with a different job, the change intent file the contract between them. The skill that elicits intent from a human today is the same skill that elicits intent from an orchestrator later — same dialogue shape, same artifact, same pipeline.
 
 ---
 
@@ -235,9 +245,9 @@ The last line is the **bidirectional check** at the change level: not just "did 
 
 ## The Authoring Skill
 
-The skill produces a change intent file through structured dialogue between the human and the AI. The human owns the macro intent; the AI helps make it rigorous, complete, and falsifiable.
+The skill produces a change intent file through structured dialogue with the deciding agent — a human today, possibly an AI orchestrator in autonomous chains. The deciding agent owns the macro intent (what the change should accomplish); the skill helps make that intent rigorous, complete, and falsifiable. The workflow below uses "human" as the dominant case, but every step works the same when the deciding agent is an orchestrator.
 
-**Critical constraint:** the AI **never** invents acceptance criteria or invariants for code that doesn't exist yet. The change hasn't been made. The AI's role is to read the affected surface, surface what currently holds there, and use that context to ask sharper questions about what the change should establish. The human is the source of intent; the AI is the source of context. The file itself only states forward-looking claims — what the change will prove — not a catalog of preserved behavior.
+**Critical constraint:** the skill **never** invents acceptance criteria or invariants for code that doesn't exist yet. The change hasn't been made. The skill's role is to read the affected surface, surface what currently holds there, and use that context to ask sharper questions about what the change should establish. The deciding agent is the source of intent; the skill is the source of context. The file itself only states forward-looking claims — what the change will prove — not a catalog of preserved behavior.
 
 ### Workflow
 
