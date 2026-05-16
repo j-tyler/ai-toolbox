@@ -70,31 +70,20 @@ A short paragraph explaining the motivation for the change. What problem is bein
 
 ### External invariants
 
-A list of properties that must be true for the change to be considered correct. These are observable from outside — by callers of the API, by users of the system, by tests run against the changed surface. Each invariant must be **falsifiable**: stated specifically enough that an evaluator can determine whether it holds based on the implementation's behavior.
+A list of properties that must be true **after this change ships** for it to be considered correct. These are observable from outside — by callers of the API, by users of the system, by tests run against the changed surface. Each invariant must be **falsifiable**: stated specifically enough that an evaluator can determine whether it holds from observable behavior.
+
+The list is forward-looking. It states what the change establishes, demonstrates, or guarantees — not a catalog of every property of the affected code. If a property is already true and your change isn't trying to establish or change it, it doesn't belong in the file. ("Did this change accidentally break something it shouldn't have?" is handled by the review pass through standard regression tests and diff analysis, not by asking every author to enumerate prior behavior up front.)
 
 **Examples of falsifiable invariants:**
-- "GetUser returns nil for users that don't exist (unchanged)"
-- "GetUser remains safe to call concurrently from multiple goroutines (unchanged)"
-- "A user updated via UpdateUser is visible to GetUser within 30 seconds (new; weakened from immediate consistency)"
-- "GetUser P95 response time drops below 10ms on cache hits, measured by BenchmarkGetUser_CacheHit"
+- "GetUser P95 response time is below 10ms on cache hits, asserted by BenchmarkGetUser_CacheHit"
+- "Cache hit rate exceeds 60% under production traffic, measured by the cache_hits / cache_total metric over a rolling 24h window"
+- "A user updated via UpdateUser is visible to GetUser within 30 seconds, asserted by TestGetUser_StalenessWindow"
+- "GetUserUncached method exists and bypasses the cache, returning fresh data on every call, asserted by TestGetUserUncached_AlwaysFresh"
 
 **Examples of non-falsifiable claims that should be rejected:**
 - "GetUser is faster" — faster than what, by how much, measured how
 - "The cache is correct" — correct in what sense
 - "Backward compatibility is preserved" — which API surface, verified how
-
-### Invariant annotations
-
-Each invariant carries an annotation describing how it changes relative to the current state:
-
-- **`[unchanged]`** — the invariant currently holds; the change must preserve it
-- **`[new]`** — the invariant doesn't currently hold; the change establishes it
-- **`[weakened]`** — the invariant currently holds in a stronger form; the change relaxes it (requires justification)
-- **`[strengthened]`** — the change tightens an existing invariant
-- **`[modified]`** — the invariant changes in a way that isn't a simple weakening or strengthening
-- **`[removed]`** — an invariant currently holds but will no longer apply after this change (requires justification)
-
-The annotations matter because the most dangerous changes are weakenings — they're how silent breakage happens. Making each change visible in the intent document forces the author to acknowledge it explicitly. A reviewer (human or machine) seeing `[weakened]` knows to look at callers that may depend on the stronger form.
 
 ### Optional sections
 
@@ -129,24 +118,19 @@ Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a complet
 
 **Key architectural detail:** the evaluator only sees what's surfaced in the conversation. So the condition must be something the implementation agent can prove through its own output — tests passing, builds clean, benchmarks meeting targets, files matching some shape. The evaluator can't run commands itself.
 
-A change intent file is naturally shaped to be a `/goal` condition. The external invariants list **is** the completion condition. The implementation agent's job is to make the code such that every invariant in the document can be demonstrated in the transcript:
-
-- `[unchanged]` invariants: existing tests still pass, run visibly
-- `[new]` invariants: new tests are added that pass
-- `[weakened]` invariants: the new (weaker) form is demonstrated; old behavior is no longer asserted
-- `[strengthened]` invariants: a tighter test is added and passes
-- `[modified]` / `[removed]` invariants: explicit demonstration that the new state is correct
+A change intent file is naturally shaped to be a `/goal` condition. The external invariants list **is** the completion condition. The implementation agent's job is to write code such that every invariant in the document is demonstrated in the transcript — typically by a passing test, a benchmark hitting its target, or some other concrete observation the evaluator can see.
 
 The in-loop evaluator checks the transcript and confirms each turn. It's a fast first pass; the more reliable check happens next.
 
 ### Review phase: the intent as the AI reviewer's target
 
-After the goal clears, an AI code review pass runs against the resulting diff with the change intent as context. The review pass validates two things on top of the standard checks you'd expect:
+After the goal clears, an AI code review pass runs against the resulting diff with the change intent as context. The review pass validates three things on top of the standard checks you'd expect:
 
 1. **Is the intent itself well-described?** Are claims falsifiable, are all relevant categories addressed, is the scope clearly bounded? A vague or incomplete intent is a defect in its own right and should bounce the change back before the diff is even examined.
-2. **Does the diff match the intent?** Every invariant the change claims to establish, preserve, weaken, or remove is reflected in the diff and supported by visible evidence. Nothing externally observable shows up in the diff that isn't covered by the intent or the "out of scope" section.
+2. **Does the diff match the intent?** Every invariant the change claims is reflected in the diff and supported by visible evidence. Nothing externally observable shows up in the diff that isn't covered by the intent or the "out of scope" section.
+3. **Does the change contradict any prior intent?** The review pass searches the `change-intent/` folder for past intents that touched related surface and flags apparent contradictions — e.g., an older intent established a strong consistency guarantee and this change appears to weaken it without acknowledging the prior claim. This is the right place for that check: the review pass pays the cost of loading prior context once, instead of forcing every author to enumerate prior invariants up front.
 
-This is independent from and stronger than the in-loop `/goal` evaluator. The evaluator is a fast Haiku pass over a transcript; the review pass is a slower, stronger model with access to the full diff and repository context. It also runs the usual review checks — concurrency hazards, security boundaries, error handling, comment clarity — but now with the intent as additional context shaping what to focus on.
+This is independent from and stronger than the in-loop `/goal` evaluator. The evaluator is a fast Haiku pass over a transcript; the review pass is a slower, stronger model with access to the full diff, the repository, and the history of prior intents. It also runs the usual review checks — concurrency hazards, security boundaries, error handling, comment clarity — but now with the intent as additional context shaping what to focus on.
 
 Only after the review pass approves does the change reach a human reviewer. By then there are two independent machine-verified confirmations that the implementation matches the stated intent, and the human can spend their attention on the judgment question rather than the verification one.
 
@@ -161,9 +145,7 @@ Only after the review pass approves does the change reach a human reviewer. By t
 
 ```
 /goal All external invariants in change-intent/2026-05-16-add-getuser-cache.md are demonstrated in this transcript:
-- Every [unchanged] invariant has a passing test visible in the transcript
-- Every [new] invariant has a new test that passes
-- Every [weakened] invariant's new form is demonstrated and old behavior is no longer asserted
+- Every invariant has visible evidence (passing test, benchmark hitting its target, or equivalent observation)
 - The change does not introduce externally observable behavior outside the listed invariants and the "out of scope" section
 ```
 
@@ -175,7 +157,7 @@ The last line is the **bidirectional check** at the change level: not just "did 
 
 The skill produces a change intent file through structured dialogue between the human and the AI. The human owns the macro intent; the AI helps make it rigorous, complete, and falsifiable.
 
-**Critical constraint:** the AI **never** invents invariants for code that doesn't exist yet. The change hasn't been made. The AI's role is to enumerate what currently holds on the affected surface (which it can read), then help the human decide which existing invariants to preserve, modify, or replace, and what new invariants to add. The human is the source of intent; the AI is the source of context.
+**Critical constraint:** the AI **never** invents invariants for code that doesn't exist yet. The change hasn't been made. The AI's role is to read the affected surface, surface what currently holds there, and use that context to ask sharper questions about what the change should establish. The human is the source of intent; the AI is the source of context. The file itself only states forward-looking claims — what the change will prove — not a catalog of preserved behavior.
 
 ### Workflow
 
@@ -280,21 +262,15 @@ GetUser is read-heavy (40k req/s peak). P95 latency is 80ms, dominated by
 the DB round-trip. Adding a 30-second TTL cache should drop P95 below 10ms 
 on cache hits and reduce DB load by ~70% based on access patterns in 
 production traces. The 30s TTL aligns with the staleness budget product 
-approved for user profile data.
+approved for user profile data. AuditLog, the one caller that needs 
+immediate consistency, is migrated to a new GetUserUncached method.
 
 ## External invariants
-- [unchanged] GetUser returns nil exactly when no user exists with the given ID
-- [unchanged] GetUser remains safe to call concurrently from multiple goroutines
-- [unchanged] GetUser propagates ctx cancellation and respects deadlines
-- [unchanged] AuditLog continues to receive consistent reads (migrated to new GetUserUncached method)
-- [new] GetUser P95 response time below 10ms on cache hits, verified by BenchmarkGetUser_CacheHit
-- [new] Cache hit rate above 60% under production traffic, verified by ratio of cache_hits / cache_total metric
-- [weakened] A user updated via UpdateUser is visible to GetUser within 30 seconds 
-  (was: immediate consistency). Justification: read-after-write consistency was not 
-  required by any current caller except AuditLog, which is migrated to GetUserUncached.
-- [new] GetUserUncached method bypasses cache and provides immediate consistency 
-  for audit and compliance use cases. Same signature as GetUser; documented for 
-  audit/compliance callers only.
+- GetUser P95 response time is below 10ms on cache hits, asserted by BenchmarkGetUser_CacheHit
+- Cache hit rate exceeds 60% under production traffic, measured by the cache_hits / cache_total metric over a rolling 24h window
+- A user updated via UpdateUser is visible to GetUser within 30 seconds, asserted by TestGetUser_StalenessWindow
+- The cache layer is safe for concurrent reads and writes from multiple goroutines, asserted by TestCacheLayer_Concurrent
+- GetUserUncached method exists, bypasses the cache, and returns fresh data on every call, asserted by TestGetUserUncached_AlwaysFresh
 
 ## Out of scope
 - The cache implementation itself (using existing CacheManager interface)
@@ -315,13 +291,9 @@ approved for user profile data.
   singleflight behavior.
 ```
 
-The implementation agent then takes this file as the `/goal` condition. After each turn, the in-loop evaluator checks:
-- Does the transcript demonstrate each `[unchanged]` invariant still holds (passing tests visible)?
-- Does the transcript demonstrate each `[new]` invariant (new tests passing, benchmark results)?
-- Is the `[weakened]` invariant's new form visible? Is the old (stronger) assertion gone?
-- Has the implementation introduced any externally observable behavior not in this list and not in "Out of scope"?
+The implementation agent takes this file as the `/goal` condition. After each turn, the in-loop evaluator checks the transcript: is each listed invariant being demonstrated (a passing test, a benchmark hitting target, or equivalent), and has the implementation stayed within the listed scope?
 
-When all conditions are met, the goal clears. The AI code review pass then takes the diff with this intent as context, validates the alignment again under a stronger model, and runs the standard checks (concurrency, errors, security, clarity). Only then does the change reach the human reviewer — who focuses not on the code itself but on whether the intent captured here was the right one to ship.
+When the goal clears, the AI code review pass takes the diff with this intent as context. It validates the alignment under a stronger model, searches the `change-intent/` folder for prior intents that might be in tension with this one, and runs the standard checks (concurrency, errors, security, clarity). Only then does the change reach the human reviewer — who focuses not on the code itself but on whether the intent captured here was the right one to ship.
 
 ---
 
@@ -340,7 +312,11 @@ Whether the Haiku evaluator can reliably detect "the agent did something not cla
 
 ### Cold start on existing codebases
 
-Untouched code has no documented invariants. The AI's "enumeration of what's currently true" is partly inferential and may be wrong. Early iterations of this system will produce intent files based on inferred-but-not-formalized invariants. This is a real risk and worth acknowledging in early deployment.
+Untouched code has no documented invariants. The AI's enumeration of what currently holds — used in the authoring dialogue to sharpen the human's claims — is partly inferential and may miss real interactions the change will have. The file itself only states forward-looking claims, so this affects elicitation quality more than file correctness, but a missed interaction can still produce a change intent that doesn't ask the right questions.
+
+### Scoping the past-intent search
+
+The review pass searches prior change intents to flag contradictions with the current change. In a mature repository this is potentially thousands of files. The pass can't load them all on every review. Options to explore: filter by file/package overlap with the current diff, embedding search over intent contents, time-window restrictions, or a combination. Picking a strategy that's both cheap and high-recall is a real engineering question, not a free check.
 
 ### Spike-then-formalize
 
