@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-A change intent is a structured document authored by a human (with AI assistance) **before any code is written** for a change. Each change gets its own intent file. The file captures *why* the change is being made and *what externally observable invariants must hold* for the change to be considered correct.
+A change intent is a structured document authored by a human (with AI assistance) **before any code is written** for a change. Each change gets its own intent file. The file captures *why* the change is being made, *acceptance criteria* (falsifiable claims each provable by a single test), and *invariants* (properties that span the change and require reasoning over the diff to close).
 
 The same document then serves two downstream roles. First, it's the completion condition for the implementation agent (e.g., Claude Code's `/goal`), giving the agent a verifiable target to work toward. Second, it's the contract an AI code review pass checks the resulting diff against — before the change ever reaches a human reviewer. The human reviewer then receives a structured artifact, machine-verified evidence the diff matches it, and can spend their attention on the judgment question — *is this the right intent?* — rather than redoing the verification work.
 
@@ -62,28 +62,44 @@ Once a file exists, it is never renamed and never deleted — it's a historical 
 
 ---
 
-The remaining subsections describe what goes inside the file. Every intent file has two required sections (`Why` and `External invariants`); the rest are optional.
+The remaining subsections describe what goes inside the file. Two sections are always required (`Why`, `Acceptance criteria`). A third (`Invariants`) is required when the change touches properties that span beyond a single test. The rest are optional.
 
 ### Why
 
 A short paragraph explaining the motivation for the change. What problem is being solved? What's the trigger? What context will be needed by a future engineer (or AI) reading this commit a year from now?
 
-### External invariants
+### Acceptance criteria
 
-A list of properties that must be true **after this change ships** for it to be considered correct. These are observable from outside — by callers of the API, by users of the system, by tests run against the changed surface. Each invariant must be **falsifiable**: stated specifically enough that an evaluator can determine whether it holds from observable behavior.
+A list of falsifiable scenarios that must hold for the change to be considered correct, where each scenario is **provable by a single test** (unit, integration, benchmark, or one-shot measurement). Each line describes a specific behavior the system supports after the change ships, named with the test or measurement that asserts it.
 
-The list is forward-looking. It states what the change establishes, demonstrates, or guarantees — not a catalog of every property of the affected code. If a property is already true and your change isn't trying to establish or change it, it doesn't belong in the file. ("Did this change accidentally break something it shouldn't have?" is handled by the review pass through standard regression tests and diff analysis, not by asking every author to enumerate prior behavior up front.)
+This is what authors usually have pre-code — "user calls X and sees Y," "this threshold is met," "this CLI command produces this output." Each AC is a focused, mechanical check: run the test, see it pass, done.
 
-**Examples of falsifiable invariants:**
-- "GetUser P95 response time is below 10ms on cache hits, asserted by BenchmarkGetUser_CacheHit"
-- "Cache hit rate exceeds 60% under production traffic, measured by the cache_hits / cache_total metric over a rolling 24h window"
-- "A user updated via UpdateUser is visible to GetUser within 30 seconds, asserted by TestGetUser_StalenessWindow"
-- "GetUserUncached method exists and bypasses the cache, returning fresh data on every call, asserted by TestGetUserUncached_AlwaysFresh"
+The list is forward-looking. It states what the change establishes or demonstrates, not a catalog of existing behavior. If a behavior is already true and your change isn't adding or altering it, it doesn't belong here.
+
+**Examples of falsifiable acceptance criteria:**
+- "GetUser P95 response time is below 10ms on cache hits, asserted by `BenchmarkGetUser_CacheHit`"
+- "Cache hit rate exceeds 60% under production traffic, measured by the `cache_hits / cache_total` metric over a rolling 24h window"
+- "`GetUserUncached` returns fresh data on every call, asserted by `TestGetUserUncached_AlwaysFresh`"
 
 **Examples of non-falsifiable claims that should be rejected:**
 - "GetUser is faster" — faster than what, by how much, measured how
 - "The cache is correct" — correct in what sense
 - "Backward compatibility is preserved" — which API surface, verified how
+
+### Invariants
+
+A list of properties that must hold *across* the change — properties that **can't be proven by a single test** because they span multiple call sites, code paths, or states. Read-after-write consistency, availability under failure, audit-log-on-every-mutation, thread safety across all paths into a shared resource — these are invariant-shaped.
+
+Where an acceptance criterion is closed by one passing test, an invariant requires reasoning across the diff. The verifier convention is therefore different: an invariant has one or more **spot-check tests** that exercise specific cases, but those tests are not the proof. The proof is "every place this property could be violated, the implementation handles it" — demonstrated by the implementation agent walking the diff during work, and confirmed by the AI review pass scrutinizing the whole diff through the invariant's lens.
+
+The invariants section is required when the change touches scope-spanning properties. It can be small or empty for trivial changes whose impact is fully captured by acceptance criteria. Heavier changes — concurrency primitives, mutation paths, security boundaries, cross-cutting behaviors — should have more invariants by definition, because their scope of impact is wider.
+
+**Examples of invariants:**
+- "Read-after-write: a user updated via `UpdateUser` is visible to `GetUser` within 30 seconds across all caller paths. Spot-checked by `TestGetUser_StalenessWindow`; verified across caller paths by review."
+- "Every mutation of user data produces an audit log entry. Spot-checked by `TestUpdateUser_AuditLog`; verified across mutation sites by review."
+- "The cache layer is safe for concurrent reads and writes from multiple goroutines, across all access paths added by this change. Spot-checked by `TestCacheLayer_Concurrent`; verified across paths by review."
+
+Note the shape: each one reaches into the codebase beyond a single test — "across all caller paths," "across all mutation sites," "across access paths." That's the verb invariants do. ACs don't.
 
 ### Optional sections
 
@@ -97,7 +113,7 @@ A complete intent document may also include:
 
 ## Why "Before Any Code"
 
-The timing matters. Writing the intent first is a forcing function: the moment you try to state precisely what must hold, you discover where your thinking is fuzzy. Most software bugs aren't reasoning errors; they're cases the author didn't consider. Articulating invariants explicitly surfaces those cases at the cheapest possible time, before the code exists.
+The timing matters. Writing the intent first is a forcing function: the moment you try to state precisely what must hold, you discover where your thinking is fuzzy. Most software bugs aren't reasoning errors; they're cases the author didn't consider. Articulating acceptance criteria and invariants explicitly surfaces those cases at the cheapest possible time, before the code exists.
 
 It also separates the two cognitive tasks that get conflated in normal code review:
 
@@ -118,16 +134,19 @@ Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a complet
 
 **Key architectural detail:** the evaluator only sees what's surfaced in the conversation. So the condition must be something the implementation agent can prove through its own output — tests passing, builds clean, benchmarks meeting targets, files matching some shape. The evaluator can't run commands itself.
 
-A change intent file is naturally shaped to be a `/goal` condition. The external invariants list **is** the completion condition. The implementation agent's job is to write code such that every invariant in the document is demonstrated in the transcript — typically by a passing test, a benchmark hitting its target, or some other concrete observation the evaluator can see.
+A change intent file is naturally shaped to be a `/goal` condition. The acceptance criteria and invariants together form the completion condition, and the implementation agent's job differs slightly for each:
 
-The in-loop evaluator checks the transcript and confirms each turn. It's a fast first pass; the more reliable check happens next.
+- **For each acceptance criterion**: write or update the named test (or measurement), run it, surface the passing result in the transcript. Mechanical.
+- **For each invariant**: write the spot-check test(s) *and* walk the diff to confirm the property holds at every site where it could be violated. The named test alone doesn't close an invariant — the implementation agent has to demonstrate, in the transcript, that it has considered the property at every relevant site.
+
+The in-loop evaluator checks the transcript for both kinds of evidence each turn. It's a fast first pass; the more reliable check — particularly on invariants — happens next.
 
 ### Review phase: the intent as the AI reviewer's target
 
 After the goal clears, an AI code review pass runs against the resulting diff with the change intent as context. The review pass validates three things on top of the standard checks you'd expect:
 
 1. **Is the intent itself well-described?** Are claims falsifiable, are all relevant categories addressed, is the scope clearly bounded? A vague or incomplete intent is a defect in its own right and should bounce the change back before the diff is even examined.
-2. **Does the diff match the intent?** Every invariant the change claims is reflected in the diff and supported by visible evidence. Nothing externally observable shows up in the diff that isn't covered by the intent or the "out of scope" section.
+2. **Does the diff match the intent?** Every acceptance criterion has its asserting test in the diff, passing. Every invariant holds across the diff — not just where the spot-check tests assert it, but at every site where the property could be violated. The review pass's work on invariants is the heaviest single thing it does: scrutinize the whole diff through each invariant's lens. Nothing externally observable shows up in the diff that isn't covered by the listed claims or the "out of scope" section.
 3. **Does the change contradict any prior intent?** The review pass searches the `change-intent/` folder for past intents that touched related surface and flags apparent contradictions — e.g., an older intent established a strong consistency guarantee and this change appears to weaken it without acknowledging the prior claim. This is the right place for that check: the review pass pays the cost of loading prior context once, instead of forcing every author to enumerate prior invariants up front.
 
 This is independent from and stronger than the in-loop `/goal` evaluator. The evaluator is a fast Haiku pass over a transcript; the review pass is a slower, stronger model with access to the full diff, the repository, and the history of prior intents. It also runs the usual review checks — concurrency hazards, security boundaries, error handling, comment clarity — but now with the intent as additional context shaping what to focus on.
@@ -137,16 +156,17 @@ Only after the review pass approves does the change reach a human reviewer. By t
 ### Workflow
 
 1. Human (with skill assistance) produces a change intent file at `change-intent/YYYY-MM-DD-slug.md`
-2. Implementation phase: `/goal` with the invariants as the condition. Agent writes code, runs tests, and demonstrates each invariant. In-loop evaluator (Haiku) confirms each turn.
-3. When the goal clears, the AI code review pass runs against the diff with the intent as context, validates intent quality and intent-vs-diff alignment, and runs standard review checks.
+2. Implementation phase: `/goal` with the acceptance criteria and invariants as the condition. Agent writes code, runs tests, demonstrates each acceptance criterion, and walks the diff to confirm each invariant. In-loop evaluator (Haiku) confirms each turn.
+3. When the goal clears, the AI code review pass runs against the diff with the intent as context, validates intent quality and intent-vs-diff alignment (with particular scrutiny on invariants), and runs standard review checks.
 4. Once the review pass approves, the change reaches a human reviewer. They focus on the judgment question — *is this the right intent?* — not on verifying the code matches it (that has already been checked twice).
 
 ### Sample `/goal` invocation
 
 ```
-/goal All external invariants in change-intent/2026-05-16-add-getuser-cache.md are demonstrated in this transcript:
-- Every invariant has visible evidence (passing test, benchmark hitting its target, or equivalent observation)
-- The change does not introduce externally observable behavior outside the listed invariants and the "out of scope" section
+/goal All acceptance criteria and invariants in change-intent/2026-05-16-add-getuser-cache.md are demonstrated in this transcript:
+- Every acceptance criterion has its named test passing (or its measurement at target)
+- Every invariant has its spot-check tests passing AND the agent has walked the diff to confirm the property holds at every site where it could be violated
+- The change does not introduce externally observable behavior outside the listed claims and the "out of scope" section
 ```
 
 The last line is the **bidirectional check** at the change level: not just "did the agent prove what it was supposed to," but "did the agent stay within scope." This check runs both in-loop (Haiku, fast) and again in the AI review pass (stronger model, full diff visibility). The in-loop pass is a fast first cut; the review pass is the more reliable gate. Whether the Haiku evaluator alone can reliably catch out-of-scope behavior is an open question — see Design Tensions below.
@@ -157,7 +177,7 @@ The last line is the **bidirectional check** at the change level: not just "did 
 
 The skill produces a change intent file through structured dialogue between the human and the AI. The human owns the macro intent; the AI helps make it rigorous, complete, and falsifiable.
 
-**Critical constraint:** the AI **never** invents invariants for code that doesn't exist yet. The change hasn't been made. The AI's role is to read the affected surface, surface what currently holds there, and use that context to ask sharper questions about what the change should establish. The human is the source of intent; the AI is the source of context. The file itself only states forward-looking claims — what the change will prove — not a catalog of preserved behavior.
+**Critical constraint:** the AI **never** invents acceptance criteria or invariants for code that doesn't exist yet. The change hasn't been made. The AI's role is to read the affected surface, surface what currently holds there, and use that context to ask sharper questions about what the change should establish. The human is the source of intent; the AI is the source of context. The file itself only states forward-looking claims — what the change will prove — not a catalog of preserved behavior.
 
 ### Workflow
 
@@ -185,17 +205,24 @@ This is the AI's primary contribution: it brings knowledge of the current codeba
 
 The AI presents an enumeration: "Here's what the existing code guarantees that your change will interact with." This grounds the conversation in reality. The human now has a concrete list to react to rather than a blank page to fill.
 
-**Step 4: Iterative Socratic refinement.**
+**Step 4: Elicit acceptance criteria first.**
 
-The AI asks targeted questions that get sharpness from the existing invariants it just enumerated:
+The AI asks the human what they already know about the change pre-code — the AC-shaped knowledge that's natural at this stage. "What does the caller / user / operator see after this is done? What scenario do they exercise? What threshold do they observe?" Each candidate AC gets pushed for falsifiability: what named test or measurement asserts it?
 
-- "AuditLog reads through GetUser. Your cache introduces a staleness window. Is staleness acceptable for audit purposes?"
-- "PaymentService verifies account state through GetUser before charging. Is a 30-second staleness window acceptable there, or do you need a cache-bypass path for that caller?"
-- "GetUser is currently safe for concurrent use. Does your cache implementation preserve that?"
+This step is fast and productive because the human typically has this content ready. The skill's job is mostly to sharpen it: turn "user can log in faster" into "p95 login latency below 200ms, asserted by `TestLogin_P95`."
 
-The questions reference specific existing code but ask about what *should* be true after the change. The AI is not anticipating the change — it's surfacing the constraints the change will have to satisfy.
+**Step 5: Elicit invariants from the surface.**
 
-**Step 5: Categories pushed proactively.**
+Using what the AI read in step 2, the skill now asks property-shaped questions that the human likely couldn't have come up with on their own:
+
+- "AuditLog reads through GetUser. Your change introduces a staleness window. Is staleness acceptable for audit, or does this caller need a different guarantee?"
+- "GetUser is called from four services with different consistency needs. Across all of them, what's the invariant — read-after-write, eventual, something in between?"
+- "The cache touches a shared map. Under concurrent calls, what must hold across all access paths?"
+- "If the cache backend fails, what must still hold for callers?"
+
+Each candidate invariant gets at least one spot-check test, but the skill is explicit that the spot-check is not the proof — the invariant is closed by reasoning over the diff at implementation and review time. For trivial changes this step often produces zero or one invariants, and that's fine. For changes touching concurrency, mutation paths, security boundaries, or cross-cutting properties, this step is where the file gets its weight.
+
+**Step 6: Categories pushed proactively.**
 
 The AI ensures the human has addressed every category that applies to the touched surface:
 
@@ -211,13 +238,13 @@ The AI ensures the human has addressed every category that applies to the touche
 
 The human can declare any category "not applicable" but they have to declare it explicitly. Silence isn't an answer.
 
-**Step 6: Falsifiability enforced on every claim.**
+**Step 7: Falsifiability enforced on every claim.**
 
 Vague claims get pushed back until they're testable. The AI does not accept "faster," "more secure," or "backwards compatible" as standalone claims. Each must be made precise: what specifically, measured how, verified by what.
 
 If the human can't make a claim falsifiable, that's a signal the claim isn't well thought out and should be removed or replaced with what the human actually means.
 
-**Step 7: Convergence.**
+**Step 8: Convergence.**
 
 When every relevant category has an explicit position and every claim is falsifiable, the AI writes the change intent file to `change-intent/YYYY-MM-DD-slug.md` and presents it for final review. If the human approves, the artifact is finalized and the implementation phase begins.
 
@@ -225,9 +252,9 @@ When every relevant category has an explicit position and every claim is falsifi
 
 Not every change deserves a fifteen-page intent file. Depth should scale with risk, detected from the existing code:
 
-- **Light pass** (3-5 invariants, single category): leaf utility, pure helper, isolated refactor
-- **Medium pass** (5-10 invariants, multiple categories): typical feature work touching one or two services
-- **Deep pass** (10+ invariants, all categories): changes to concurrency primitives, public APIs, security-relevant paths, hot paths, anything that historically required care
+- **Light pass**: 2-5 acceptance criteria, zero or one invariants, single category. Leaf utility, pure helper, isolated refactor.
+- **Medium pass**: 5-10 acceptance criteria, 1-3 invariants, multiple categories. Typical feature work touching one or two services.
+- **Deep pass**: many acceptance criteria, multiple invariants, all categories covered. Changes to concurrency primitives, public APIs, security-relevant paths, hot paths, mutation paths — anything that historically required care.
 
 The risk profile comes from the existing code, not the proposed change (which doesn't exist yet). If the touched surface has historically required care, the skill pushes deeper regardless of how casually the human stated the intent.
 
@@ -265,12 +292,14 @@ production traces. The 30s TTL aligns with the staleness budget product
 approved for user profile data. AuditLog, the one caller that needs 
 immediate consistency, is migrated to a new GetUserUncached method.
 
-## External invariants
-- GetUser P95 response time is below 10ms on cache hits, asserted by BenchmarkGetUser_CacheHit
-- Cache hit rate exceeds 60% under production traffic, measured by the cache_hits / cache_total metric over a rolling 24h window
-- A user updated via UpdateUser is visible to GetUser within 30 seconds, asserted by TestGetUser_StalenessWindow
-- The cache layer is safe for concurrent reads and writes from multiple goroutines, asserted by TestCacheLayer_Concurrent
-- GetUserUncached method exists, bypasses the cache, and returns fresh data on every call, asserted by TestGetUserUncached_AlwaysFresh
+## Acceptance criteria
+- GetUser P95 response time is below 10ms on cache hits, asserted by `BenchmarkGetUser_CacheHit`
+- Cache hit rate exceeds 60% under production traffic, measured by the `cache_hits / cache_total` metric over a rolling 24h window
+- `GetUserUncached` returns fresh data on every call, asserted by `TestGetUserUncached_AlwaysFresh`
+
+## Invariants
+- Read-after-write: a user updated via `UpdateUser` is visible to `GetUser` within 30 seconds across all caller paths. Spot-checked by `TestGetUser_StalenessWindow`; verified across caller paths by review.
+- The cache layer is safe for concurrent reads and writes from multiple goroutines, across all access paths added by this change. Spot-checked by `TestCacheLayer_Concurrent`; verified across paths by review.
 
 ## Out of scope
 - The cache implementation itself (using existing CacheManager interface)
@@ -291,9 +320,9 @@ immediate consistency, is migrated to a new GetUserUncached method.
   singleflight behavior.
 ```
 
-The implementation agent takes this file as the `/goal` condition. After each turn, the in-loop evaluator checks the transcript: is each listed invariant being demonstrated (a passing test, a benchmark hitting target, or equivalent), and has the implementation stayed within the listed scope?
+The implementation agent takes this file as the `/goal` condition. For each acceptance criterion, the agent runs the named test or measurement and surfaces the result. For each invariant, the agent runs the spot-check test(s) *and* walks the diff to confirm the property holds at every site where it could be violated — every caller path of `GetUser` for the read-after-write window, every access path into the cache for thread safety. The in-loop evaluator checks the transcript for both kinds of evidence.
 
-When the goal clears, the AI code review pass takes the diff with this intent as context. It validates the alignment under a stronger model, searches the `change-intent/` folder for prior intents that might be in tension with this one, and runs the standard checks (concurrency, errors, security, clarity). Only then does the change reach the human reviewer — who focuses not on the code itself but on whether the intent captured here was the right one to ship.
+When the goal clears, the AI code review pass takes the diff with this intent as context. It validates the alignment under a stronger model — with particular scrutiny on invariants, where the review pass walks the whole diff through each invariant's lens — searches the `change-intent/` folder for prior intents that might be in tension with this one, and runs the standard checks (concurrency, errors, security, clarity). Only then does the change reach the human reviewer — who focuses not on the code itself but on whether the intent captured here was the right one to ship.
 
 ---
 
@@ -334,7 +363,7 @@ This document covers only the macro layer — change-scoped, human-authored (wit
 
 ## Summary
 
-A change intent is a per-change artifact authored *before* code, capturing the why and the externally observable invariants the change must satisfy. One file per change, stored under `change-intent/` in the repository. It's produced through structured dialogue between a human (who provides the intent) and an AI (which provides context from the existing codebase, pushes for category coverage, and enforces falsifiability). The artifact then serves two downstream roles: it's the `/goal` condition for the implementation phase, and it's the contract an AI code review pass checks the resulting diff against before any human review.
+A change intent is a per-change artifact authored *before* code, capturing the why, the acceptance criteria (each provable by a single test), and the invariants (properties that span the change and need reasoning over the diff to close). One file per change, stored under `change-intent/` in the repository. It's produced through structured dialogue between a human (who provides the intent) and an AI (which provides context from the existing codebase, pushes for category coverage, and enforces falsifiability). The artifact then serves two downstream roles: it's the `/goal` condition for the implementation phase, and it's the contract an AI code review pass checks the resulting diff against before any human review.
 
 The discipline replaces the fiction of careful per-line human review with a process that's actually verifiable, scoped to each change, and produced by each party at the level it's good at: humans set intent, AI enforces rigor in authoring, the implementation agent works against a clear target, and the review pass verifies the result before the human reviewer ever opens the diff.
 
