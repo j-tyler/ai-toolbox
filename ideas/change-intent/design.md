@@ -70,36 +70,47 @@ A short paragraph explaining the motivation for the change. What problem is bein
 
 ### Acceptance criteria
 
-A list of falsifiable scenarios that must hold for the change to be considered correct, where each scenario is **provable by a single test** (unit, integration, benchmark, or one-shot measurement). Each line describes a specific behavior the system supports after the change ships, named with the test or measurement that asserts it.
+A list of falsifiable scenarios that must hold for the change to be considered correct. Each one describes specific observable behavior — what a caller, user, or operator can do or see after the change ships. Each AC must be **provable by a single test** in principle (unit, integration, or one-shot measurement), but **at authoring time you do not name the test**. The implementation agent writes the test as part of the work; the test shows up in the transcript when it runs.
 
-This is what authors usually have pre-code — "user calls X and sees Y," "this threshold is met," "this CLI command produces this output." Each AC is a focused, mechanical check: run the test, see it pass, done.
+This is what authors usually have pre-code — "user calls X and sees Y," "I can do A and observe B," "field C appears in response D." Each AC is a focused scenario.
 
 The list is forward-looking. It states what the change establishes or demonstrates, not a catalog of existing behavior. If a behavior is already true and your change isn't adding or altering it, it doesn't belong here.
 
+**Production-traffic claims also don't belong here.** Statements like "cache hit rate exceeds 60% in production" or "P95 latency in prod drops by 70%" are operational observations that can only be made after deployment. They aren't provable by a test at change time. If they're motivation for the change, they go in `Why`. If they're operational targets to track, they live in dashboards or runbooks, not in the intent.
+
 **Examples of falsifiable acceptance criteria:**
-- "GetUser P95 response time is below 10ms on cache hits, asserted by `BenchmarkGetUser_CacheHit`"
-- "Cache hit rate exceeds 60% under production traffic, measured by the `cache_hits / cache_total` metric over a rolling 24h window"
-- "`GetUserUncached` returns fresh data on every call, asserted by `TestGetUserUncached_AlwaysFresh`"
+- "When `UpdateUser` is called with a new email, a subsequent `GetUser` for that user returns the new email"
+- "`GetUser` response includes the user's email address as a top-level field"
+- "When a user creates an item via `POST /items`, a subsequent `GET /items/{id}` returns that item"
+- "`DELETE /items/{id}` returns 204 on success; a subsequent `GET /items/{id}` returns 404"
+- "On a cache hit, `GetUser` returns the cached value without querying the database"
 
 **Examples of non-falsifiable claims that should be rejected:**
-- "GetUser is faster" — faster than what, by how much, measured how
+- "GetUser is faster" — faster than what, how, in what scenario
 - "The cache is correct" — correct in what sense
-- "Backward compatibility is preserved" — which API surface, verified how
+- "Backward compatibility is preserved" — which API surface, in what scenarios
+
+**Examples of claims that don't belong as ACs (move to `Why` or remove):**
+- "Cache hit rate exceeds 60% under production traffic" — observable only after deployment
+- "P95 latency drops by 70%" — production observation, not test-provable at change time
 
 ### Invariants
 
-A list of properties that must hold *across* the change — properties that **can't be proven by a single test** because they span multiple call sites, code paths, or states. Read-after-write consistency, availability under failure, audit-log-on-every-mutation, thread safety across all paths into a shared resource — these are invariant-shaped.
+A list of properties that must hold *across* the change — properties that **can't be proven by a single test** because they span multiple call sites, code paths, or states. Read-after-write consistency across all callers, availability under failure, audit-log-on-every-mutation, thread safety across all access paths — these are invariant-shaped.
 
-Where an acceptance criterion is closed by one passing test, an invariant requires reasoning across the diff. The verifier convention is therefore different: an invariant has one or more **spot-check tests** that exercise specific cases, but those tests are not the proof. The proof is "every place this property could be violated, the implementation handles it" — demonstrated by the implementation agent walking the diff during work, and confirmed by the AI review pass scrutinizing the whole diff through the invariant's lens.
+Where an acceptance criterion is closed by one passing test, an invariant requires reasoning across the diff. The implementation agent demonstrates each invariant by walking the affected code paths and confirming the property holds at each; the AI review pass independently scrutinizes the whole diff through the invariant's lens. Spot-check tests may help — they pin down specific cases — but the invariant is closed by analysis, not by any single test passing alone.
+
+As with ACs, invariants are written at authoring time **without naming specific tests**. The shape of the claim is the contract; the implementation figures out how to verify it.
 
 The invariants section is required when the change touches scope-spanning properties. It can be small or empty for trivial changes whose impact is fully captured by acceptance criteria. Heavier changes — concurrency primitives, mutation paths, security boundaries, cross-cutting behaviors — should have more invariants by definition, because their scope of impact is wider.
 
 **Examples of invariants:**
-- "Read-after-write: a user updated via `UpdateUser` is visible to `GetUser` within 30 seconds across all caller paths. Spot-checked by `TestGetUser_StalenessWindow`; verified across caller paths by review."
-- "Every mutation of user data produces an audit log entry. Spot-checked by `TestUpdateUser_AuditLog`; verified across mutation sites by review."
-- "The cache layer is safe for concurrent reads and writes from multiple goroutines, across all access paths added by this change. Spot-checked by `TestCacheLayer_Concurrent`; verified across paths by review."
+- "Read-after-write: a user updated via `UpdateUser` is visible to `GetUser` across all caller paths, within the staleness window"
+- "Every mutation of user data produces an audit log entry"
+- "The cache layer is safe for concurrent reads and writes from multiple goroutines, across all access paths added by this change"
+- "If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers"
 
-Note the shape: each one reaches into the codebase beyond a single test — "across all caller paths," "across all mutation sites," "across access paths." That's the verb invariants do. ACs don't.
+Note the shape: each one reaches into the codebase beyond a single test — "across all caller paths," "across all mutation sites," "across access paths," "every code path." That's the verb invariants do. ACs don't.
 
 ### Optional sections
 
@@ -136,8 +147,8 @@ Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a complet
 
 A change intent file is naturally shaped to be a `/goal` condition. The acceptance criteria and invariants together form the completion condition, and the implementation agent's job differs slightly for each:
 
-- **For each acceptance criterion**: write or update the named test (or measurement), run it, surface the passing result in the transcript. Mechanical.
-- **For each invariant**: write the spot-check test(s) *and* walk the diff to confirm the property holds at every site where it could be violated. The named test alone doesn't close an invariant — the implementation agent has to demonstrate, in the transcript, that it has considered the property at every relevant site.
+- **For each acceptance criterion**: write a test that exercises the scenario, run it, and surface the passing result in the transcript. The test is the agent's own work; the AC didn't name it.
+- **For each invariant**: write spot-check test(s) for specific cases *and* walk the diff to confirm the property holds at every site where it could be violated. The spot-check passing doesn't close the invariant — the agent has to demonstrate, in the transcript, that it has considered the property at every relevant site.
 
 The in-loop evaluator checks the transcript for both kinds of evidence each turn. It's a fast first pass; the more reliable check — particularly on invariants — happens next.
 
@@ -146,7 +157,7 @@ The in-loop evaluator checks the transcript for both kinds of evidence each turn
 After the goal clears, an AI code review pass runs against the resulting diff with the change intent as context. The review pass validates three things on top of the standard checks you'd expect:
 
 1. **Is the intent itself well-described?** Are claims falsifiable, are all relevant categories addressed, is the scope clearly bounded? A vague or incomplete intent is a defect in its own right and should bounce the change back before the diff is even examined.
-2. **Does the diff match the intent?** Every acceptance criterion has its asserting test in the diff, passing. Every invariant holds across the diff — not just where the spot-check tests assert it, but at every site where the property could be violated. The review pass's work on invariants is the heaviest single thing it does: scrutinize the whole diff through each invariant's lens. Nothing externally observable shows up in the diff that isn't covered by the listed claims or the "out of scope" section.
+2. **Does the diff match the intent?** Every acceptance criterion is exercised by a test in the diff, and that test passes. Every invariant holds across the diff — not just where the spot-check tests assert it, but at every site where the property could be violated. The review pass's work on invariants is the heaviest single thing it does: scrutinize the whole diff through each invariant's lens. Nothing externally observable shows up in the diff that isn't covered by the listed claims or the "out of scope" section.
 3. **Does the change contradict any prior intent?** The review pass searches the `change-intent/` folder for past intents that touched related surface and flags apparent contradictions — e.g., an older intent established a strong consistency guarantee and this change appears to weaken it without acknowledging the prior claim. This is the right place for that check: the review pass pays the cost of loading prior context once, instead of forcing every author to enumerate prior invariants up front.
 
 This is independent from and stronger than the in-loop `/goal` evaluator. The evaluator is a fast Haiku pass over a transcript; the review pass is a slower, stronger model with access to the full diff, the repository, and the history of prior intents. It also runs the usual review checks — concurrency hazards, security boundaries, error handling, comment clarity — but now with the intent as additional context shaping what to focus on.
@@ -164,7 +175,7 @@ Only after the review pass approves does the change reach a human reviewer. By t
 
 ```
 /goal All acceptance criteria and invariants in change-intent/2026-05-16-add-getuser-cache.md are demonstrated in this transcript:
-- Every acceptance criterion has its named test passing (or its measurement at target)
+- Every acceptance criterion is exercised by a test the agent wrote, and the test passes
 - Every invariant has its spot-check tests passing AND the agent has walked the diff to confirm the property holds at every site where it could be violated
 - The change does not introduce externally observable behavior outside the listed claims and the "out of scope" section
 ```
@@ -207,9 +218,11 @@ The AI presents an enumeration: "Here's what the existing code guarantees that y
 
 **Step 4: Elicit acceptance criteria first.**
 
-The AI asks the human what they already know about the change pre-code — the AC-shaped knowledge that's natural at this stage. "What does the caller / user / operator see after this is done? What scenario do they exercise? What threshold do they observe?" Each candidate AC gets pushed for falsifiability: what named test or measurement asserts it?
+The AI asks the human what they already know about the change pre-code — the AC-shaped knowledge that's natural at this stage. "What does the caller / user / operator see after this is done? What scenario do they exercise? What does the response look like?" Each candidate AC gets pushed for specificity: is the scenario concrete enough that someone could write a test against it without further questions?
 
-This step is fast and productive because the human typically has this content ready. The skill's job is mostly to sharpen it: turn "user can log in faster" into "p95 login latency below 200ms, asserted by `TestLogin_P95`."
+This step is fast and productive because the human typically has this content ready. The skill's job is mostly to sharpen it: turn "user can update their email" into "when `PATCH /users/me` is called with a new email, a subsequent `GET /users/me` returns the new email." Note what's missing: no test name. The test gets written at implementation time. The AC is the scenario, not the test.
+
+Two things the skill pushes back on at this stage: vague claims ("faster," "more secure") that don't describe an observable scenario, and production-traffic claims ("hit rate >60% in prod") that can't be proven by a test. The first get sharpened; the second get moved to `Why` or dropped.
 
 **Step 5: Elicit invariants from the surface.**
 
@@ -220,7 +233,7 @@ Using what the AI read in step 2, the skill now asks property-shaped questions t
 - "The cache touches a shared map. Under concurrent calls, what must hold across all access paths?"
 - "If the cache backend fails, what must still hold for callers?"
 
-Each candidate invariant gets at least one spot-check test, but the skill is explicit that the spot-check is not the proof — the invariant is closed by reasoning over the diff at implementation and review time. For trivial changes this step often produces zero or one invariants, and that's fine. For changes touching concurrency, mutation paths, security boundaries, or cross-cutting properties, this step is where the file gets its weight.
+Each candidate invariant must describe the property specifically enough that the implementation agent can walk the diff and verify it. As with ACs, no test names at this stage — the implementation will add spot-check tests as it works, and the invariant is closed by reasoning over the diff at implementation and review time, not by any single test passing. For trivial changes this step often produces zero or one invariants, and that's fine. For changes touching concurrency, mutation paths, security boundaries, or cross-cutting properties, this step is where the file gets its weight.
 
 **Step 6: Categories pushed proactively.**
 
@@ -240,7 +253,7 @@ The human can declare any category "not applicable" but they have to declare it 
 
 **Step 7: Falsifiability enforced on every claim.**
 
-Vague claims get pushed back until they're testable. The AI does not accept "faster," "more secure," or "backwards compatible" as standalone claims. Each must be made precise: what specifically, measured how, verified by what.
+Vague claims get pushed back until they describe specific observable behavior. The AI does not accept "faster," "more secure," or "backwards compatible" as standalone claims. Each must be made precise: what scenario, what behavior, observable how. The test that proves it doesn't have to exist yet — but the claim has to be specific enough that the implementation agent could write the test from the claim alone.
 
 If the human can't make a claim falsifiable, that's a signal the claim isn't well thought out and should be removed or replaced with what the human actually means.
 
@@ -293,13 +306,14 @@ approved for user profile data. AuditLog, the one caller that needs
 immediate consistency, is migrated to a new GetUserUncached method.
 
 ## Acceptance criteria
-- GetUser P95 response time is below 10ms on cache hits, asserted by `BenchmarkGetUser_CacheHit`
-- Cache hit rate exceeds 60% under production traffic, measured by the `cache_hits / cache_total` metric over a rolling 24h window
-- `GetUserUncached` returns fresh data on every call, asserted by `TestGetUserUncached_AlwaysFresh`
+- On a cache hit, `GetUser` returns the cached value without querying the database
+- `GetUserUncached` returns fresh data from the database on every call, never reading from the cache
+- When `UpdateUser` is called with a new email, a subsequent `GetUser` for that user returns the new email within 30 seconds
 
 ## Invariants
-- Read-after-write: a user updated via `UpdateUser` is visible to `GetUser` within 30 seconds across all caller paths. Spot-checked by `TestGetUser_StalenessWindow`; verified across caller paths by review.
-- The cache layer is safe for concurrent reads and writes from multiple goroutines, across all access paths added by this change. Spot-checked by `TestCacheLayer_Concurrent`; verified across paths by review.
+- Read-after-write: across all caller paths through `GetUser`, no caller sees data older than 30 seconds after an `UpdateUser` for that user
+- The cache layer is safe for concurrent reads and writes from multiple goroutines, across all access paths added by this change
+- If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers
 
 ## Out of scope
 - The cache implementation itself (using existing CacheManager interface)
@@ -320,7 +334,7 @@ immediate consistency, is migrated to a new GetUserUncached method.
   singleflight behavior.
 ```
 
-The implementation agent takes this file as the `/goal` condition. For each acceptance criterion, the agent runs the named test or measurement and surfaces the result. For each invariant, the agent runs the spot-check test(s) *and* walks the diff to confirm the property holds at every site where it could be violated — every caller path of `GetUser` for the read-after-write window, every access path into the cache for thread safety. The in-loop evaluator checks the transcript for both kinds of evidence.
+The implementation agent takes this file as the `/goal` condition. For each acceptance criterion, the agent writes a test that exercises the scenario, runs it, and surfaces the passing result. For each invariant, the agent writes spot-check test(s) for specific cases *and* walks the diff to confirm the property holds at every site where it could be violated — every caller path of `GetUser` for the read-after-write window, every access path into the cache for thread safety, every cache-read code path for the backend-unreachable fallback. The in-loop evaluator checks the transcript for both kinds of evidence.
 
 When the goal clears, the AI code review pass takes the diff with this intent as context. It validates the alignment under a stronger model — with particular scrutiny on invariants, where the review pass walks the whole diff through each invariant's lens — searches the `change-intent/` folder for prior intents that might be in tension with this one, and runs the standard checks (concurrency, errors, security, clarity). Only then does the change reach the human reviewer — who focuses not on the code itself but on whether the intent captured here was the right one to ship.
 
