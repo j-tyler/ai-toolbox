@@ -70,29 +70,61 @@ A short paragraph explaining the motivation for the change. What problem is bein
 
 ### Acceptance criteria
 
-A list of falsifiable scenarios that must hold for the change to be considered correct. Each one describes specific observable behavior — what a caller, user, or operator can do or see after the change ships. Each AC must be **provable by a single test** in principle (unit, integration, or one-shot measurement), but **at authoring time you do not name the test**. The implementation agent writes the test as part of the work; the test shows up in the transcript when it runs.
+A list of falsifiable scenarios that must hold for the change to be **accepted**. Each one describes specific observable behavior — what a caller, user, or operator can do or see after the change ships. Each AC must be provable by a single test in principle (unit, integration, or one-shot measurement), but **at authoring time you do not name the test**. The implementation agent writes the test as part of the work; the test shows up in the transcript when it runs.
 
-This is what authors usually have pre-code — "user calls X and sees Y," "I can do A and observe B," "field C appears in response D." Each AC is a focused scenario.
+This is what authors usually have pre-code — "user calls X and sees Y," "field C appears in response D," "when E happens, metric F is emitted." Each AC is a focused scenario.
+
+**ACs are decision criteria, not exhaustive specs.** They capture what this change introduces or alters that needs verification before accepting it. Properties covered by the project's default standards — general performance characteristics, basic style, default error handling, existing test coverage — don't need to be restated as ACs. Many changes have a handful of functional ACs and nothing else, and that's correct. A short AC list is not a defect; it's a signal that the change has a small surface of new claims.
 
 The list is forward-looking. It states what the change establishes or demonstrates, not a catalog of existing behavior. If a behavior is already true and your change isn't adding or altering it, it doesn't belong here.
 
 **Production-traffic claims also don't belong here.** Statements like "cache hit rate exceeds 60% in production" or "P95 latency in prod drops by 70%" are operational observations that can only be made after deployment. They aren't provable by a test at change time. If they're motivation for the change, they go in `Why`. If they're operational targets to track, they live in dashboards or runbooks, not in the intent.
 
 **Examples of falsifiable acceptance criteria:**
+
+Functional behavior:
 - "When `UpdateUser` is called with a new email, a subsequent `GetUser` for that user returns the new email"
-- "`GetUser` response includes the user's email address as a top-level field"
-- "When a user creates an item via `POST /items`, a subsequent `GET /items/{id}` returns that item"
 - "`DELETE /items/{id}` returns 204 on success; a subsequent `GET /items/{id}` returns 404"
-- "On a cache hit, `GetUser` returns the cached value without querying the database"
+
+Observability:
+- "When `GET /orders` returns a 500, the `get_orders_error_rate` metric is incremented"
+- "When a user is deleted, an audit log entry is written with the deleting actor's identity"
+
+Schema / response shape:
+- "`GetUser` response includes the user's email address as a top-level string field"
+
+These are all provable by integration or unit tests; none depend on production traffic.
 
 **Examples of non-falsifiable claims that should be rejected:**
-- "GetUser is faster" — faster than what, how, in what scenario
+- "GetUser is faster" — faster than what, in what scenario
 - "The cache is correct" — correct in what sense
 - "Backward compatibility is preserved" — which API surface, in what scenarios
 
 **Examples of claims that don't belong as ACs (move to `Why` or remove):**
 - "Cache hit rate exceeds 60% under production traffic" — observable only after deployment
 - "P95 latency drops by 70%" — production observation, not test-provable at change time
+
+#### Performance acceptance criteria
+
+Most changes don't have performance ACs, and shouldn't. The default position is: the change is accepted under the project's general performance characteristics, and if performance regresses elsewhere, monitoring and load testing will surface it.
+
+Include a performance AC only when **both** conditions hold:
+
+1. The change is **performance-constrained** — performance is the reason for the change, or a specific bound is a hard requirement.
+2. The measurement is **environment-independent** — it produces the same answer regardless of machine, OS, or concurrent load.
+
+Memory allocation, allocation count, database-query count, network-call count, and algorithmic complexity (operations as a function of input size) are environment-independent and make good benchmark-style ACs. Wall-clock latency, throughput, and percentile latencies under load are environment-dependent and don't — they need different verification paths (staging load tests, production monitoring, perf regression suites), not single-test ACs.
+
+**Examples of good performance ACs:**
+- "A single `GetUser` call allocates at most 10KB of memory"
+- "A single `ProcessOrder` call makes at most one database query"
+- "Cache lookup is O(1) — no iteration over cache entries"
+
+**Examples of performance claims that aren't good ACs:**
+- "GetUser returns in under 10ms" — depends on machine, DB connection, concurrent load
+- "Throughput exceeds 1000 req/s" — depends on hardware, parallelism, network
+
+If your change needs an environment-dependent performance bound, that's not an AC — it's a separate verification track (benchmark suite, load test, production SLI). The intent file is the wrong artifact for that.
 
 ### Invariants
 
@@ -218,11 +250,22 @@ The AI presents an enumeration: "Here's what the existing code guarantees that y
 
 **Step 4: Elicit acceptance criteria first.**
 
-The AI asks the human what they already know about the change pre-code — the AC-shaped knowledge that's natural at this stage. "What does the caller / user / operator see after this is done? What scenario do they exercise? What does the response look like?" Each candidate AC gets pushed for specificity: is the scenario concrete enough that someone could write a test against it without further questions?
+The AI asks the human what they already know about the change pre-code — the AC-shaped knowledge that's natural at this stage. The questions cover the breadth of what an AC can capture:
 
-This step is fast and productive because the human typically has this content ready. The skill's job is mostly to sharpen it: turn "user can update their email" into "when `PATCH /users/me` is called with a new email, a subsequent `GET /users/me` returns the new email." Note what's missing: no test name. The test gets written at implementation time. The AC is the scenario, not the test.
+- *Functional:* "What does the caller / user / operator see? What scenario do they exercise?"
+- *Observability:* "When something happens, what metric, log, or audit entry should be emitted?"
+- *Schema:* "What new fields, endpoints, or response shapes does this introduce?"
+- *Performance (only if perf-constrained):* "Is there an environment-independent bound — memory, query count, complexity — that must hold?"
 
-Two things the skill pushes back on at this stage: vague claims ("faster," "more secure") that don't describe an observable scenario, and production-traffic claims ("hit rate >60% in prod") that can't be proven by a test. The first get sharpened; the second get moved to `Why` or dropped.
+Each candidate AC gets pushed for specificity: is the scenario concrete enough that someone could write a test against it without further questions?
+
+This step is fast and productive because the human typically has this content ready. The skill's job is mostly to sharpen: turn "user can update their email" into "when `PATCH /users/me` is called with a new email, a subsequent `GET /users/me` returns the new email." Note what's missing: no test name. The test gets written at implementation time. The AC is the scenario, not the test.
+
+The skill pushes back on:
+- Vague claims ("faster," "more secure") that don't describe an observable scenario — sharpened or removed
+- Production-traffic claims ("hit rate >60% in prod") — moved to `Why` or dropped
+- Environment-dependent performance claims ("returns in under 10ms") — replaced with env-independent measures if the change is perf-constrained, dropped otherwise
+- Properties already covered by the project's defaults — kept out of the AC list to avoid bloat
 
 **Step 5: Elicit invariants from the surface.**
 
@@ -307,6 +350,7 @@ immediate consistency, is migrated to a new GetUserUncached method.
 
 ## Acceptance criteria
 - On a cache hit, `GetUser` returns the cached value without querying the database
+- On a cache miss, the `cache_misses` counter is incremented; on a hit, `cache_hits` is incremented
 - `GetUserUncached` returns fresh data from the database on every call, never reading from the cache
 - When `UpdateUser` is called with a new email, a subsequent `GetUser` for that user returns the new email within 30 seconds
 
