@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-A `CHANGE_INTENT.md` is a structured document authored by a human (with AI assistance) **before any code is written** for a change. It captures *why* the change is being made and *what externally observable invariants must hold* for the change to be considered correct.
+A change intent is a structured document authored by a human (with AI assistance) **before any code is written** for a change. Each change gets its own intent file. The file captures *why* the change is being made and *what externally observable invariants must hold* for the change to be considered correct.
 
 The same document then serves two downstream roles. First, it's the completion condition for the implementation agent (e.g., Claude Code's `/goal`), giving the agent a verifiable target to work toward. Second, it's the contract an AI code review pass checks the resulting diff against — before the change ever reaches a human reviewer. The human reviewer then receives a structured artifact, machine-verified evidence the diff matches it, and can spend their attention on the judgment question — *is this the right intent?* — rather than redoing the verification work.
 
@@ -16,17 +16,17 @@ AI generates code far faster than humans can review it. A competent engineer wit
 
 Just as autonomous vehicles will eventually drive themselves and we'll think nothing of it, code review will eventually be done by AI and we'll think nothing of that either. The point of a good process today is to walk us toward that future smoothly — more AI, less human, comfort accumulating along the way.
 
-Until we're there, `CHANGE_INTENT.md` addresses several failure modes of today's review process:
+Until we're there, change intent addresses several failure modes of today's review process:
 
-1. **Vague intent.** Most PRs today are accompanied by a one-line description and a 400-line diff. Reviewers (human or AI) have to infer the author's intent from the code itself. CHANGE_INTENT inverts this: intent is authored explicitly and the code is verified against it.
+1. **Vague intent.** Most PRs today are accompanied by a one-line description and a 400-line diff. Reviewers (human or AI) have to infer the author's intent from the code itself. Change intent inverts this: intent is authored explicitly and the code is verified against it.
 
 2. **Silent invariant breakage.** Most production bugs aren't "I thought X would happen and Y happened." They're "I didn't think about case Z, and the code now does something weird in case Z." Forcing the author to enumerate what must remain true surfaces these cases before code is written.
 
-3. **Unverifiable claims.** Vague claims like "faster" or "more secure" can't be checked. CHANGE_INTENT requires every claim to be falsifiable — measurable, verifiable by a test or analysis the implementation agent can run.
+3. **Unverifiable claims.** Vague claims like "faster" or "more secure" can't be checked. Change intent requires every claim to be falsifiable — measurable, verifiable by a test or analysis the implementation agent can run.
 
-4. **Lost context.** PR descriptions get lost in commit history. CHANGE_INTENT lives in the commit itself, structured enough that a future engineer (or AI) reading it months later can understand why the change was made and what tradeoffs were accepted.
+4. **Lost context.** PR descriptions get lost in commit history. The change intent lives in the repository itself, structured enough that a future engineer (or AI) reading it months later can understand why the change was made and what tradeoffs were accepted.
 
-5. **Conflation of two tasks.** Human reviewers today are nominally doing two jobs simultaneously: deciding whether the change is the right change to make, and verifying that the code matches the intent. CHANGE_INTENT separates these so each can be done by the right kind of agent: humans focus on intent correctness, machines focus on implementation fidelity.
+5. **Conflation of two tasks.** Human reviewers today are nominally doing two jobs simultaneously: deciding whether the change is the right change to make, and verifying that the code matches the intent. Change intent separates these so each can be done by the right kind of agent: humans focus on intent correctness, machines focus on implementation fidelity.
 
 ---
 
@@ -115,7 +115,7 @@ It also separates the two cognitive tasks that get conflated in normal code revi
 1. **Deciding what should be true** — a high-judgment task humans are good at
 2. **Verifying that code matches what should be true** — a mostly mechanical task machines are good at
 
-CHANGE_INTENT splits the work so each gets done by the right agent at the right time.
+Change intent splits the work so each gets done by the right agent at the right time.
 
 ---
 
@@ -129,7 +129,7 @@ Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a complet
 
 **Key architectural detail:** the evaluator only sees what's surfaced in the conversation. So the condition must be something the implementation agent can prove through its own output — tests passing, builds clean, benchmarks meeting targets, files matching some shape. The evaluator can't run commands itself.
 
-`CHANGE_INTENT.md` is naturally shaped to be a `/goal` condition. The external invariants list **is** the completion condition. The implementation agent's job is to make the code such that every invariant in the document can be demonstrated in the transcript:
+A change intent file is naturally shaped to be a `/goal` condition. The external invariants list **is** the completion condition. The implementation agent's job is to make the code such that every invariant in the document can be demonstrated in the transcript:
 
 - `[unchanged]` invariants: existing tests still pass, run visibly
 - `[new]` invariants: new tests are added that pass
@@ -152,7 +152,7 @@ Only after the review pass approves does the change reach a human reviewer. By t
 
 ### Workflow
 
-1. Human (with skill assistance) produces `CHANGE_INTENT.md`
+1. Human (with skill assistance) produces a change intent file at `change-intent/YYYY-MM-DD-slug.md`
 2. Implementation phase: `/goal` with the invariants as the condition. Agent writes code, runs tests, and demonstrates each invariant. In-loop evaluator (Haiku) confirms each turn.
 3. When the goal clears, the AI code review pass runs against the diff with the intent as context, validates intent quality and intent-vs-diff alignment, and runs standard review checks.
 4. Once the review pass approves, the change reaches a human reviewer. They focus on the judgment question — *is this the right intent?* — not on verifying the code matches it (that has already been checked twice).
@@ -160,7 +160,7 @@ Only after the review pass approves does the change reach a human reviewer. By t
 ### Sample `/goal` invocation
 
 ```
-/goal All external invariants in CHANGE_INTENT.md are demonstrated in this transcript:
+/goal All external invariants in change-intent/2026-05-16-add-getuser-cache.md are demonstrated in this transcript:
 - Every [unchanged] invariant has a passing test visible in the transcript
 - Every [new] invariant has a new test that passes
 - Every [weakened] invariant's new form is demonstrated and old behavior is no longer asserted
@@ -173,7 +173,7 @@ The last line is the **bidirectional check** at the change level: not just "did 
 
 ## The Authoring Skill
 
-The skill produces `CHANGE_INTENT.md` through structured dialogue between the human and the AI. The human owns the macro intent; the AI helps make it rigorous, complete, and falsifiable.
+The skill produces a change intent file through structured dialogue between the human and the AI. The human owns the macro intent; the AI helps make it rigorous, complete, and falsifiable.
 
 **Critical constraint:** the AI **never** invents invariants for code that doesn't exist yet. The change hasn't been made. The AI's role is to enumerate what currently holds on the affected surface (which it can read), then help the human decide which existing invariants to preserve, modify, or replace, and what new invariants to add. The human is the source of intent; the AI is the source of context.
 
@@ -237,7 +237,7 @@ If the human can't make a claim falsifiable, that's a signal the claim isn't wel
 
 **Step 7: Convergence.**
 
-When every relevant category has an explicit position and every claim is falsifiable, the AI produces the `CHANGE_INTENT.md` and presents it for final review. If the human approves, the artifact is finalized and the implementation phase begins.
+When every relevant category has an explicit position and every claim is falsifiable, the AI writes the change intent file to `change-intent/YYYY-MM-DD-slug.md` and presents it for final review. If the human approves, the artifact is finalized and the implementation phase begins.
 
 ### Depth calibration
 
@@ -272,11 +272,9 @@ Without an explicit stopping rule, elicitation either runs forever or stops too 
 - No existing cache in this service
 - Similar caching pattern exists in `OrderService` using `CacheManager` interface
 
-**AI presents baseline and conducts elicitation.** After dialogue, the produced `CHANGE_INTENT.md`:
+**AI presents baseline and conducts elicitation.** After dialogue, the produced file at `change-intent/2026-05-16-add-getuser-cache.md`:
 
 ```markdown
-# CHANGE_INTENT
-
 ## Why
 GetUser is read-heavy (40k req/s peak). P95 latency is 80ms, dominated by 
 the DB round-trip. Adding a 30-second TTL cache should drop P95 below 10ms 
@@ -360,8 +358,8 @@ This document covers only the macro layer — change-scoped, human-authored (wit
 
 ## Summary
 
-`CHANGE_INTENT.md` is a per-change artifact authored *before* code, capturing the why and the externally observable invariants the change must satisfy. It's produced through structured dialogue between a human (who provides the intent) and an AI (which provides context from the existing codebase, pushes for category coverage, and enforces falsifiability). The artifact then serves two downstream roles: it's the `/goal` condition for the implementation phase, and it's the contract an AI code review pass checks the resulting diff against before any human review.
+A change intent is a per-change artifact authored *before* code, capturing the why and the externally observable invariants the change must satisfy. One file per change, stored under `change-intent/` in the repository. It's produced through structured dialogue between a human (who provides the intent) and an AI (which provides context from the existing codebase, pushes for category coverage, and enforces falsifiability). The artifact then serves two downstream roles: it's the `/goal` condition for the implementation phase, and it's the contract an AI code review pass checks the resulting diff against before any human review.
 
 The discipline replaces the fiction of careful per-line human review with a process that's actually verifiable, scoped to each change, and produced by each party at the level it's good at: humans set intent, AI enforces rigor in authoring, the implementation agent works against a clear target, and the review pass verifies the result before the human reviewer ever opens the diff.
 
-**The skill to build:** a structured-dialogue tool that takes a human's seed intent, reads the affected code surface, and walks the human through Socratic elicitation until every relevant category is addressed and every claim is falsifiable. The output is a `CHANGE_INTENT.md` ready to serve as both the `/goal` condition and the AI review pass's target.
+**The skill to build:** a structured-dialogue tool that takes a human's seed intent, reads the affected code surface, and walks the human through Socratic elicitation until every relevant category is addressed and every claim is falsifiable. The output is a change intent file ready to serve as both the `/goal` condition and the AI review pass's target.
