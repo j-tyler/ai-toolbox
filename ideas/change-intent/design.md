@@ -32,7 +32,37 @@ Until we're there, `CHANGE_INTENT.md` addresses several failure modes of today's
 
 ## What Change Intent Is
 
-A `CHANGE_INTENT.md` is a per-commit (or per-change) document authored **before any code is written**. It has two required sections:
+A change intent file is a per-change document authored **before any code is written**. One file per change, living alongside the rest of the repository.
+
+### File location and naming
+
+Intent files live in a `change-intent/` folder at the repository root. Each file is named:
+
+```
+YYYY-MM-DD-short-slug.md
+```
+
+Where `YYYY-MM-DD` is the date the intent was authored and `short-slug` is a kebab-case description of the change. Examples:
+
+```
+change-intent/2026-05-16-add-getuser-cache.md
+change-intent/2026-05-22-migrate-auth-to-oidc.md
+change-intent/2026-06-03-fix-payment-timeout.md
+```
+
+Three design choices are wrapped up here, each worth being explicit about:
+
+**1. The date comes first so the folder is linearly scannable.** A repository accumulates intent files over time — hundreds, eventually thousands in a long-lived codebase. Sorting by name gives you sorting by time, so a reader can scan the folder and see what happened when without digging into git history. The date is the *authoring* date, set at file creation, and never changes through review, merge, or squash.
+
+**2. The slug is short, descriptive, and required up front.** When the author invokes the skill to create the intent file, they have to pick the slug right then. This is intentional: if you can't describe your change in five to ten words at the moment you're about to write the intent, you don't yet know what you're doing and shouldn't be starting. The slug is essentially the commit title you'd write if you were committing — same level of compression, same level of specificity.
+
+**3. The slug is meant to be token-rich for future discovery.** The slug list is itself a useful artifact. Someone working in a new part of the codebase, or revisiting an old one, can scan the `change-intent/` folder and find prior intents that touched the same area or addressed the same concern — then read those intents to understand the reasoning behind earlier decisions. The slug should be written with that future reader in mind: concrete nouns about what was changed, not vague verbs about effort. `add-getuser-cache` is far more useful than `cache-improvements`; `migrate-auth-to-oidc` is far more useful than `auth-refactor`.
+
+Once a file exists, it is never renamed and never deleted — it's a historical record. Follow-up changes to the same area get their own file with their own date and slug; the date prefix makes the lineage visible without explicit cross-references.
+
+---
+
+The remaining subsections describe what goes inside the file. Every intent file has two required sections (`Why` and `External invariants`); the rest are optional.
 
 ### Why
 
