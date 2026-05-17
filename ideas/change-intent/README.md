@@ -6,7 +6,7 @@ A change intent is a structured artifact authored *before any code is written* f
 
 **Why** is always included: the motivation for the change, in enough detail that a future reader understands what triggered the work and what context shaped the decisions.
 
-It also includes any of the following when their conditions apply:
+The change intent file also includes any of the following when their conditions apply:
 
 - **Acceptance criteria** — falsifiable scenarios that must hold for the change to be accepted, each provable by a single test. "When a user does X, the system returns Y." Applies when there's observable behavior to verify.
 - **Invariants** — properties that must hold *across* the change, spanning multiple call sites or code paths. Not provable by a single test; closed by reasoning over the diff. "Read-after-write holds across all caller paths of `GetUser`." Applies when the change touches properties that span beyond a single test.
