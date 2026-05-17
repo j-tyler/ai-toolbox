@@ -447,7 +447,9 @@ That's the deeper claim. Change intent is one expression of it, scoped to 2026 t
 
 What this looks like a year or two from now is probably different. Code review may not use git as the substrate. Intent may be captured through richer interactions than markdown files. The specific conventions here will evolve.
 
-But the *form* of the answer — every change carrying the structured reasoning that produced it, retrievable indefinitely — feels durable. Change intent is what that form looks like today, with the tools and the intelligence level of current foundation models, structured to be a net value add to the review process rather than ceremony on top of it. The artifact will change; the goal of opening a change and getting into the mind of what produced it will not.
+We don't have to be exactly right about the future to be directionally right. The asymmetry that matters: information saved now can be reshaped into whatever future tooling needs; information that wasn't saved can't be reconstructed. As long as we capture the substance — the work, the decisions, the intent that went into the change — the format can adapt to whatever future review processes look like. The conviction underneath is that the future will want a lot more information about each change than the executable code carries on its own.
+
+The form feels durable: every change carrying the structured reasoning that produced it, retrievable indefinitely. Change intent is what that form looks like today, with the tools and the intelligence level of current foundation models, structured to be a net value add to the review process rather than ceremony on top of it. The artifact will change; the goal of opening a change and getting into the mind of what produced it will not.
 
 ---
 
