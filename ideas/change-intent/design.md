@@ -441,3 +441,9 @@ A change intent is a per-change artifact authored *before* code, capturing the w
 The discipline replaces the fiction of careful per-line human review with a process that's actually verifiable, scoped to each change, and produced by each party at the level it's good at: humans set intent, AI enforces rigor in authoring, the implementation agent works against a clear target, and the review pass verifies the result before the human reviewer ever opens the diff.
 
 **The skill to build:** a structured-dialogue tool that takes a human's seed intent, reads the affected code surface, and walks the human through Socratic elicitation until every relevant category is addressed and every claim is falsifiable. The output is a change intent file ready to serve as both the `/goal` condition and the AI review pass's target.
+
+---
+
+## Related
+
+Change intent is one instance of a broader pattern this repository explores: [**working in public**](../working-in-public/README.md) — capturing the high-value structured work between humans and AI in artifacts that persist for future agents and humans to reference, rather than letting it die with the context window it happened in. The pre-code dialogue here produces high-value tokens; the change intent file is how those tokens get preserved beyond the session that produced them.
