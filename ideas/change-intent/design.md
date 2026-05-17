@@ -2,11 +2,11 @@
 
 ## TL;DR
 
-A change intent is a structured document authored by a human (with AI assistance) **before any code is written** for a change. Each change gets its own intent file. The file captures *why* the change is being made, *acceptance criteria* (falsifiable claims each provable by a single test), and *invariants* (properties that span the change and require reasoning over the diff to close).
+The goal: construct changes in a way that they're **reviewable**. Less focus on the change itself, more focus on the review process around it. By the time a change reaches a human reviewer, design intent has already driven the implementation and been verified by automated review — the reviewer focuses on the judgment question *is this the right intent?* instead of redoing the verification work.
 
-The same document then serves two downstream roles. First, it's the completion condition for the implementation agent (e.g., Claude Code's `/goal`), giving the agent a verifiable target to work toward. Second, it's the contract an AI code review pass checks the resulting diff against — before the change ever reaches a human reviewer. The human reviewer then receives a structured artifact, machine-verified evidence the diff matches it, and can spend their attention on the judgment question — *is this the right intent?* — rather than redoing the verification work.
+A **change intent** is a per-change artifact authored before any code is written. It captures the design intent in a form that can drive the implementation agent, can be checked against the resulting diff by an AI review pass, and remains in the repository as a persistent record. Two layers of machine verification land a change on the human reviewer's plate already aligned with its stated intent.
 
-This document explains the concept, the problems it addresses, how it integrates with the implementation and review phases downstream, and how a Claude Code skill could produce these intent documents through structured dialogue.
+This document covers the concept, the problems it addresses, the artifact's structure, how it integrates downstream, and how a skill could produce these intent documents through structured dialogue.
 
 ---
 
@@ -443,11 +443,15 @@ This document covers only the macro layer — change-scoped, human-authored (wit
 
 ## Summary
 
-A change intent is a per-change artifact authored *before* code, capturing the why, the acceptance criteria (each provable by a single test), and the invariants (properties that span the change and need reasoning over the diff to close). One file per change, stored under `change-intent/` in the repository. It's produced through structured dialogue between a human (who provides the intent) and an AI (which provides context from the existing codebase, pushes for category coverage, and enforces falsifiability). The artifact then serves two downstream roles: it's the `/goal` condition for the implementation phase, and it's the contract an AI code review pass checks the resulting diff against before any human review.
+The case for change intent is structural, not aesthetic. AI generates code far faster than humans can review it, and the gap is widening. Post-facto PR descriptions don't help — in the AI era they're often just a summary of what the AI did, and an AI reviewer can derive that from the diff. What the review process is missing is signal about whether design intent actually drove the change.
 
-The discipline replaces the fiction of careful per-line human review with a process that's actually verifiable, scoped to each change, and produced by each party at the level it's good at: humans set intent, AI enforces rigor in authoring, the implementation agent works against a clear target, and the review pass verifies the result before the human reviewer ever opens the diff.
+Change intent provides that signal by inverting the direction of fit: intent is authored before code, the code must satisfy the intent, and the implementation can't retroactively absorb whatever happened to get built. The artifact has a small set of sections — *Why* always, plus *Acceptance criteria*, *Invariants*, and *Out of scope* when their conditions apply — and a naming convention (`change-intent/YYYY-MM-DD-short-slug.md`) that makes it discoverable forever via the same tools the rest of the codebase uses.
 
-**The skill to build:** a structured-dialogue tool that takes a human's seed intent, reads the affected code surface, and walks the human through Socratic elicitation until every relevant category is addressed and every claim is falsifiable. The output is a change intent file ready to serve as both the `/goal` condition and the AI review pass's target.
+Once authored, the same artifact does work at two downstream stages. The implementation agent treats it as a `/goal` condition: a passing test for every acceptance criterion, a walk over the diff for every invariant, and a refusal to drift outside the listed scope. The AI review pass treats it as a contract: it confirms the intent is itself well-described, that the diff matches it, and that the change doesn't contradict prior intents in the same area. By the time the change reaches a human reviewer, two independent machine-verified confirmations exist that the implementation matches stated intent — so the human spends their attention on the four-task model's only judgment task, *is this the right change to make,* while the other three (implementation choice, correctness, clarity) increasingly recede onto the AI as it improves.
+
+The discipline is built to work without humans entirely. The deciding agent — currently a human in dialogue with the authoring skill — can be an AI orchestrator in autonomous chains, producing the same artifact for the same downstream pipeline. That's what carries the design forward into the trajectory where humans gradually exit the loop: same dialogue shape, same artifact, same review process, just different agents in the role.
+
+**The skill to build:** a structured-dialogue tool that takes a seed intent, reads the affected code surface, walks the deciding agent through acceptance-criteria elicitation, then invariant elicitation, then category coverage, and refuses to settle for unfalsifiable claims. The output is a change intent file ready to drive implementation and pass review.
 
 ---
 
