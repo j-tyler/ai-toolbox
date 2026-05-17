@@ -69,7 +69,7 @@ Once a file exists, it is never renamed and never deleted — it's a historical 
 
 ---
 
-The remaining subsections describe what goes inside the file. Each is required when its conditions apply — `Why` and `Acceptance criteria` apply to every change; `Invariants` applies when the change touches properties that span beyond a single test; `Out of scope` applies when there are conscious exclusions worth signaling. A section being absent means there's nothing for it to hold, not that the author skipped it.
+The remaining subsections describe what goes inside the file. Each is required when its conditions apply — `Why` applies to every change; `Acceptance criteria` applies when there's observable behavior to verify; `Invariants` applies when the change touches properties that span beyond a single test; `Out of scope` applies when there are conscious exclusions worth signaling. A section being absent means there's nothing for it to hold, not that the author skipped it.
 
 ### Why
 

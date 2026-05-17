@@ -1,10 +1,13 @@
 # Change Intent
 
-A structured artifact authored *before any code is written* for a change. Each change has three required pieces:
+A structured artifact authored *before any code is written* for a change. The file is organized into four sections; each is included when its conditions apply.
 
-- **Why** — the motivation, in enough detail that a future reader understands what triggered the work and what context shaped the decisions.
-- **Acceptance criteria** — falsifiable scenarios that must hold for the change to be accepted, each provable by a single test. "When a user does X, the system returns Y." Mechanical to verify.
-- **Invariants** — properties that must hold *across* the change, spanning multiple call sites or code paths. Not provable by a single test; closed by reasoning over the diff at implementation and review time. "Read-after-write holds across all caller paths of `GetUser`."
+- **Why** — the motivation, in enough detail that a future reader understands what triggered the work and what context shaped the decisions. *Always included.*
+- **Acceptance criteria** — falsifiable scenarios that must hold for the change to be accepted, each provable by a single test. "When a user does X, the system returns Y." *Included when there's observable behavior to verify.*
+- **Invariants** — properties that must hold *across* the change, spanning multiple call sites or code paths. Not provable by a single test; closed by reasoning over the diff. "Read-after-write holds across all caller paths of `GetUser`." *Included when the change touches properties that span beyond a single test.*
+- **Out of scope** — what this change explicitly is *not* doing. Signals conscious exclusions to the implementation agent, the AI review pass, and the human reviewer. *Included when there are conscious exclusions worth signaling.*
+
+A section being absent means there's nothing for it to hold, not that the author skipped it.
 
 ACs and invariants are kept separate because they invite different downstream behavior: the implementation agent runs a test per AC and walks the diff for each invariant, and the AI review pass treats invariants as the heaviest single thing it scrutinizes.
 
