@@ -69,7 +69,7 @@ Once a file exists, it is never renamed and never deleted — it's a historical 
 
 ---
 
-The remaining subsections describe what goes inside the file. Two sections are always required (`Why`, `Acceptance criteria`). A third (`Invariants`) is required when the change touches properties that span beyond a single test. The rest are optional.
+The remaining subsections describe what goes inside the file. Each is required when its conditions apply — `Why` and `Acceptance criteria` apply to every change; `Invariants` applies when the change touches properties that span beyond a single test; `Out of scope` applies when there are conscious exclusions worth signaling. A section being absent means there's nothing for it to hold, not that the author skipped it.
 
 ### Why
 
@@ -153,7 +153,7 @@ Note the shape: each one reaches into the codebase beyond a single test — "acr
 
 ### Out of scope
 
-A list of things this change explicitly is *not* doing. This is the only optional section the design defines, because it carries signal nothing else can.
+A list of things this change explicitly is *not* doing. Required when there are conscious exclusions worth signaling — many changes have something to put here, some don't. It's the only section beyond the three above that the design defines, because it carries signal nothing else can.
 
 What it does:
 
@@ -169,7 +169,7 @@ Examples:
 
 Each item is something the author thought about and explicitly excluded.
 
-**Why no other optional sections?** Two shapes common in design docs are deliberately excluded from this artifact:
+**Why no other sections?** Two shapes common in design docs are deliberately excluded from this artifact:
 
 - *Alternatives considered* pollutes future searches. An old "rejected alternative" anchors new authors on prior reasoning that may no longer apply, creating gravity around decisions that should be re-evaluated when context shifts.
 - *Risks* biases review. A listed risk becomes the reviewer's checklist; unlisted risks get less scrutiny than fresh eyes on the diff would give them. The author writing the change shouldn't shape the reviewer's attention this way.
