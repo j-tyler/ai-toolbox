@@ -439,6 +439,18 @@ This document covers only the macro layer — change-scoped, human-authored (wit
 
 ---
 
+## Where this is heading
+
+A change is the package of the work that produced it — the decisions, the intent, the falsifiable claims, the consciously-excluded scope — bundled with the code itself. An AI or future engineer should be able to almost hermetically open a single merged change and reconstruct it: the what, the why, the tradeoffs that were accepted, all the important tokens that went into producing the change saved alongside it.
+
+That's the deeper claim. Change intent is one expression of it, scoped to 2026 tools.
+
+What this looks like a year or two from now is probably different. Code review may not use git as the substrate. Intent may be captured through richer interactions than markdown files. The specific conventions here will evolve.
+
+But the *form* of the answer — every change carrying the structured reasoning that produced it, retrievable indefinitely — feels durable. Change intent is what that form looks like today, with the tools and the intelligence level of current foundation models, structured to be a net value add to the review process rather than ceremony on top of it. The artifact will change; the goal of opening a change and getting into the mind of what produced it will not.
+
+---
+
 ## Summary
 
 The case for change intent is structural, not aesthetic. AI generates code far faster than humans can review it, and the gap is widening. Post-facto PR descriptions don't help — in the AI era they're often just a summary of what the AI did, and an AI reviewer can derive that from the diff. What the review process is missing is signal about whether design intent actually drove the change.
