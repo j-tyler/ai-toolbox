@@ -18,7 +18,7 @@ Just as autonomous vehicles will eventually drive themselves and we'll think not
 
 Until we're there, change intent addresses several failure modes of today's review process:
 
-1. **Vague intent.** Most PRs today are accompanied by a one-line description and a 400-line diff. Reviewers (human or AI) have to infer the author's intent from the code itself. Change intent inverts this: intent is authored explicitly and the code is verified against it.
+1. **Post-facto rationalization.** PR descriptions are written *after* the change is made, so they get shaped to fit the change the author ended up with — covering what the code does, but not what the author intended before starting or didn't consider along the way. Reviewers end up reading a description that's been overfit to the implementation, with no signal about whether design intent actually drove the change. Change intent inverts the direction: intent is authored before code, the code must satisfy the intent, and the description can't retroactively absorb whatever the code did.
 
 2. **Silent invariant breakage.** Most production bugs aren't "I thought X would happen and Y happened." They're "I didn't think about case Z, and the code now does something weird in case Z." Forcing the author to enumerate what must remain true surfaces these cases before code is written.
 
