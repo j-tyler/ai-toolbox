@@ -28,12 +28,12 @@ Until we're there, change intent addresses several failure modes of today's revi
 
 5. **Conflation of multiple tasks.** Human reviewers today are nominally doing four jobs at once:
 
-    1. Deciding whether this is the right change to make
-    2. Deciding whether the implementation is the right one for that change
-    3. Verifying correctness — the code does what it claims
-    4. Verifying clarity — the code is understandable
+    - **a.** Deciding whether this is the right change to make
+    - **b.** Deciding whether the implementation is the right one for that change
+    - **c.** Verifying correctness — the code does what it claims
+    - **d.** Verifying clarity — the code is understandable
 
-    Only the first needs human taste. The other three are increasingly within reach of AI, and change intent accelerates that handoff: with explicit intent in hand, the AI review pass has what it needs to verify the implementation, correctness, and clarity against a stated target. The human's attention frees up for the judgment task that only they can do — and as AI gets better, the human's role on the other three recedes naturally over time.
+    Only (a) needs human taste. The other three are increasingly within reach of AI, and change intent accelerates that handoff: with explicit intent in hand, the AI review pass has what it needs to verify the implementation, correctness, and clarity against a stated target. The human's attention frees up for the judgment task that only they can do — and as AI gets better, the human's role on the other three recedes naturally over time.
 
 ---
 
