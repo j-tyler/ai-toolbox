@@ -136,7 +136,7 @@ A list of things this change explicitly is *not* doing — work the author consi
 
 What it does:
 
-- **Signals to the author at authoring time.** Writing an out-of-scope item often prompts "wait, should this actually be in scope?" The reflection happens before code is written, which is the cheapest place for it.
+- **Signals to the author at authoring time.** Writing an out-of-scope item often prompts "wait, should this actually be in scope?" That reflection happens before any code is written — before the implementation itself starts to bias the author's view of what the change should be.
 - **Signals to the implementation agent.** These areas are excluded from the goal, so the agent doesn't drift into them while satisfying the ACs and invariants.
 - **Signals to the AI review pass.** Items listed here were a conscious choice, not an oversight. The review pass doesn't flag the absence of an out-of-scope item as a defect.
 - **Signals to the human reviewer.** If a related item is missing from this list and the reviewer would expect it to be considered, that's a question to ask — the author may not have thought about it.
