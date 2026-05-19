@@ -28,12 +28,12 @@ Until we're there, change intent addresses several failure modes of today's revi
 
 5. **Conflation of multiple tasks.** Human reviewers today are nominally doing four jobs at once:
 
-    - **a.** Deciding whether this is the right change to make
-    - **b.** Deciding whether the implementation is the right one for that change
-    - **c.** Verifying correctness — the code does what it claims
-    - **d.** Verifying clarity — the code is understandable
+    - Deciding whether this is the right change to make
+    - Deciding whether the implementation is the right one for that change
+    - Verifying correctness — the code does what it claims
+    - Verifying clarity — the code is understandable
 
-    Only (a) needs human taste. The other three are increasingly within reach of AI, and change intent accelerates that handoff: with explicit intent in hand, the AI review pass has what it needs to verify the implementation, correctness, and clarity against a stated target. The human's attention frees up for the judgment task that only they can do — and as AI gets better, the human's role on the other three recedes naturally over time.
+    Only the first needs human taste. The other three are increasingly within reach of AI, and change intent accelerates that handoff: with explicit intent in hand, the AI review pass has what it needs to verify the implementation, correctness, and clarity against a stated target. The human's attention frees up for the judgment task that only they can do — and as AI gets better, the human's role on the other three recedes naturally over time.
 
 ---
 
@@ -43,13 +43,12 @@ A change intent file is a per-change document authored **before any code is writ
 
 ### Why
 
-A thorough, clear paragraph (or a few) that captures the high-value context surrounding the change — the kind of reasoning a future reader (engineer or AI) couldn't reconstruct from the diff alone. Aim to answer at least:
+A thorough, clear paragraph (or a few) that captures the high-value context surrounding the change — the kind of reasoning a future reader (engineer or AI) couldn't reconstruct from the diff alone. The Why is written as prose, not a Q&A. The prompts below are the kinds of information to weave in, in whatever order makes sense — not a list to answer point-by-point:
 
-- **What problem is being solved?**
-- **What triggered this change** — a bug, a metric regression, user feedback, a planned migration, a product request?
-- **What measurements or observations motivated it?** Production traces, profiling data, telemetry, prior incidents — the data that grounds the decision.
-- **What domain context isn't obvious from the code** but shapes the decision? Constraints, prior decisions, system behavior the reader needs to know.
-- **What context will a future engineer (or AI) reading this a year from now** need to make sense of why this happened?
+- What problem is being solved?
+- What triggered this change — a bug, a metric regression, user feedback, a planned migration, a product request?
+- What domain context isn't obvious from the code but shapes the decision? Constraints, prior decisions, system behavior the reader needs to know.
+- What context will a future engineer (or AI) reading this a year from now need to make sense of why this happened?
 
 This is where the high-value tokens from the pre-code dialogue land — the reasoning that wouldn't survive in a commit message and can't be recovered from the diff. Err toward including too much rather than too little; the Why is durable storage for context that's expensive or impossible to reconstruct later.
 
