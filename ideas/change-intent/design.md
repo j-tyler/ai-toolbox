@@ -194,7 +194,7 @@ Two reasons, both about timing.
 
 **It's a forcing function.** The moment you try to state precisely what must hold, you discover where your thinking is fuzzy. Most software bugs aren't reasoning errors; they're cases the author didn't consider. Articulating acceptance criteria and invariants explicitly surfaces those cases at the cheapest possible time, before the code exists.
 
-**It's the last point where a deciding agent is in the loop.** Once the change intent is set, the implementation runs autonomously — the agent writes code, runs tests, walks the diff, demonstrates the criteria — and the deciding agent is not involved again until review. If a decision about *what the change should be* hasn't been made by then, it doesn't get made. The intent file is the contract between the deciding step and the doing step; once signed, the doing is on its own.
+**It's the last point where a deciding agent is in the loop.** Once the change intent is set, the downstream agents work in narrower modes: the implementation agent thinks about *how* to satisfy the intent (write code, run tests, walk the diff for invariants), and the review pass thinks about *whether the implementation matches the stated intent*. Neither is asking "what should the change be?" — that's been settled. The downstream work is more focused and more verifiable precisely because the design question has already been answered. If a decision about what the change should be hasn't been made by the time the intent is finalized, it doesn't get made — the intent file is the contract between the deciding step and the doing step, and once signed, the doing is on its own.
 
 This split also separates the two cognitive tasks that get conflated in normal code review:
 
