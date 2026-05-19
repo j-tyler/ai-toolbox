@@ -125,7 +125,7 @@ The invariants section is required when the change touches scope-spanning proper
 **Examples of invariants:**
 - "Read-after-write: a user updated via `UpdateUser` is visible to `GetUser` across all caller paths, within the staleness window"
 - "Every mutation of user data produces an audit log entry"
-- "The cache layer is safe for concurrent reads and writes from multiple goroutines, across all access paths added by this change"
+- "The cache layer is safe for concurrent reads and writes from multiple callers, across all access paths added by this change"
 - "If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers"
 
 Note the shape: each one reaches into the codebase beyond a single test — "across all caller paths," "across all mutation sites," "across access paths," "every code path." That's the verb invariants do. ACs don't.
@@ -276,7 +276,7 @@ If the seed is too vague to act on at all, the skill's first move is to refuse t
 Given the seed, the AI identifies the code likely to be affected and enumerates what currently holds:
 
 - Type signatures and error contracts
-- Concurrency patterns (mutex usage, channel semantics, goroutine spawning)
+- Concurrency patterns (locking, message passing, spawning of concurrent work)
 - Existing invariants documented in godoc
 - Call sites — who depends on this code and how
 - Existing tests — what's currently verified
@@ -330,7 +330,7 @@ The AI ensures the human has addressed every category that applies to the touche
 - Audit / compliance
 - Performance
 - Backward compatibility (API, on-disk format, wire protocol)
-- Resource cleanup (file handles, connections, goroutines)
+- Resource cleanup (file handles, connections, background tasks)
 - Failure modes (what happens when dependencies fail)
 
 The human can declare any category "not applicable" but they have to declare it explicitly. Silence isn't an answer.
@@ -397,7 +397,7 @@ immediate consistency, is migrated to a new GetUserUncached method.
 
 ## Invariants
 - Read-after-write: across all caller paths through `GetUser`, no caller sees data older than 30 seconds after an `UpdateUser` for that user
-- The cache layer is safe for concurrent reads and writes from multiple goroutines, across all access paths added by this change
+- The cache layer is safe for concurrent reads and writes from multiple callers, across all access paths added by this change
 - If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers
 
 ## Out of scope
