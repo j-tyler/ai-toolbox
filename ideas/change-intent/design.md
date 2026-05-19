@@ -132,7 +132,7 @@ Note the shape: each one reaches into the codebase beyond a single test — "acr
 
 ### Out of scope
 
-A list of things this change explicitly is *not* doing. Required when there are conscious exclusions worth signaling — many changes have something to put here, some don't. It's the only section beyond the three above that the design defines, because it carries signal nothing else can.
+A list of things this change explicitly is *not* doing — work the author considered but intentionally left out. Without this section, the diff alone can't tell a reader whether something was thought about and excluded, or just never considered. Out of scope captures that distinction, turning intentional exclusion into a signal the same way the diff makes intentional inclusion a signal.
 
 What it does:
 
