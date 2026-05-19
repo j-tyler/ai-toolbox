@@ -141,12 +141,15 @@ What it does:
 - **Signals to the AI review pass.** Items listed here were a conscious choice, not an oversight. The review pass doesn't flag the absence of an out-of-scope item as a defect.
 - **Signals to the human reviewer.** If a related item is missing from this list and the reviewer would expect it to be considered, that's a question to ask — the author may not have thought about it.
 
-Examples:
-- "Distributed cache coordination — single-node cache only for now"
-- "Cache eviction policy customization — using `CacheManager` defaults"
-- "Cache warming or pre-population"
+Out-of-scope items are typically multi-sentence — enough to convey what was considered and why it was excluded. Examples:
 
-Each item is something the author thought about and explicitly excluded.
+- **Distributed cache coordination.** Single-node cache only for now. Cross-node consistency would require a separate design and a measurable need we don't yet have.
+
+- **Cache eviction policy customization.** The library defaults work for current access patterns. We can add hooks for customization later as specific callers need different policies.
+
+- **A dedicated API for cache inspection and invalidation.** Not included in this change. A follow-up PR will add inspection endpoints once production data shows whether on-demand invalidation is needed.
+
+Each item is something the author thought about and explicitly excluded. Note the third example: an out-of-scope item can flag work the author has explicitly deferred. That signals to the reviewer that more work is coming, and gives a later reader the ability to check whether the follow-up actually landed.
 
 **Why no other sections?** Two shapes common in design docs are deliberately excluded from this artifact:
 
@@ -401,10 +404,10 @@ immediate consistency, is migrated to a new GetUserUncached method.
 - If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers
 
 ## Out of scope
-- The cache implementation itself (using existing CacheManager interface)
-- Eviction policy (using CacheManager defaults: LRU with 100k entry limit)
-- Cache warming or pre-population
-- Distributed cache coordination (single-node cache only for now)
+- **The cache implementation itself.** Using the existing CacheManager interface; no new caching primitives are introduced.
+- **Eviction policy customization.** CacheManager defaults (LRU with a 100k entry limit) are sufficient for the access patterns we've measured.
+- **Distributed cache coordination.** Single-node cache only. Cross-node consistency would require a separate design and isn't justified by current request volume.
+- **A dedicated API for cache inspection or invalidation.** Not included here. A follow-up PR will add inspection endpoints once production data shows whether on-demand invalidation is needed.
 ```
 
 The implementation agent takes this file as the `/goal` condition. For each acceptance criterion, the agent writes a test that exercises the scenario, runs it, and surfaces the passing result. For each invariant, the agent writes spot-check test(s) for specific cases *and* walks the diff to confirm the property holds at every site where it could be violated — every caller path of `GetUser` for the read-after-write window, every access path into the cache for thread safety, every cache-read code path for the backend-unreachable fallback. The in-loop evaluator checks the transcript for both kinds of evidence.
