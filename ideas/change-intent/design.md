@@ -79,14 +79,17 @@ Schema / response shape:
 
 These are all provable by integration or unit tests; none depend on production traffic.
 
-**Examples of non-falsifiable claims that should be rejected:**
-- "GetUser is faster" — faster than what, in what scenario
-- "The cache is correct" — correct in what sense
-- "Backward compatibility is preserved" — which API surface, in what scenarios
+**Examples of claims that should be rejected:**
 
-**Examples of claims that don't belong as ACs (move to `Why` or remove):**
-- "Cache hit rate exceeds 60% under production traffic" — observable only after deployment
-- "P95 latency drops by 70%" — production observation, not test-provable at change time
+Too abstract — what would it even mean to uphold these?
+- "GetUser is faster" — faster than what, in what scenario, by how much
+- "The cache is correct" — correct in what sense
+
+Concrete but not provable by a test that ships with the diff:
+- "Cache hit rate exceeds 60% under production traffic over a rolling 24h window" — specific, but observable only after deployment
+- "GetUser p95 latency drops below 10ms under 1000 RPS" — specific, but requires production-scale load to verify
+
+Claims in the second category usually belong in `Why` (if they're motivation) or in dashboards/runbooks (if they're operational targets), not in the AC list.
 
 #### Performance acceptance criteria
 
