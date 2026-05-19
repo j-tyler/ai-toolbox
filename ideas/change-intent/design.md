@@ -213,7 +213,7 @@ This is what lets the discipline carry forward into the autonomous trajectory. A
 
 ## How It Integrates Downstream
 
-The change intent has two downstream consumers. The implementation agent uses it as a *goal* — a completion condition to work toward. An AI code review pass then uses it as a *contract* — checking the resulting diff against what was claimed. Each stage adds an independent layer of verification before the change reaches a human reviewer.
+The change intent has three downstream consumers. The implementation agent uses it as a *goal* — a completion condition to work toward. The AI code review pass uses it as a *contract* — checking the resulting diff against what was claimed. The human reviewer uses it as *evidence of the process* — confirming the design question was settled before code was written and seeing exactly what context the AI agents had. Each consumer adds verification of a different kind, and by the time the human engages they don't need to wonder what was looked at or what wasn't.
 
 ### Implementation phase: the intent as the `/goal` condition
 
@@ -238,7 +238,11 @@ After the goal clears, an AI code review pass runs against the resulting diff wi
 
 This is independent from and stronger than the in-loop `/goal` evaluator. The evaluator is a fast Haiku pass over a transcript; the review pass is a slower, stronger model with access to the full diff, the repository, and the history of prior intents. It also runs the usual review checks — concurrency hazards, security boundaries, error handling, comment clarity — but now with the intent as additional context shaping what to focus on.
 
-Only after the review pass approves does the change reach a human reviewer. By then there are two independent machine-verified confirmations that the implementation matches the stated intent, and the human can spend their attention on the judgment question rather than the verification one.
+### Human review: the intent as evidence of the process
+
+After both machine layers approve, the change lands on a human reviewer's plate. The change intent serves them differently from how it served the AI agents: it's evidence that the design question was settled before code was written, that the implementation agent worked from a stated intent, and that the AI review pass had that intent as context for its checks. The human reviewer doesn't need to wonder what the AI agents had in front of them — the intent file is the record, sitting in the repository alongside the change.
+
+This is what frees the human reviewer to focus on the one task only they can do: deciding whether the change is the right change to make. The verification work has been done twice by machines, and the intent that was checked against is right there in the file.
 
 ### Workflow
 
