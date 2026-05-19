@@ -105,7 +105,7 @@ Memory allocation, allocation count, database-query count, network-call count, a
 **Examples of good performance ACs:**
 - "A single `GetUser` call allocates at most 10KB of memory"
 - "A single `ProcessOrder` call makes at most one database query"
-- "Cache lookup is O(1) — no iteration over cache entries"
+- "At most 10 concurrent requests can be in-flight through `ProcessOrder` at any given moment — useful for verifying bulkhead or rate-limiter patterns"
 
 **Examples of performance claims that aren't good ACs:**
 - "GetUser returns in under 10ms" — depends on machine, DB connection, concurrent load
