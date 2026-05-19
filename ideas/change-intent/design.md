@@ -147,7 +147,7 @@ Out-of-scope items are typically multi-sentence — enough to convey what was co
 
 - **Cache eviction policy customization.** The library defaults work for current access patterns. We can add hooks for customization later as specific callers need different policies.
 
-- **A dedicated API for cache inspection and invalidation.** Not included in this change. A follow-up PR will add inspection endpoints once production data shows whether on-demand invalidation is needed.
+- **A batch `GetUsers` endpoint.** Considered but deferred. The dashboard would benefit from a multi-user fetch to reduce round-trips, but the auth model for batch requests needs its own design. A follow-up PR will deliver it once the auth approach is settled.
 
 Each item is something the author thought about and explicitly excluded. Note the third example: an out-of-scope item can flag work the author has explicitly deferred. That signals to the reviewer that more work is coming, and gives a later reader the ability to check whether the follow-up actually landed.
 
