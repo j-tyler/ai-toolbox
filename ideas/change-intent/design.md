@@ -58,11 +58,11 @@ A list of falsifiable scenarios that must hold for the change to be **accepted**
 
 This is what authors usually have pre-code — "user calls X and sees Y," "field C appears in response D," "when E happens, metric F is emitted." Each AC is a focused scenario.
 
-**ACs are decision criteria, not exhaustive specs.** They capture what this change introduces or alters that needs verification before accepting it. Properties covered by the project's default standards — general performance characteristics, basic style, default error handling, existing test coverage — don't need to be restated as ACs. Many changes have a handful of functional ACs and nothing else, and that's correct. A short AC list is not a defect; it's a signal that the change has a small surface of new claims.
+**ACs are decision criteria, not exhaustive specs.** They capture what this change introduces or alters that needs verification before accepting it. Properties covered by the project's default standards — general performance characteristics, basic style, default error handling, existing test coverage — don't need to be restated as ACs. The AC list should be sized to the change: a small or internal change may have few or no ACs; a large change may have tens or even hundreds. A short list isn't a defect any more than a long list is — what matters is whether each AC describes a claim the change is making.
 
 The list is forward-looking. It states what the change establishes or demonstrates, not a catalog of existing behavior. If a behavior is already true and your change isn't adding or altering it, it doesn't belong here.
 
-**Production-traffic claims also don't belong here.** Statements like "cache hit rate exceeds 60% in production" or "P95 latency in prod drops by 70%" are operational observations that can only be made after deployment. They aren't provable by a test at change time. If they're motivation for the change, they go in `Why`. If they're operational targets to track, they live in dashboards or runbooks, not in the intent.
+**Each AC must be provable by a test that ships with the diff.** If there's no integration test, unit test, or one-shot measurement that can be run against the change to demonstrate the claim, it doesn't belong here. "Cache hit rate exceeds 60% in production," for example, can't be verified at change time — production isn't running the diff when the review happens. Claims like that go in `Why` (if they're motivation) or in dashboards/runbooks (if they're operational targets), not in the intent.
 
 **Examples of falsifiable acceptance criteria:**
 
