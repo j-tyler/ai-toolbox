@@ -103,7 +103,6 @@ Include a performance AC only when **both** conditions hold:
 Memory allocation, allocation count, database-query count, network-call count, and algorithmic complexity (operations as a function of input size) are environment-independent and make good benchmark-style ACs. Wall-clock latency, throughput, and percentile latencies under load are environment-dependent and don't — they need different verification paths (staging load tests, production monitoring, perf regression suites), not single-test ACs.
 
 **Examples of good performance ACs:**
-- "A single `GetUser` call allocates at most 10KB of memory"
 - "A single `ProcessOrder` call makes at most one database query"
 - "At most 10 concurrent requests can be in-flight through `ProcessOrder` at any given moment — useful for verifying bulkhead or rate-limiter patterns"
 
