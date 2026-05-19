@@ -277,7 +277,7 @@ Given the seed, the AI identifies the code likely to be affected and enumerates 
 
 - Type signatures and error contracts
 - Concurrency patterns (locking, message passing, spawning of concurrent work)
-- Existing invariants documented in godoc
+- Existing invariants documented in doc comments
 - Call sites — who depends on this code and how
 - Existing tests — what's currently verified
 - Performance characteristics where measurable
@@ -372,7 +372,7 @@ Without an explicit stopping rule, elicitation either runs forever or stops too 
 **Human seed:** "Add caching to UserService.GetUser to reduce database load."
 
 **AI reads relevant code and finds:**
-- `GetUser(ctx context.Context, id UserID) (*User, error)` returns nil for missing users
+- `GetUser(userID)` returns the user, or nil for users that don't exist
 - Documented as safe for concurrent use
 - Called by PaymentService, AuthService, AuditLog, NotificationService
 - No existing cache in this service
@@ -444,7 +444,7 @@ The change-level intent captures invariants on the touched surface, but some pro
 
 ### Method-level invariants are separate
 
-This document covers only the macro layer — change-scoped, human-authored (with AI assistance). There is a complementary system for method-level invariants: pedantic, AI-maintained annotations in godoc comments paired with named tests, enforced by a linter, consumed by an AI-only reviewer. That system handles the micro layer. The two layers compose in the broader review pipeline but are designed independently. Method-level invariants are **out of scope** for this document and this skill.
+This document covers only the macro layer — change-scoped, human-authored (with AI assistance). There is a complementary system for method-level invariants: pedantic, AI-maintained annotations in doc comments paired with named tests, enforced by a linter, consumed by an AI-only reviewer. That system handles the micro layer. The two layers compose in the broader review pipeline but are designed independently. Method-level invariants are **out of scope** for this document and this skill.
 
 ---
 
