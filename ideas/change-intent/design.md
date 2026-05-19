@@ -43,7 +43,15 @@ A change intent file is a per-change document authored **before any code is writ
 
 ### Why
 
-A short paragraph explaining the motivation for the change. What problem is being solved? What's the trigger? What context will be needed by a future engineer (or AI) reading this commit a year from now?
+A thorough, clear paragraph (or a few) that captures the high-value context surrounding the change — the kind of reasoning a future reader (engineer or AI) couldn't reconstruct from the diff alone. Aim to answer at least:
+
+- **What problem is being solved?**
+- **What triggered this change** — a bug, a metric regression, user feedback, a planned migration, a product request?
+- **What measurements or observations motivated it?** Production traces, profiling data, telemetry, prior incidents — the data that grounds the decision.
+- **What domain context isn't obvious from the code** but shapes the decision? Constraints, prior decisions, system behavior the reader needs to know.
+- **What context will a future engineer (or AI) reading this a year from now** need to make sense of why this happened?
+
+This is where the high-value tokens from the pre-code dialogue land — the reasoning that wouldn't survive in a commit message and can't be recovered from the diff. Err toward including too much rather than too little; the Why is durable storage for context that's expensive or impossible to reconstruct later.
 
 ### Acceptance criteria
 
