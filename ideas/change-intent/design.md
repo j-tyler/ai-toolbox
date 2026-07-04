@@ -6,7 +6,7 @@ The goal: construct changes in a way that they're **reviewable**. Less focus on 
 
 A **change intent** is a per-change artifact authored before any code is written. It captures the design intent in a form that can drive the implementation agent, can be checked against the resulting diff by an AI review pass, and remains in the repository as a persistent record. Machine verification lands a change on the human reviewer's plate already aligned with its stated intent.
 
-This document covers the concept, the problems it addresses, the artifact's structure, how it integrates downstream, and how a skill could produce these intent documents through structured dialogue.
+This document covers the concept, the problems it addresses, the artifact's structure, how it integrates downstream, and how a skill could produce these intent documents through structured dialogue. The operational instruments that carry it into a project — skill files, prompt blocks, tool bindings — live in [mechanics/](mechanics/README.md): this document makes the argument; those files make it runnable.
 
 ---
 
@@ -560,6 +560,15 @@ The change-level intent captures invariants on the touched surface, but some pro
 
 This document covers only the macro layer — change-scoped, human-authored (with AI assistance). There is a complementary system for method-level invariants: pedantic, AI-maintained annotations in doc comments paired with named tests, enforced by a linter, consumed by an AI-only reviewer. That system handles the micro layer. The two layers compose in the broader review pipeline but are designed independently. Method-level invariants are **out of scope** for this document and this skill.
 
+### Open artifact questions
+
+Four questions surfaced while specifying the mechanics ([mechanics/](mechanics/README.md)), parked here because they change the artifact or the protocol, not the prompts:
+
+- **Should invariants carry their blast radius?** The authoring surface read finds the caller list; the intent file currently drops it. Checking a named list is verifiable; regenerating the list is where an implementation agent silently drops a site.
+- **Should amendments link their escalation record?** Without a pointer to where the halt-and-escalate actually happened, the custody check verifies formatting, not custody.
+- **Where does the authoring surface read persist?** It is evidence the review pass consumes — caller lists, existing guarantees, prior intents on the same surface — so its home is part of the artifact spec.
+- **What about claims that are true but unprovable in this repository?** An acceptance criterion whose proving test can't be written in the project's harness is neither a falsified claim nor unsatisfiable scope; the necessity test has no door for it. Either an authoring-time feasibility check closes the gap, or the amendment protocol needs a third trigger.
+
 ---
 
 ## Where this is heading
@@ -586,7 +595,7 @@ Once authored, the same artifact does work at two downstream stages. The impleme
 
 The discipline is built to work without humans entirely. The intent author — currently a human in dialogue with the authoring skill — can be an AI orchestrator in autonomous chains, producing the same artifact for the same downstream pipeline. That's what carries the design forward into the trajectory where humans gradually exit the loop: same dialogue shape, same artifact, same review process, just different agents in the role.
 
-**The skill to build:** a structured-dialogue tool that takes a seed intent, reads the affected code surface, walks the intent author through acceptance-criteria elicitation, then invariant elicitation, then category coverage, and refuses to settle for unfalsifiable claims. The output is a change intent file ready to drive implementation and pass review.
+**The skill to build:** a structured-dialogue tool that takes a seed intent, reads the affected code surface, walks the intent author through acceptance-criteria elicitation, then invariant elicitation, then category coverage, and refuses to settle for unfalsifiable claims. The output is a change intent file ready to drive implementation and pass review. That skill ships as part of a small mechanics package — an agents-file block, the authoring skill, an implementation reference, and a review skill — stubbed in [mechanics/](mechanics/README.md). The design stays out of the prompt-level engineering those instruments carry; they stay out of the argument this document makes.
 
 ---
 
