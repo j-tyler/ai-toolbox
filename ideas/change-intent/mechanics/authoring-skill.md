@@ -159,6 +159,6 @@ At signing:
 - **Strip the scaffolding.** Provenance tags and section wrappers go; decision outcomes are already embodied in the claims. The signed file is clean, in the design.md format, nothing else.
 - **Emit parked items** as one-line seeds the author can turn into future intents.
 
-Sign-off is explicit. Present the final file and state what signing means: from this point the file changes only through halt-and-escalate amendment, and the author is who rules on escalations. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before signing anything.
+Sign-off is explicit. Present the final file and state what approval means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file on the change's branch before any implementation begins: that commit is the baseline the review pass diffs against when it verifies amendments were recorded. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before signing anything.
 
 If the author abandons at any point, write nothing. There is no half-signed intent.

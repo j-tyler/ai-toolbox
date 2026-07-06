@@ -25,7 +25,7 @@ If asked to implement a change that needs an intent and none exists, say so and 
 
 ### Rules that apply in every role
 
-- **Never edit an intent file.** If you are implementing and the intent is wrong as written — a claim that cannot hold, or the change forces observable behavior the intent takes no position on — stop work on that claim and escalate to the intent author with the discovered fact and the options. Only the author amends. Do not pick a resolution yourself or build past the problem.
+- **If a claim cannot hold, amend the intent — on the record.** If you are implementing and the intent is wrong as written — a claim that cannot hold, or the change forces observable behavior the intent takes no position on — amend the intent file: change the claim, add a dated entry under Amendments (what changed — the discovered fact that forced it), and note the discovery next to the claim it changed. Never pretend a claim holds and never drift past it silently; amendment exists so you never have to. This should be rare. The author rules on every amendment when the work comes back, and one they would have refused means rework — so amend with the evidence you would want in their place. If no amendment can deliver the change, stop and report: that is a failed change, not an amendment.
 - **Stay inside scope.** Items under "Out of scope" are conscious exclusions, not oversights — do not fix them while you are in there. If you discover an improvement, propose it as a new intent; never fold it into the current one.
 - **Add no unclaimed observable behavior.** Observable in this project means: `[team list — e.g., API request/response shapes, persisted data formats, named metrics and log events, public error types]`. If your diff changes one of these channels and no acceptance criterion or out-of-scope entry covers it, escalate — that is not a judgment call.
 - **Discretion granted in the intent's text** ("TTL may be 10–60s, implementation's choice") **is yours to exercise without asking.** Anything else that conflicts with the intent escalates.
@@ -36,7 +36,7 @@ If asked to implement a change that needs an intent and none exists, say so and 
 - **Acceptance criteria** — falsifiable scenarios, each provable by a single test written at implementation time.
 - **Invariants** — properties that span multiple code paths or call sites ("across all callers…"). Closed by reasoning over every affected site in the diff, not by any test alone. Do not treat them as acceptance criteria.
 - **Out of scope** — what was considered and deliberately excluded.
-- **Amendments** — a ledger of author-approved repairs made during implementation. Absent means the intent held as written.
+- **Amendments** — repairs made during implementation; the author rules on each when the work returns. Absent means the intent held as written.
 
 ### Frozen history
 
