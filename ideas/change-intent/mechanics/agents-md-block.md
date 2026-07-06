@@ -1,13 +1,43 @@
 # Agents-File Block
 
-**Status: stub. To be built after the design is settled.**
+**Status: drafted. Skill names are placeholders until the skills ship.**
 
-The block a team pastes into their project's agents file (`AGENTS.md`, `CLAUDE.md`, or equivalent) so every agent working in the project is intent-aware without further setup. The block carries only the always-loaded rules — orientation, policy, shared vocabulary, and routing; the seat-specific instructions live in the instrument each agent loads when it takes the seat ([authoring-skill.md](authoring-skill.md), [implementation-reference.md](implementation-reference.md), [review-skill.md](review-skill.md)).
+The block below is what a team copies into their project's agents file (`AGENTS.md`, `CLAUDE.md`, or equivalent) so every agent working in the project is intent-aware without further setup. It is written for an AI agent reading it at the start of a context window, with no prior knowledge of change intent: decision procedure first, hard rules second, explanation only where it makes the rules execute faithfully. Seat-specific instructions stay out; they live in the instrument each agent loads when it takes the seat ([authoring-skill.md](authoring-skill.md), [implementation-reference.md](implementation-reference.md), [review-skill.md](review-skill.md)).
 
-What the block must cover:
+Before pasting, customize the `[BRACKETED]` spots: the skill names, the observable-behavior channel list, and the when-required policy. Everything else is designed to be used verbatim.
 
-- **Orientation.** What change intents are, that they live in `change-intent/`, and that merged intents are frozen history — a grep hit on an old intent is a record of what was decided then, not a statement of what holds now.
-- **When an intent is required.** The team's risk profile for requiring one, so the folder stays an honest record of deliberate work rather than filling with boilerplate that quietly degrades every downstream consumer.
-- **Routing.** Authoring a change runs the authoring skill instead of ad-hoc planning; implementing from an intent follows the implementation reference; reviewing a change that has an intent runs the review skill. The block is how an agent landing in the project learns these instruments exist.
-- **What counts as observable.** The channels the scope rules apply to (API responses, persisted data, named metrics and logs, public error types — the team's own list). This is shared vocabulary between the implementation agent and the review pass, so it lives in the always-loaded block. Taken literally, "no unclaimed observable behavior" is unsatisfiable — every diff perturbs error strings and timing — and an agent that learns a rule can't be satisfied learns to discount it.
-- **Bounded-discretion convention.** How intents grant latitude ("TTL may be anywhere in 10–60s, implementation's choice") — written into the signed text at authoring time, exercised silently at implementation time, everything else escalating.
+---
+
+## Change intent
+
+This project uses change intents: per-change contracts authored **before any code is written**, stored at `change-intent/YYYY-MM-DD-short-slug.md`. An intent states what a change must accomplish. The implementation must satisfy the intent — never the reverse. Every change is reviewed against its intent, so work that drifts from or bypasses an intent will fail review.
+
+### What to do, by task
+
+- **Planning or starting a change** → run the authoring skill (`[/change-intent-author]`). Do not plan ad hoc and do not write an intent file freehand; the skill runs the pre-code dialogue and writes the file.
+- **Implementing a change that has an intent** → the intent is your goal and your contract; follow `[implementation reference]`. For every acceptance criterion, write a test that exercises the scenario and show it passing. For every invariant, walk each affected code path in the diff and confirm the property holds — no single test closes an invariant.
+- **Reviewing a change** → run the review skill (`[/change-intent-review]`). You are checking the diff against its intent, not the diff alone.
+- **Anything that is not a change** (questions, debugging, exploration) → no process applies. Intent files are context; read them freely.
+
+### Rules that apply in every role
+
+- **Never edit an intent file.** If you are implementing and the intent is wrong as written — a claim that cannot hold, or the change forces observable behavior the intent takes no position on — stop work on that claim and escalate to the intent author with the discovered fact and the options. Only the author amends. Do not silently pick a resolution, and do not keep building past the problem.
+- **Stay inside scope.** Items under "Out of scope" are conscious exclusions, not oversights — do not fix them while you are in there. If you discover an improvement, propose it as a new intent; never fold it into the current one.
+- **Add no unclaimed observable behavior.** Observable in this project means: `[team list — e.g., API request/response shapes, persisted data formats, named metrics and log events, public error types]`. If your diff changes one of these channels and no acceptance criterion or out-of-scope entry covers it, escalate — that is not a judgment call.
+- **Discretion granted in the intent's text** ("TTL may be 10–60s, implementation's choice") **is yours to exercise without asking.** Anything else that conflicts with the intent escalates.
+
+### Reading an intent file
+
+- **Why** — motivation and context that cannot be reconstructed from the diff. Always present.
+- **Acceptance criteria** — falsifiable scenarios, each provable by a single test written at implementation time.
+- **Invariants** — properties that span multiple code paths or call sites ("across all callers…"). Closed by reasoning over every affected site in the diff, not by any test alone. Do not treat them as acceptance criteria.
+- **Out of scope** — what was considered and deliberately excluded.
+- **Amendments** — a ledger of author-approved repairs made during implementation. Absent means the intent held as written.
+
+### Frozen history
+
+Merged intents are never edited. They record what was decided *then*, not what holds *now* — a claim in an old intent may have been superseded by a later change, so verify current behavior against code and tests, never against old intents. Use the folder as memory, though: before working on a surface, grep `change-intent/` for prior intents that touched it. Their Why sections carry reasoning you cannot get anywhere else.
+
+### When an intent is required
+
+`[Team policy — e.g., required for any change to production code paths; not required for docs-only, test-only, or dependency-bump changes.]` When unsure whether a change needs one, ask before writing code.
