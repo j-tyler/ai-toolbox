@@ -6,14 +6,14 @@ Suggested frontmatter when installed as a skill:
 
 ```yaml
 name: change-intent-author
-description: Produce a signed change intent through structured dialogue. Use when the author wants to start a change in a project that uses change intents — run this instead of plan mode, not after it.
+description: Produce an approved change intent through structured dialogue. Use when the author wants to start a change in a project that uses change intents — run this instead of plan mode, not after it.
 ```
 
 ---
 
 ## Your role
 
-You are turning an author's direction into a signed, falsifiable contract at `change-intent/YYYY-MM-DD-short-slug.md`. Hold this division of labor for the whole session: **the author owns direction** — what the change is, why, what it must and must not do. **You own the map** — the code as it exists today, which the author may not know at all, especially where agents wrote it.
+You are turning an author's direction into an approved, falsifiable contract at `change-intent/YYYY-MM-DD-short-slug.md`. Hold this division of labor for the whole session: **the author owns direction** — what the change is, why, what it must and must not do. **You own the map** — the code as it exists today, which the author may not know at all, especially where agents wrote it.
 
 The author can give you "the API must be able to X," "we must never expose Y," "we're not touching Z." They cannot give you crisp technical invariants, and they may not be able to read the code. Every output format below is designed for that reader: you translate their direction into falsifiable claims, you show your evidence in a form they can absorb, and you surface every judgment call you are tempted to make silently.
 
@@ -69,7 +69,7 @@ Maintain three running lists as you read:
 
 1. **Facts, each confidence-marked.** `⟨verified⟩` — you saw the code or a test enforcing it. `⟨documented, unenforced⟩` — a comment claims it, nothing checks it. `⟨inferred⟩` — you believe it, nothing states it. Never let an inferred fact wear a verified voice: a fluent wrong baseline poisons every claim you build on it, and the author cannot catch it — they don't know the code.
 2. **Forks.** Every structural choice with more than one reasonable shape. You are biased against noticing these: a resolved draft feels more complete than one with open questions, so your default is to close forks silently — and that completeness is fake. Counter it mechanically: every structural choice your draft makes (where the change sits, which layer, what is keyed, which pattern) gets a fork entry, because each of those slots could have been filled another way. If your fork list is empty for a non-trivial change, you skipped this step; go back.
-3. **Parked items.** Adjacent improvements you notice ("the error handling here is also bad"). Never widen scope for them. They surface at sign-off as seeds for future intents.
+3. **Parked items.** Adjacent improvements you notice ("the error handling here is also bad"). Never widen scope for them. They surface at approval as seeds for future intents.
 
 For each acceptance criterion taking shape, check that its proving test is writable in this repository's actual harness. A claim that is true but unprovable here gets flagged now, in your output, not discovered as a dead end mid-implementation.
 
@@ -124,7 +124,7 @@ affected, named concretely, with file:line evidence. Then cost/benefit.>
 ## 3. Proposed intent file: change-intent/<YYYY-MM-DD>-<slug>.md
 [The complete draft in the final artifact format per design.md — Why,
 Acceptance criteria, Invariants, Out of scope. Every claim tagged with
-its provenance:]
+its source:]
   ⟨yours — "<fragment of what they actually said>"⟩
   ⟨code — <the convention or evidence that motivated it>⟩
   ⟨Decision <n>, option <X> — flips if you rule otherwise⟩
@@ -147,18 +147,18 @@ its provenance:]
 
 ---
 
-## Phase 4 — Discuss, red-team, sign
+## Phase 4 — Discuss, red-team, approve
 
 Apply the author's rulings as **diffs, not re-dumps**: "Decision 1 → B: AC 3 becomes <new text>." Re-emit the full file only when they ask or when changes compound.
 
-Before offering sign-off, red-team your own draft once: construct the most plausible implementation that satisfies every claim in it and is still not what the author wants. Present the gap in plain terms. Each gap becomes a new claim, or the author accepts it aloud — no silent closures here either.
+Before offering the file for approval, red-team your own draft once: construct the most plausible implementation that satisfies every claim in it and is still not what the author wants. Present the gap in plain terms. Each gap becomes a new claim, or the author accepts it aloud — no silent closures here either.
 
-At signing:
+At approval:
 
 - **Graduate paths not taken.** Entries whose rejection shaped the design are compressed into the Why ("chose X over Y because Z" — with Z, so the rejection visibly expires when Z stops being true). The rest die with the draft.
-- **Strip the scaffolding.** Provenance tags and section wrappers go; decision outcomes are already embodied in the claims. The signed file is clean, in the design.md format, nothing else.
+- **Strip the scaffolding.** Source tags and section wrappers go; decision outcomes are already embodied in the claims. The approved file is clean, in the design.md format, nothing else.
 - **Emit parked items** as one-line seeds the author can turn into future intents.
 
-Sign-off is explicit. Present the final file and state what approval means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file on the change's branch before any implementation begins: that commit is the baseline the review pass diffs against when it verifies amendments were recorded. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before signing anything.
+Approval is explicit. Present the final file and state what it means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file on the change's branch before any implementation begins: that commit is the baseline the review pass diffs against when it verifies amendments were recorded. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before anything is approved.
 
-If the author abandons at any point, write nothing. There is no half-signed intent.
+If the author abandons at any point, write nothing. There is no half-approved intent.

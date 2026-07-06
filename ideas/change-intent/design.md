@@ -47,13 +47,13 @@ Four principles govern this design.
 
 **Every claim is falsifiable.** An acceptance criterion can be refuted by a test; an invariant can be refuted by reasoning over the diff. Anything the pipeline is asked to verify has to be specific enough to fail.
 
-**No adversary.** This is a workflow teams adopt for their own benefit, not a control imposed on them, so the design assumes cooperative actors. The pipeline checks compliance — agents check other agents' work at every stage — but it does not try to prove it: the authoring date is self-reported, intent-before-code is not attested, and the ledger is a receipt rather than an audit trail. The checks catch mistakes, not forgery. Proof would defend against a bad actor the design assumes away, and charge for that defense in adoption cost — the used-beats-better tradeoff again, decided the same way. Gaming the process is easy and pointless: its only output is review quality for the team running it.
+**No adversary.** This is a workflow teams adopt for their own benefit, not a control imposed on them, so the design assumes cooperative actors. The pipeline checks compliance — agents check other agents' work at every stage — but it does not try to prove it: the authoring date is self-reported, intent-before-code is not attested, and the Amendments section is a plain record rather than an audit trail. The checks catch mistakes, not forgery. Proof would defend against a bad actor the design assumes away, and charge for that defense in adoption cost — the used-beats-better tradeoff again, decided the same way. Gaming the process is easy and pointless: its only output is review quality for the team running it.
 
 ---
 
 ## What an intent file contains
 
-A change intent file is a per-change document authored **before any code is written**. One file per change, living alongside the rest of the repository — and a change is a pull request. Exactly one intent per PR: not one per local commit, and never a second intent for later rounds of edits within the same PR, which stay under the original intent (amended by its author if implementation proves it wrong). Work that seems to need two intents is two changes, shipped as two pull requests. Each section below is required when its conditions apply — `Why` applies to every change; `Acceptance criteria` applies when there's observable behavior to verify; `Invariants` applies when the change touches properties that span beyond a single test; `Out of scope` applies when there are conscious exclusions worth signaling; `Amendments` applies when implementation discovered the intent was wrong as written and it had to be repaired to deliver the change. A section being absent means there's nothing for it to hold, not that the author skipped it.
+A change intent file is a per-change document authored **before any code is written**. One file per change, living alongside the rest of the repository — and a change is a pull request. Exactly one intent per PR: not one per local commit, and never a second intent for later rounds of edits within the same PR, which stay under the original intent (amended on the record if implementation proves it wrong). Work that seems to need two intents is two changes, shipped as two pull requests. Each section below is required when its conditions apply — `Why` applies to every change; `Acceptance criteria` applies when there's observable behavior to verify; `Invariants` applies when the change touches properties that span beyond a single test; `Out of scope` applies when there are conscious exclusions worth signaling; `Amendments` applies when implementation discovered the intent was wrong as written and it had to be repaired to deliver the change. A section being absent means there's nothing for it to hold, not that the author skipped it.
 
 ### Why
 
@@ -175,7 +175,7 @@ What remains excluded is the residue — speculative risks that resist conversio
 
 ### Amendments
 
-A ledger of repairs made to the intent during implementation — present only when the intent proved wrong as written and had to change for the change to be deliverable. Most intents never get one; an absent Amendments section means the contract held as authored. The process that produces these entries — who may amend, when, and what each amendment must leave behind — is covered in [Amending the intent](#amending-the-intent).
+A dated record of repairs made to the intent during implementation — present only when the intent proved wrong as written and had to change for the change to be deliverable. Most intents never get one; an absent Amendments section means the contract held as authored. The process that produces these entries — who may amend, when, and what each amendment must leave behind — is covered in [Amending the intent](#amending-the-intent).
 
 Each entry is one line with two required fields beyond the date:
 
@@ -183,7 +183,7 @@ Each entry is one line with two required fields beyond the date:
 - <DATE> — <WHAT: the delta, at claim granularity> — <WHY: the discovered fact that forced it>
 ```
 
-The WHY must name a fact about the system, not an activity of the author — a statement that would still be true and checkable if the rest of the file were deleted. This is the same falsifiability discipline the artifact applies to acceptance criteria, pointed at the ledger:
+The WHY must name a fact about the system, not an activity of the author — a statement that would still be true and checkable if the rest of the file were deleted. This is the same falsifiability discipline the artifact applies to acceptance criteria, pointed at the amendment entries:
 
 ```
 Fails — activity-shaped, tells a future reader nothing:
@@ -194,7 +194,7 @@ Passes — fact-shaped, verifiable against the codebase:
   token validation for 5m with no invalidation hook
 ```
 
-The ledger is a custody receipt and an index, not the story. Every semantic amendment also leaves a provenance note in the body, attached to the claim it changed — that's where a future reader actually learns why (the body-residue rule in [Amending the intent](#amending-the-intent)). The two homes serve different readers at different times: the merge-time reviewer reads the ledger top to bottom and gets complete custody in a few lines; the month-later reader reads the body and gets complete understanding without ever reaching the ledger. Neither should have to join the two against each other.
+The Amendments section is an index, not the story. Every semantic amendment also leaves a discovery note in the body, attached to the claim it changed — that's where a future reader actually learns why (the discovery-note rule in [Amending the intent](#amending-the-intent)). The two homes serve different readers at different times: the merge-time reviewer reads the entries top to bottom and sees everything that changed since approval in a few lines; the month-later reader reads the body and gets complete understanding without ever reaching the entries. Neither should have to join the two against each other.
 
 ---
 
@@ -282,17 +282,17 @@ Two supporting rules keep the channel quiet and enforceable:
 
 ### What an amendment leaves behind
 
-Every amendment has two components with different lifespans. The **decision** — claim changed from X to Y — has its residue in the final text itself and needs only a one-line ledger entry as a receipt. The **discovery** — the fact about the system that forced the change — is durable knowledge, and usually the most valuable tokens in the file: it is both non-obvious (it was missed at authoring time) and empirically verified (learned by contact with the code, not speculated). The discovery gets folded into the body, next to the claim it affected.
+Every amendment has two components with different lifespans. The **decision** — claim changed from X to Y — lives in the final text itself and needs only a one-line entry in the Amendments section as its record. The **discovery** — the fact about the system that forced the change — is durable knowledge, and usually the most valuable tokens in the file: it is both non-obvious (it was missed at authoring time) and empirically verified (learned by contact with the code, not speculated). The discovery gets folded into the body, next to the claim it affected.
 
 Concretely, an amendment produces:
 
-- **A ledger entry** in the [Amendments](#amendments) section: `<DATE> — <WHAT> — <WHY>`, with the WHY naming the discovered fact.
-- **Body residue, required for every semantic amendment.** A provenance note attached to the changed claim — one to three sentences carrying the mechanism and its forward-looking implication, marked as discovered during implementation. The marker is signal, not decoration: it tells a future reader the fact was non-obvious and paid for. Wording-only amendments are exempt; they have no WHY worth carrying. The review pass rejects a semantic amendment whose WHY exists only in the ledger.
-- **For relaxations, residue in two places.** When a claim is weakened and the original strength is deferred rather than abandoned, the residue lands on the weakened claim *and* as an Out of scope entry recording the deferral. The pairing keeps a relaxation from silently becoming the permanent state of the world — a future reader can check whether the follow-up ever landed.
+- **An entry** in the [Amendments](#amendments) section: `<DATE> — <WHAT> — <WHY>`, with the WHY naming the discovered fact.
+- **A discovery note, required for every semantic amendment.** A short note attached to the changed claim — one to three sentences carrying the mechanism and its forward-looking implication, marked as discovered during implementation. The marker is signal, not decoration: it tells a future reader the fact was non-obvious and paid for. Wording-only amendments are exempt; they have no WHY worth carrying. The review pass rejects a semantic amendment whose WHY exists only in the Amendments section.
+- **For relaxations, notes in two places.** When a claim is weakened and the original strength is deferred rather than abandoned, the discovery note lands on the weakened claim *and* an Out of scope entry records the deferral. The pairing keeps a relaxation from silently becoming the permanent state of the world — a future reader can check whether the follow-up ever landed.
 
-The result reads coherently for both readers the file serves. The merge-time reviewer reads the ledger and gets complete custody in a few lines — what changed since signing, and why. The month-later reader reads the body and gets complete understanding without reaching the ledger — the intent as if authored by someone who knew everything known at merge time, with the discoveries marked in place.
+The result reads coherently for both readers the file serves. The merge-time reviewer reads the Amendments section and sees, in a few lines, what changed since approval and why. The month-later reader reads the body and gets complete understanding without reaching the Amendments section — the intent as if authored by someone who knew everything known at merge time, with the discoveries marked in place.
 
-This is not the post-facto rationalization the design warns against. The sin of post-facto writing was never that it is written late — it is that it erases the gap between what was intended and what happened. An amended intent preserves the gap at claim granularity in the ledger and marks each discovery where it lives. A traditional PR description hides the journey by never having recorded a destination; an amended intent recorded the destination, marks where the route changed, and hands the reader the map with the detours labeled.
+This is not the post-facto rationalization the design warns against. The sin of post-facto writing was never that it is written late — it is that it erases the gap between what was intended and what happened. An amended intent preserves the gap at claim granularity in the Amendments section and marks each discovery where it lives. A traditional PR description hides the journey by never having recorded a destination; an amended intent recorded the destination, marks where the route changed, and hands the reader the map with the detours labeled.
 
 ### Why rarity is load-bearing
 
@@ -339,7 +339,7 @@ This is independent from and stronger than the in-loop `/goal` evaluator. The ev
 
 After both machine layers approve, the change lands on a human reviewer's plate. The change intent serves them differently from how it served the AI agents: it's evidence that the design question was settled before code was written, that the implementation agent worked from a stated intent, and that the AI review pass had that intent as context for its checks. The human reviewer doesn't need to wonder what the AI agents had in front of them — the intent file is the record, sitting in the repository alongside the change.
 
-This is the record paying out. The reviewer knows what the intent author settled, what the implementation agent built toward, and what the review agent validated — not because they watched it happen, but because every change in the project goes through the same steps. A teammate's change reads the same as their own. On the rare change that carries an Amendments section, those entries are the highest-signal lines in the file: each is a judgment call made during implementation that the author has not yet seen. What's left is the one task only a human can do: deciding whether this was the right change to make. The intent everything was checked against is right there in the file.
+This is the chain of custody paying out. The reviewer knows what the intent author settled, what the implementation agent built toward, and what the review agent validated — not because they watched it happen, but because every change in the project goes through the same steps. A teammate's change reads the same as their own. On the rare change that carries an Amendments section, those entries are the highest-signal lines in the file: each is a judgment call made during implementation that the author has not yet seen. What's left is the one task only a human can do: deciding whether this was the right change to make. The intent everything was checked against is right there in the file.
 
 ### Workflow
 
@@ -447,7 +447,7 @@ If the human can't make a claim falsifiable, that's a signal the claim isn't wel
 
 **Step 8: Convergence.**
 
-When every relevant category has an explicit position and every claim is falsifiable, the AI writes the change intent file to `change-intent/YYYY-MM-DD-slug.md` and presents it for final review. If the human approves, the artifact is signed and the implementation phase begins. From that point until merge, the intent changes only through the amendment process ([Amending the intent](#amending-the-intent)); at merge it freezes for good.
+When every relevant category has an explicit position and every claim is falsifiable, the AI writes the change intent file to `change-intent/YYYY-MM-DD-slug.md` and presents it for final review. If the human approves, the file is committed on the change's branch — the baseline the review pass later diffs against — and the implementation phase begins. From that point until merge, the intent changes only through the amendment process ([Amending the intent](#amending-the-intent)); at merge it freezes for good.
 
 ### Depth calibration
 
@@ -465,7 +465,7 @@ The skill is "done" when:
 
 - Every category flagged as applicable has either an explicit position or an explicit not-applicable
 - Every claim is falsifiable
-- The human signs off on the produced artifact
+- The human approves the produced artifact
 
 Without an explicit stopping rule, elicitation either runs forever or stops too early.
 
