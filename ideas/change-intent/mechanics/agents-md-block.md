@@ -17,7 +17,7 @@ This project uses change intents: per-change contracts authored **before any cod
 ### What to do, by task
 
 - **Planning or starting a change** → run the authoring skill (`[/change-intent-author]`). Do not plan ad hoc and do not write an intent file freehand; the skill runs the pre-code dialogue and writes the file.
-- **Implementing a change that has an intent** → the intent is your goal and your contract; follow `[implementation reference]`. For every acceptance criterion, write a test that exercises the scenario and show it passing. For every invariant, walk each affected code path in the diff and confirm the property holds — no single test closes an invariant.
+- **Implementing a change that has an intent** → the intent is your goal and your contract; follow `[implementation reference]`: a passing test per acceptance criterion, a walk of the diff per invariant.
 - **Reviewing a change** → run the review skill (`[/change-intent-review]`). You are checking the diff against its intent, not the diff alone.
 - **Anything that is not a change** (questions, debugging, exploration) → no process applies. Intent files are context; read them freely.
 
@@ -25,7 +25,7 @@ If asked to implement a change that needs an intent and none exists, say so and 
 
 ### Rules that apply in every role
 
-- **Never edit an intent file.** If you are implementing and the intent is wrong as written — a claim that cannot hold, or the change forces observable behavior the intent takes no position on — stop work on that claim and escalate to the intent author with the discovered fact and the options. Only the author amends. Do not silently pick a resolution, and do not keep building past the problem.
+- **Never edit an intent file.** If you are implementing and the intent is wrong as written — a claim that cannot hold, or the change forces observable behavior the intent takes no position on — stop work on that claim and escalate to the intent author with the discovered fact and the options. Only the author amends. Do not pick a resolution yourself or build past the problem.
 - **Stay inside scope.** Items under "Out of scope" are conscious exclusions, not oversights — do not fix them while you are in there. If you discover an improvement, propose it as a new intent; never fold it into the current one.
 - **Add no unclaimed observable behavior.** Observable in this project means: `[team list — e.g., API request/response shapes, persisted data formats, named metrics and log events, public error types]`. If your diff changes one of these channels and no acceptance criterion or out-of-scope entry covers it, escalate — that is not a judgment call.
 - **Discretion granted in the intent's text** ("TTL may be 10–60s, implementation's choice") **is yours to exercise without asking.** Anything else that conflicts with the intent escalates.
@@ -40,7 +40,7 @@ If asked to implement a change that needs an intent and none exists, say so and 
 
 ### Frozen history
 
-Merged intents are never edited. They record what was decided *then*, not what holds *now* — a claim in an old intent may have been superseded by a later change, so verify current behavior against code and tests, never against old intents. Use the folder as memory, though: before working on a surface, grep `change-intent/` for prior intents that touched it. Their Why sections carry reasoning you cannot get anywhere else.
+Merged intents are never edited. They record what was decided *then*, not what holds *now* — verify current behavior against code and tests, never against old intents. Use the folder as memory, though: before working on a surface, grep `change-intent/` for prior intents that touched it. Their Why sections carry reasoning you cannot get anywhere else.
 
 ### When an intent is required
 
