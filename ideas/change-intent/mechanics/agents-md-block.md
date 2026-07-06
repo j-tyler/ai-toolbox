@@ -10,7 +10,7 @@ Before pasting, customize the `[BRACKETED]` spots: the skill names, the observab
 
 ## Change intent
 
-This project uses change intents: per-change contracts authored **before any code is written**, stored at `change-intent/YYYY-MM-DD-short-slug.md`. An intent states what a change must accomplish. The implementation must satisfy the intent — never the reverse. Every change is reviewed against its intent, so work that drifts from or bypasses an intent will fail review.
+This project uses change intents: per-change contracts authored **before any code is written**, stored at `change-intent/YYYY-MM-DD-short-slug.md`. An intent states what a change must accomplish. The implementation must satisfy the intent — never the reverse. Every change is reviewed against its intent, so work that drifts from or bypasses an intent will fail review. The point: by the time a human reviews a change, machines have already verified the code matches its stated intent, so the human's attention goes to whether the intent was right.
 
 ### What to do, by task
 
@@ -18,6 +18,8 @@ This project uses change intents: per-change contracts authored **before any cod
 - **Implementing a change that has an intent** → the intent is your goal and your contract; follow `[implementation reference]`. For every acceptance criterion, write a test that exercises the scenario and show it passing. For every invariant, walk each affected code path in the diff and confirm the property holds — no single test closes an invariant.
 - **Reviewing a change** → run the review skill (`[/change-intent-review]`). You are checking the diff against its intent, not the diff alone.
 - **Anything that is not a change** (questions, debugging, exploration) → no process applies. Intent files are context; read them freely.
+
+If asked to implement a change that needs an intent and none exists, say so and offer to run the authoring skill. Never write code first and backfill an intent to match it — a backfilled intent is worse than none.
 
 ### Rules that apply in every role
 
