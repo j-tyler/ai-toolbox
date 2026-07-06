@@ -39,13 +39,15 @@ Until we're there, change intent addresses several failure modes of today's revi
 
 ## Design principles
 
-Three principles govern this design.
+Four principles govern this design.
 
 **Used beats better.** A process only pays off if the team actually runs it, so the bar to start is as low as we can make it: the project's agents file explains what change intents are, the coding and review agents are made intent-aware, and the ask of a teammate is one sentence — run the change-intent skill instead of the coding harness's built-in plan mode. Change intent adds no new activity to a project. You already plan implementations; this plans one as a change intent. You already review code; code review now starts with the output of a consistent pipeline. Mechanically stronger ideas exist — structural coverage over the intent's tests, per-routine contracts, machine-checked proofs — and they are stronger precisely because they demand more: team effort, specific languages, dedicated tooling. When strength and adoption pull in different directions, this design sides with adoption.
 
 **Diligence to agents, judgment to humans.** Rigor is cheap for an agent and expensive for a human. The agents carry the mechanical work in this design: the authoring skill reads the affected code and runs the elicitation dialogue, the implementation agent writes the tests and walks the diff for each invariant, the review agent checks the diff against the intent and the amendment ledger. The human supplies judgment: they author the intent, they rule on amendments when implementation proves it wrong, and they decide at merge whether the change was the right one.
 
 **Every claim is falsifiable.** An acceptance criterion can be refuted by a test; an invariant can be refuted by reasoning over the diff. Anything the pipeline is asked to verify has to be specific enough to fail.
+
+**No adversary.** This is a workflow teams adopt for their own benefit, not a control imposed on them, so the design assumes cooperative actors. The pipeline checks compliance — agents check other agents' work at every stage — but it does not try to prove it: the authoring date is self-reported, intent-before-code is not attested, and the ledger is a receipt rather than an audit trail. The checks catch mistakes, not forgery. Proof would defend against a bad actor the design assumes away, and charge for that defense in adoption cost — the used-beats-better tradeoff again, decided the same way. Gaming the process is easy and pointless: its only output is review quality for the team running it.
 
 ---
 
@@ -270,7 +272,7 @@ This is what preserves the chain of custody through an amendment. The intent aut
 Two supporting rules keep the channel quiet and enforceable:
 
 - **Discretion is granted inside the contract, not exercised as edits to it.** If a detail is genuinely the implementation's call, the intent says so up front ("TTL may be anywhere in 10–60s, implementation's choice"). Bounded discretion written into the signed text keeps the agent's latitude inside the chain of custody, and reserves the escalation channel for real incongruencies rather than delegated judgment calls.
-- **The review pass enforces custody mechanically.** Every amendment entry must correspond to an escalation and decision that actually happened, and the final intent must match what the intent author last approved. An intent modified without a matching ledger entry is a process defect that bounces the change — same severity as a failing acceptance criterion.
+- **The review pass enforces custody mechanically.** Every amendment entry must correspond to an escalation and decision that actually happened, and the final intent must match what the intent author last approved. An intent modified without a matching ledger entry is a process defect that bounces the change — same severity as a failing acceptance criterion. Per the no-adversary principle, this check catches mistakes, not forgery: the failure mode is an agent that edited what it shouldn't, not an author gaming the ledger.
 
 ### What an amendment leaves behind
 
