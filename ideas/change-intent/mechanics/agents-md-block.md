@@ -12,6 +12,8 @@ Before pasting, customize the `[BRACKETED]` spots: the skill names, the observab
 
 This project uses change intents: per-change contracts authored **before any code is written**, stored at `change-intent/YYYY-MM-DD-short-slug.md`. An intent states what a change must accomplish. The implementation must satisfy the intent — never the reverse. Every change is reviewed against its intent, so work that drifts from or bypasses an intent will fail review. The point: by the time a human reviews a change, machines have already verified the code matches its stated intent, so the human's attention goes to whether the intent was right.
 
+**Exactly one intent file per pull request.** Not one per commit, and never a second intent for later rounds of edits in the same PR — the original intent governs until merge, amended by its author if it proves wrong. Work that needs two intents is two changes: ship it as two pull requests.
+
 ### What to do, by task
 
 - **Planning or starting a change** → run the authoring skill (`[/change-intent-author]`). Do not plan ad hoc and do not write an intent file freehand; the skill runs the pre-code dialogue and writes the file.
