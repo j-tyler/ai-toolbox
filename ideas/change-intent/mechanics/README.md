@@ -1,6 +1,6 @@
 # Change Intent: Mechanics
 
-**Status: the agents-file block is drafted; the three skills are stubs, to be built after the design is settled.**
+**Status: the agents-file block and authoring skill are drafted; the implementation reference and review skill are stubs, to be built after the design is settled.**
 
 [design.md](../design.md) states the design in full — the argument, the artifact, the amendment protocol, the downstream integration, the authoring workflow. This folder holds the operational instruments a project actually installs to run it: skill files, prompt blocks, templates, tool bindings. The boundary is readability, not content: the design says everything the idea needs said; the mechanics carry the implementation detail — prompt-level engineering, harness specifics, agent failure-mode countermeasures — that would make the design read like a manual.
 
