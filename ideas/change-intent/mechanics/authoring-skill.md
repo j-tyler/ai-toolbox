@@ -57,7 +57,7 @@ any of it is wrong.
 
 Then **stop and wait for confirmation.** You will want to start reading code immediately — the brief looks trivial and exploration is the interesting part. Emit it anyway: it costs the author thirty seconds and it is the only thing that prevents you from exploring the wrong change. The Rejected section is load-bearing — it is where a mis-harvest gets caught before it poisons the draft.
 
-The constraint tags are your translation plan and you will be checked against it: `[must do]` decomposes into acceptance criteria, `[must not]` into invariants, `[not touching]` into out-of-scope entries.
+The constraint tags are your translation plan and you will be checked against it: `[must do]` and `[must not]` become claims; `[not touching]` becomes out-of-scope entries. The tag carries the author's direction, but the proof method decides which section a claim lands in: provable by a single test → acceptance criterion; spans multiple sites and closes by reasoning over the diff → invariant. A `[must not]` that one test can prove ("the `/me` response never contains the password hash") is an acceptance criterion, not an invariant.
 
 ---
 
@@ -71,7 +71,7 @@ Maintain three running lists as you read:
 2. **Forks.** Every structural choice with more than one reasonable shape. You are biased against noticing these: a resolved draft feels more complete than one with open questions, so your default is to close forks silently — and that completeness is fake. Counter it mechanically: every structural choice your draft makes (where the change sits, which layer, what is keyed, which pattern) gets a fork entry, because each of those slots could have been filled another way. If your fork list is empty for a non-trivial change, you skipped this step; go back.
 3. **Parked items.** Adjacent improvements you notice ("the error handling here is also bad"). Never widen scope for them. They surface at approval as seeds for future intents.
 
-For each acceptance criterion taking shape, check that its proving test is writable in this repository's actual harness. A claim that is true but unprovable here gets flagged now, in your output, not discovered as a dead end mid-implementation.
+For each acceptance criterion taking shape, check that its proving test is writable in this repository's actual harness. A claim that is true but unprovable here gets flagged now, in your output, not discovered as a dead end mid-implementation — and it is resolved with the author before approval: reword the claim into a provable form, or move its substance to Why. An acceptance criterion that cannot be proven in this repository never enters the change intent.
 
 Before drafting, sweep the categories yourself: concurrency, error handling, observability, security boundaries, audit, performance, backward compatibility, resource cleanup, failure modes. For each: cite evidence from the surface that it applies, or drop it. Only categories with evidence appear anywhere in your output — the author never sees a not-applicable checklist.
 
@@ -122,9 +122,9 @@ affected, named concretely, with file:line evidence. Then cost/benefit.>
    condition under which this rejection expires>.
 
 ## 3. Proposed intent file: change-intent/<YYYY-MM-DD>-<slug>.md
-[The complete draft in the final artifact format per design.md — Why,
-Acceptance criteria, Invariants, Out of scope. Every claim tagged with
-its source:]
+[The complete draft, in the file format defined at the end of this
+skill — What, Why, Acceptance criteria, Invariants, Out of scope. Every
+claim tagged with its source:]
   ⟨yours — "<fragment of what they actually said>"⟩
   ⟨code — <the convention or evidence that motivated it>⟩
   ⟨Decision <n>, option <X> — flips if you rule otherwise⟩
@@ -156,9 +156,43 @@ Before offering the file for approval, red-team your own draft once: construct t
 At approval:
 
 - **Graduate paths not taken.** Entries whose rejection shaped the design are compressed into the Why ("chose X over Y because Z" — with Z, so the rejection visibly expires when Z stops being true). The rest die with the draft.
-- **Strip the scaffolding.** Source tags and section wrappers go; decision outcomes are already embodied in the claims. The approved file is clean, in the design.md format, nothing else.
+- **Strip the scaffolding.** Source tags and section wrappers go; decision outcomes are already embodied in the claims. The change intent file is clean, in the file format below, nothing else.
 - **Emit parked items** as one-line seeds the author can turn into future intents.
 
 Approval is explicit. Present the final file and state what it means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file on the change's branch before any implementation begins: that commit is the baseline the review pass diffs against when it verifies amendments were recorded. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before anything is approved.
 
 If the author abandons at any point, write nothing. There is no half-approved intent.
+
+---
+
+## The change intent file format
+
+```markdown
+# Change intent: <title — the change in one line>
+
+## What
+<the change stated plainly, in a few sentences — the brief's What,
+sharpened by what exploration confirmed>
+
+## Why
+<prose paragraphs>
+
+## Acceptance criteria
+- <one falsifiable scenario per bullet>
+
+## Invariants
+- <one property per bullet, naming its span: "across all caller paths...">
+
+## Out of scope
+- **<Excluded item>.** <What was considered, and why it stays out.>
+
+## Amendments
+- <YYYY-MM-DD> — <what changed, at claim granularity> — <the discovered fact that forced it>
+```
+
+Rules:
+
+- Section headings exactly as above, in this order. The file carries these sections and nothing else — do not invent metadata (status fields, author lines, PR links).
+- A section with nothing to hold is omitted. This deliberately differs from the proposal wrapper: the proposal shows every heading because a missing heading is indistinguishable from a skipped step; in the final file, absence is meaningful — an absent Amendments section means the intent held as written.
+- Amendments is never present at authoring time. It appears only if implementation amends, and each entry's discovery note lands next to the claim it changed.
+- The review pass diffs this file against the commit made at approval, so hold this format exactly — drift turns that diff into noise.

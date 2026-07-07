@@ -53,7 +53,11 @@ Four principles govern this design.
 
 ## What an intent file contains
 
-A change intent file is a per-change document authored **before any code is written**. One file per change, living alongside the rest of the repository — and a change is a pull request. Exactly one intent per PR: not one per local commit, and never a second intent for later rounds of edits within the same PR, which stay under the original intent (amended on the record if implementation proves it wrong). Work that seems to need two intents is two changes, shipped as two pull requests. Each section below is required when its conditions apply — `Why` applies to every change; `Acceptance criteria` applies when there's observable behavior to verify; `Invariants` applies when the change touches properties that span beyond a single test; `Out of scope` applies when there are conscious exclusions worth signaling; `Amendments` applies when implementation discovered the intent was wrong as written and it had to be repaired to deliver the change. A section being absent means there's nothing for it to hold, not that the author skipped it.
+A change intent file is a per-change document authored **before any code is written**. One file per change, living alongside the rest of the repository — and a change is a pull request. Exactly one intent per PR: not one per local commit, and never a second intent for later rounds of edits within the same PR, which stay under the original intent (amended on the record if implementation proves it wrong). Work that seems to need two intents is two changes, shipped as two pull requests. Each section below is required when its conditions apply — `What` and `Why` apply to every change; `Acceptance criteria` applies when there's observable behavior to verify; `Invariants` applies when the change touches properties that span beyond a single test; `Out of scope` applies when there are conscious exclusions worth signaling; `Amendments` applies when implementation discovered the intent was wrong as written and it had to be repaired to deliver the change. A section being absent means there's nothing for it to hold, not that the author skipped it.
+
+### What
+
+The change stated plainly in a few sentences — what is being built, changed, or removed. The slug compresses this; the What states it.
 
 ### Why
 
@@ -485,6 +489,10 @@ Without an explicit stopping rule, elicitation either runs forever or stops too 
 **AI presents baseline and conducts elicitation.** After dialogue, the produced file at `change-intent/2026-05-16-add-getuser-cache.md`:
 
 ```markdown
+## What
+Add a 30-second TTL cache to `UserService.GetUser`, using the existing
+CacheManager interface. AuditLog moves to a new `GetUserUncached` method.
+
 ## Why
 GetUser is read-heavy (40k req/s peak). P95 latency is 80ms, dominated by 
 the DB round-trip. Adding a 30-second TTL cache should drop P95 below 10ms 
@@ -596,7 +604,7 @@ The form feels durable: every change carrying the structured reasoning that prod
 
 The case for change intent is structural, not aesthetic. AI generates code far faster than humans can review it, and the gap is widening. Post-facto PR descriptions don't help — in the AI era they're often just a summary of what the AI did, and an AI reviewer can derive that from the diff. What the review process is missing is signal about whether design intent actually drove the change.
 
-Change intent provides that signal by inverting the direction of fit: intent is authored before code, the code must satisfy the intent, and the implementation can't retroactively absorb whatever happened to get built. The artifact has a small set of sections — *Why* always, plus *Acceptance criteria*, *Invariants*, *Out of scope*, and *Amendments* when their conditions apply — and a naming convention (`change-intent/YYYY-MM-DD-short-slug.md`) that makes it discoverable forever via the same tools the rest of the codebase uses.
+Change intent provides that signal by inverting the direction of fit: intent is authored before code, the code must satisfy the intent, and the implementation can't retroactively absorb whatever happened to get built. The artifact has a small set of sections — *What* and *Why* always, plus *Acceptance criteria*, *Invariants*, *Out of scope*, and *Amendments* when their conditions apply — and a naming convention (`change-intent/YYYY-MM-DD-short-slug.md`) that makes it discoverable forever via the same tools the rest of the codebase uses.
 
 Once authored, the same artifact does work at two downstream stages. The implementation agent treats it as a `/goal` condition: a passing test for every acceptance criterion, a walk over the diff for every invariant, and a refusal to drift outside the listed scope. In the rare case implementation proves the intent wrong — a falsified claim, a forced behavior the intent didn't cover — the agent amends on the record rather than fabricating or stalling: the Amendments section records what changed and the fact that forced it, the author rules on every amendment at review, and the intent freezes at merge. The AI review pass treats it as a contract: it confirms the intent is itself well-described, that the diff matches it, and that the change doesn't contradict prior intents in the same area. By the time the change reaches a human reviewer, machines have already verified that the implementation matches the stated intent — the human arrives knowing what was settled, what was built toward, and what was checked. Their attention goes to the four-task model's only judgment task, *is this the right change to make,* while the other three (implementation choice, correctness, clarity) recede onto the AI at the pace the machines prove reliable — no faster.
 
