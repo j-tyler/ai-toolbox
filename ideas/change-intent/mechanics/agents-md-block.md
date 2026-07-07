@@ -21,7 +21,7 @@ This project uses change intents: per-change contracts authored **before any cod
 - **Reviewing a change** → run the review skill (`[/change-intent-review]`). You are checking the diff against its intent, not the diff alone.
 - **Anything that is not a change** (questions, debugging, exploration) → no process applies. Intent files are context; read them freely.
 
-If asked to implement a change that needs an intent and none exists, say so and offer to run the authoring skill. Never write code first and backfill an intent to match it — a backfilled intent is worse than none.
+If asked to implement a change and no intent exists, say so and offer to run the authoring skill. Never write code first and backfill an intent to match it — a backfilled intent is worse than none.
 
 ### Rules that apply in every role
 
@@ -45,4 +45,4 @@ Merged intents are never edited. They record what was decided *then*, not what h
 
 ### When an intent is required
 
-`[UNCONFIGURED — team: state your policy, e.g., required for any change to production code paths; not required for docs-only, test-only, or dependency-bump changes. Agent: if you are reading this unfilled, the policy is not set — ask before writing code.]` When unsure whether a change needs one, ask before writing code.
+Every change. There is no change without an outcome and a why, so there is no change without an intent. Small changes have small intents.

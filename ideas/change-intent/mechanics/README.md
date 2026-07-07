@@ -6,11 +6,11 @@
 
 The package, in the order a team adopts it:
 
-1. [agents-md-block.md](agents-md-block.md) — pasted into the project's agents file; always-loaded orientation, the when-required policy, shared vocabulary, and routing to the other three instruments
+1. [agents-md-block.md](agents-md-block.md) — pasted into the project's agents file; always-loaded orientation, rules, shared vocabulary, and routing to the other three instruments
 2. [authoring-skill.md](authoring-skill.md) — the skill that runs the pre-code elicitation dialogue and writes the intent file
-3. [implementation-reference.md](implementation-reference.md) — how the implementation agent binds a signed intent to its harness's goal mechanism, and how it halts and escalates
+3. [implementation-reference.md](implementation-reference.md) — how the implementation agent binds an approved intent to its harness's goal mechanism, and how it amends on the record
 4. [review-skill.md](review-skill.md) — the skill for the AI review pass that checks a diff against its intent
 
-The split matters because the two layers fail differently. A design flaw means the artifact or the process is wrong — fixed once, in design.md. A mechanics flaw means an agent runs the right process badly: an authoring skill that drafts the intent for the author instead of eliciting it, an implementation agent that quietly resolves a forced choice instead of halting, a review pass that confirms instead of adversarially checks. Those failure modes are real and predictable, but they are prompt-level problems with prompt-level fixes, and they live here so the design can stay silent on them on purpose.
+The split matters because the two layers fail differently. A design flaw means the artifact or the process is wrong — fixed once, in design.md. A mechanics flaw means an agent runs the right process badly: an authoring skill that drafts the intent for the author instead of eliciting it, an implementation agent that quietly resolves a forced choice instead of amending on the record, a review pass that confirms instead of adversarially checks. Those failure modes are real and predictable, but they are prompt-level problems with prompt-level fixes, and they live here so the design can stay silent on them on purpose.
 
 Each stub records the requirements the eventual instrument must satisfy — including the known agent failure modes it exists to counter — so it gets written against a checklist rather than from memory.
