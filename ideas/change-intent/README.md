@@ -4,7 +4,7 @@ The goal is to construct changes in a way that they're **reviewable**: less focu
 
 A change intent is a structured artifact authored *before any code is written* for the change. It is a live contract during implementation — amendable by the implementing agent, on the record, only if the intent proves wrong as written — and frozen history once the change merges.
 
-**What** and **Why** are always included: the change stated plainly in a few sentences, and the motivation behind it — in enough detail that a future reader understands what triggered the work and what context shaped the decisions.
+**Outcomes** and **Why** are always included: what the change is intended to make true, and the motivation behind it — in enough detail that a future reader understands what triggered the work and what context shaped the decisions.
 
 The change intent file also includes any of the following when their conditions apply:
 

@@ -32,7 +32,7 @@ If asked to implement a change that needs an intent and none exists, say so and 
 
 ### Reading an intent file
 
-- **What** — the change stated plainly, in a few sentences.
+- **Outcomes** — what the change is intended to make true, in a few bullets — not the implementation chosen for it.
 - **Why** — motivation and context that cannot be reconstructed from the diff. Always present.
 - **Acceptance criteria** — falsifiable scenarios, each provable by a single test written at implementation time.
 - **Invariants** — properties that span multiple code paths or call sites ("across all callers…"). Closed by reasoning over every affected site in the diff, not by any test alone. Do not treat them as acceptance criteria.

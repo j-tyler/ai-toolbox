@@ -26,15 +26,20 @@ Run four phases in order. Each ends at a gate. Do not merge phases, even when yo
 Two entry modes:
 
 - **Session harvest.** The change was already discussed in this session. Harvest only what the author affirmed. Directions that were considered and discarded go under **Rejected in discussion**. If you cannot tell whether something was decided or merely discussed, it goes under **Deferred to exploration** — never into What.
-- **Cold start.** Ask for the what, the why, and any constraints, in the author's words, in one message. Take what they give and sort it into the template. Do not run a questionnaire. A bare one-sentence request is a cold start, not a harvest.
+- **Cold start.** Ask for the outcomes, the why, and any constraints, in the author's words, in one message. Take what they give and sort it into the template. Do not run a questionnaire. A bare one-sentence request is a cold start, not a harvest.
 
 Emit exactly this format:
 
 ```markdown
 ## Intent brief: <working title>
 
-**What.** One paragraph, plain language — the change as the author would
-say it aloud. No implementation vocabulary unless the author used it.
+**Outcomes.** A short list of what the change is intended to make true —
+results, not solutions. Authors often seed with a solution ("add a
+cache"): record the outcome it serves, and keep the solution only if the
+author confirms it as a deliberate requirement — then it is a constraint,
+carried in the acceptance criteria. Mechanical changes — a migration, a
+rename — are their own outcome. Testable and untestable outcomes both
+belong.
 
 **Why.** One paragraph — what triggered this and what it should accomplish.
 
@@ -123,8 +128,8 @@ affected, named concretely, with file:line evidence. Then cost/benefit.>
 
 ## 3. Proposed intent file: change-intent/<YYYY-MM-DD>-<slug>.md
 [The complete draft, in the file format defined at the end of this
-skill — What, Why, Acceptance criteria, Invariants, Out of scope. Every
-claim tagged with its source:]
+skill — Outcomes, Why, Acceptance criteria, Invariants, Out of scope.
+Every claim tagged with its source:]
   ⟨yours — "<fragment of what they actually said>"⟩
   ⟨code — <the convention or evidence that motivated it>⟩
   ⟨Decision <n>, option <X> — flips if you rule otherwise⟩
@@ -170,9 +175,9 @@ If the author abandons at any point, write nothing. There is no half-approved in
 ```markdown
 # Change intent: <title — the change in one line>
 
-## What
-<the change stated plainly, in a few sentences — the brief's What,
-sharpened by what exploration confirmed>
+## Outcomes
+- <what the change is intended to make true — an outcome, not the
+  implementation>
 
 ## Why
 <prose paragraphs>
@@ -193,6 +198,6 @@ sharpened by what exploration confirmed>
 Rules:
 
 - Section headings exactly as above, in this order. The file carries these sections and nothing else — do not invent metadata (status fields, author lines, PR links).
-- A section with nothing to hold is omitted (What and Why always have something to hold). This deliberately differs from the proposal wrapper: the proposal shows every heading because a missing heading is indistinguishable from a skipped step; in the final file, absence is meaningful — an absent Amendments section means the intent held as written.
+- A section with nothing to hold is omitted (Outcomes and Why always have something to hold). This deliberately differs from the proposal wrapper: the proposal shows every heading because a missing heading is indistinguishable from a skipped step; in the final file, absence is meaningful — an absent Amendments section means the intent held as written.
 - Amendments is never present at authoring time. It appears only if implementation amends, and each entry's discovery note lands next to the claim it changed as an italic parenthetical: `*(Amended 2026-07-08: AuthMiddleware caches token validation for 5m with no invalidation hook.)*`
 - The review pass diffs this file against the commit made at approval, so hold this format exactly — drift turns that diff into noise.
