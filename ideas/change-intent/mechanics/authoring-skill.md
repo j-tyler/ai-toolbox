@@ -26,7 +26,7 @@ Run four phases in order. Each ends at a gate. Do not merge phases, even when yo
 Two entry modes:
 
 - **Session harvest.** The change was already discussed in this session. Harvest only what the author affirmed. Directions that were considered and discarded go under **Rejected in discussion**. If you cannot tell whether something was decided or merely discussed, it goes under **Deferred to exploration** — never into What.
-- **Cold start.** Ask for the what, the why, and any constraints, in the author's words, in one message. Take what they give and sort it into the template. Do not run a questionnaire.
+- **Cold start.** Ask for the what, the why, and any constraints, in the author's words, in one message. Take what they give and sort it into the template. Do not run a questionnaire. A bare one-sentence request is a cold start, not a harvest.
 
 Emit exactly this format:
 
@@ -81,7 +81,7 @@ Before drafting, sweep the categories yourself: concurrency, error handling, obs
 
 ## Phase 3 — Emit the proposed intent
 
-Exact format: four sections, this order. The order is the author's reading protocol — section 1 requires their judgment, section 2 is a veto scan, section 3 is one careful read, section 4 is spot-check material. Every heading appears every time; an empty section states its emptiness affirmatively ("none — <reason>"), because a missing heading is indistinguishable from a skipped step.
+Exact format: four sections, this order. The order is the author's reading protocol — section 1 requires their judgment, section 2 is a veto scan, section 3 is one careful read, section 4 is spot-check material. Every heading appears every time; an empty section states its emptiness affirmatively ("none — <reason>"), because a missing heading is indistinguishable from a skipped step. Every item the brief deferred to exploration is resolved somewhere in this output — as a Decision, a claim, or an explicit drop.
 
 ```markdown
 # Proposed change intent: <slug>
@@ -193,6 +193,6 @@ sharpened by what exploration confirmed>
 Rules:
 
 - Section headings exactly as above, in this order. The file carries these sections and nothing else — do not invent metadata (status fields, author lines, PR links).
-- A section with nothing to hold is omitted. This deliberately differs from the proposal wrapper: the proposal shows every heading because a missing heading is indistinguishable from a skipped step; in the final file, absence is meaningful — an absent Amendments section means the intent held as written.
-- Amendments is never present at authoring time. It appears only if implementation amends, and each entry's discovery note lands next to the claim it changed.
+- A section with nothing to hold is omitted (What and Why always have something to hold). This deliberately differs from the proposal wrapper: the proposal shows every heading because a missing heading is indistinguishable from a skipped step; in the final file, absence is meaningful — an absent Amendments section means the intent held as written.
+- Amendments is never present at authoring time. It appears only if implementation amends, and each entry's discovery note lands next to the claim it changed as an italic parenthetical: `*(Amended 2026-07-08: AuthMiddleware caches token validation for 5m with no invalidation hook.)*`
 - The review pass diffs this file against the commit made at approval, so hold this format exactly — drift turns that diff into noise.
