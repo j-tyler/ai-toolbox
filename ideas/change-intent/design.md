@@ -43,7 +43,7 @@ Four principles govern this design.
 
 **Used beats better.** A process only pays off if the team actually runs it, so the bar to start is as low as we can make it: the project's agents file explains what change intents are, the coding and review agents are made intent-aware, and the ask of a teammate is one sentence — run the change-intent skill instead of the coding harness's built-in plan mode. Change intent adds no new activity to a project. You already plan implementations; this plans one as a change intent. You already review code; code review now starts with the output of a consistent pipeline. Mechanically stronger ideas exist — structural coverage over the intent's tests, per-routine contracts, machine-checked proofs — and they are stronger precisely because they demand more: team effort, specific languages, dedicated tooling. When strength and adoption pull in different directions, this design sides with adoption.
 
-**Diligence to agents, judgment to humans.** Rigor is cheap for an agent and expensive for a human. The agents carry the mechanical work in this design: the authoring skill reads the affected code and runs the elicitation dialogue, the implementation agent writes the tests and walks the diff for each invariant, the review agent checks the diff against the intent and any amendments. The human supplies judgment: they author the intent, they rule on any amendment when the work returns, and they decide at merge whether the change was the right one.
+**Diligence to agents, judgment to humans.** Rigor is cheap for an agent and expensive for a human. The agents carry the mechanical work in this design: the authoring skill reads the affected code and runs the authoring dialogue, the implementation agent writes the tests and walks the diff for each invariant, the review agent checks the diff against the intent and any amendments. The human supplies judgment: they author the intent, they rule on any amendment when the work returns, and they decide at merge whether the change was the right one.
 
 **Every claim is falsifiable.** An acceptance criterion can be refuted by a test; an invariant can be refuted by reasoning over the diff. Anything the pipeline is asked to verify has to be specific enough to fail.
 
@@ -251,7 +251,7 @@ Change intent splits the work so each gets done by the right agent at the right 
 
 Everything in this design works if an AI orchestrator fills the dialogue role instead of a person. The orchestrator brings the intent, the authoring skill brings the structure and rigor, the result is a change intent file ready for the implementation phase — same artifact, same downstream pipeline.
 
-This is what lets the discipline carry forward into the autonomous trajectory. As humans gradually exit the loop (the Waymo-style arc described at the top of this document), the artifact and process don't change: the orchestrator-implementer-reviewer chain runs end-to-end without a human, each step a different agent with a different job, the change intent file the contract between them. The skill that elicits intent from a human today is the same skill that elicits intent from an orchestrator later — same dialogue shape, same artifact, same pipeline.
+This is what lets the discipline carry forward into the autonomous trajectory. As humans gradually exit the loop (the Waymo-style arc described at the top of this document), the artifact and process don't change: the orchestrator-implementer-reviewer chain runs end-to-end without a human, each step a different agent with a different job, the change intent file the contract between them. The skill that runs the dialogue with a human today is the same skill that serves an orchestrator later — same shape, same artifact, same pipeline.
 
 ---
 
@@ -306,7 +306,7 @@ Amendments should be rare, and the design leans on that rarity three ways:
 
 - **Every amendment is a decision made under anchoring.** The argument for "before any code" is that it is the only moment the author has an unbiased view. An amendment reopens the deciding question after implementation has started shaping everyone's view of the change. Sometimes that is unavoidable — reality falsified the plan, and re-deciding with better information is the process working — but it is never free. A process where amendments are routine is a process where deciding happens continuously during implementation: the pre-intent world, rebuilt with extra paperwork.
 - **Rarity is what earns each amendment the author's full attention.** When amendments appear only on falsification, an Amendments section on a returned change is a signal worth reading carefully. If amendments appeared for every nice-to-have, the author would learn to skim them — and a skimmed Amendments section carries no signal at all.
-- **Amendment count becomes a diagnostic.** Every amendment marks a spot where confusion was confirmed in practice — the author, the authoring dialogue, and the surface read all missed something that reality then surfaced. One or two entries is reality doing its thing. Six entries on a small change points at the elicitation (the dialogue missed real interactions with the touched surface) or at the code itself (the area is genuinely hard to reason about). Either way the signal is actionable: a surface that accumulates amendments across changes has earned extra scrutiny in review passes, and a deeper authoring pass the next time a change touches it.
+- **Amendment count becomes a diagnostic.** Every amendment marks a spot where confusion was confirmed in practice — the author, the authoring dialogue, and the surface read all missed something that reality then surfaced. One or two entries is reality doing its thing. Six entries on a small change points at the authoring dialogue (it missed real interactions with the touched surface) or at the code itself (the area is genuinely hard to reason about). Either way the signal is actionable: a surface that accumulates amendments across changes has earned extra scrutiny in review passes, and a deeper authoring pass the next time a change touches it.
 
 ---
 
@@ -369,97 +369,25 @@ The last line is the **bidirectional check** at the change level: not just "did 
 
 ## The Authoring Skill
 
-The skill produces a change intent file through structured dialogue with the intent author — a human today, possibly an AI orchestrator in autonomous chains. The intent author owns the macro intent (what the change should accomplish); the skill helps make that intent rigorous, complete, and falsifiable. The workflow below uses "human" as the dominant case, but every step works the same when the intent author is an orchestrator.
+The skill produces a change intent file through structured dialogue with the intent author — a human today, possibly an AI orchestrator in autonomous chains. The division of labor: **the author owns direction** — the outcomes, the why, what the change must and must not do — and **the skill owns the map**, the code as it exists today, which the author may not know at all, especially where agents wrote it. The author speaks in outcomes and plain-language constraints; the skill translates them into falsifiable claims. The prompt-level instrument lives in [mechanics/authoring-skill.md](mechanics/authoring-skill.md); this section fixes the design it implements.
 
-**Critical constraint:** the skill **never** invents acceptance criteria or invariants for code that doesn't exist yet. The change hasn't been made. The skill's role is to read the affected surface, surface what currently holds there, and use that context to ask sharper questions about what the change should establish. The intent author is the source of intent; the skill is the source of context. The file itself only states forward-looking claims — what the change will prove — not a catalog of preserved behavior.
+**Critical constraint: the skill drafts everything and decides nothing.** It may write the whole file, including claims the author never stated — proposing is its job — but every claim carries its source (the author's words, the code, or the skill's own proposal), every structural fork it closed is shown with the authority that closed it, and every fork it could not close on the author's authority is presented as an explicit decision. What it may never do is exercise a judgment call silently, or word an invented claim so fluently it reads as the author's. The file states only forward-looking claims — what the change will prove — never a catalog of existing behavior.
 
 ### Workflow
 
-**Step 1: Human seeds the intent.**
+**Phase 1 — the intent brief.** The skill assembles the author's direction — harvested from the session when the change was already discussed there, asked for otherwise — into a short fixed-format brief: outcomes, why, constraints, directions explicitly rejected, questions deferred to exploration. The author corrects and confirms it before anything else happens. The gate is cheap and load-bearing: it is where a misread of the author's direction gets caught, before exploration is spent on the wrong change.
 
-The human says what they want to do at whatever level of specificity they have. Vague seeds are accepted ("speed up GetUser") but trigger more pushback. Precise seeds ("add a 30-second TTL cache to GetUser using the existing CacheManager interface") move faster through the workflow but still get the full category check.
+**Phase 2 — exploration.** The skill reads the affected surface: the code, its callers, its tests, prior intents on the same surface, design docs. Every fact it collects is confidence-marked — verified, documented-but-unenforced, or inferred — because a fluently stated wrong baseline poisons every claim built on it, and the author cannot catch it. It keeps a running list of structural forks (each slot in the draft that could be filled another way), checks that each forming acceptance criterion has a writable test in the project's harness, and parks adjacent improvements rather than widening scope.
 
-If the seed is too vague to act on at all, the skill's first move is to refuse to proceed and push for specificity: "What does 'faster' mean? What's the current latency? What's the target? What can you trade off to get there?" The skill should not start enumerating invariants against an undefined target.
+**Phase 3 — the proposed intent.** One fixed-format output, ordered as a reading protocol for the author: the decisions needing their ruling, each written to be answerable without opening a single file — the situation in plain terms, the code as annotated evidence, options with behavior-first consequences, and each option's effect on the file; the paths not taken — forks the skill closed, each citing the brief line or hard evidence that closed it, because a fork closed by the skill's own judgment is not allowed there and must be presented as a decision; the complete draft, every claim source-tagged; and the surface read with its confidence marks.
 
-**Step 2: AI reads the existing relevant surface.**
-
-Given the seed, the AI identifies the code likely to be affected and enumerates what currently holds:
-
-- Type signatures and error contracts
-- Concurrency patterns (locking, message passing, spawning of concurrent work)
-- Existing invariants documented in doc comments
-- Call sites — who depends on this code and how
-- Existing tests — what's currently verified
-- Performance characteristics where measurable
-- Similar patterns elsewhere in the codebase (e.g., other services using the same caching approach)
-
-This is the AI's primary contribution: it brings knowledge of the current codebase that the human doesn't carry in their head.
-
-**Step 3: AI proposes a baseline of what's currently true.**
-
-The AI presents an enumeration: "Here's what the existing code guarantees that your change will interact with." This grounds the conversation in reality. The human now has a concrete list to react to rather than a blank page to fill.
-
-**Step 4: Elicit acceptance criteria first.**
-
-The AI asks the human what they already know about the change pre-code — the AC-shaped knowledge that's natural at this stage. The questions cover the breadth of what an AC can capture:
-
-- *Functional:* "What does the caller / user / operator see? What scenario do they exercise?"
-- *Observability:* "When something happens, what metric, log, or audit entry should be emitted?"
-- *Schema:* "What new fields, endpoints, or response shapes does this introduce?"
-- *Performance (only if perf-constrained):* "Is there an environment-independent bound — memory, query count, complexity — that must hold?"
-
-Each candidate AC gets pushed for specificity: is the scenario concrete enough that someone could write a test against it without further questions?
-
-This step is fast and productive because the human typically has this content ready. The skill's job is mostly to sharpen: turn "user can update their email" into "when `PATCH /users/me` is called with a new email, a subsequent `GET /users/me` returns the new email." Note what's missing: no test name. The test gets written at implementation time. The AC is the scenario, not the test.
-
-The skill pushes back on:
-- Vague claims ("faster," "more secure") that don't describe an observable scenario — sharpened or removed
-- Production-traffic claims ("hit rate >60% in prod") — moved to `Why` or dropped
-- Environment-dependent performance claims ("returns in under 10ms") — replaced with env-independent measures if the change is perf-constrained, dropped otherwise
-- Properties already covered by the project's defaults — kept out of the AC list to avoid bloat
-
-**Step 5: Elicit invariants from the surface.**
-
-Using what the AI read in step 2, the skill now asks property-shaped questions that the human likely couldn't have come up with on their own:
-
-- "AuditLog reads through GetUser. Your change introduces a staleness window. Is staleness acceptable for audit, or does this caller need a different guarantee?"
-- "GetUser is called from four services with different consistency needs. Across all of them, what's the invariant — read-after-write, eventual, something in between?"
-- "The cache touches a shared map. Under concurrent calls, what must hold across all access paths?"
-- "If the cache backend fails, what must still hold for callers?"
-
-Each candidate invariant must describe the property specifically enough that the implementation agent can walk the diff and verify it. As with ACs, no test names at this stage — the implementation will add spot-check tests as it works, and the invariant is closed by reasoning over the diff at implementation and review time, not by any single test passing. For trivial changes this step often produces zero or one invariants, and that's fine. For changes touching concurrency, mutation paths, security boundaries, or cross-cutting properties, this step is where the file gets its weight.
-
-**Step 6: Categories pushed proactively.**
-
-The AI ensures the human has addressed every category that applies to the touched surface:
-
-- Concurrency / thread safety
-- Error handling and propagation
-- Observability (logs, metrics, tracing)
-- Security boundaries
-- Audit / compliance
-- Performance
-- Backward compatibility (API, on-disk format, wire protocol)
-- Resource cleanup (file handles, connections, background tasks)
-- Failure modes (what happens when dependencies fail)
-
-The human can declare any category "not applicable" but they have to declare it explicitly. Silence isn't an answer.
-
-**Step 7: Falsifiability enforced on every claim.**
-
-Vague claims get pushed back until they describe specific observable behavior. The AI does not accept "faster," "more secure," or "backwards compatible" as standalone claims. Each must be made precise: what scenario, what behavior, observable how. The test that proves it doesn't have to exist yet — but the claim has to be specific enough that the implementation agent could write the test from the claim alone.
-
-If the human can't make a claim falsifiable, that's a signal the claim isn't well thought out and should be removed or replaced with what the human actually means.
-
-**Step 8: Convergence.**
-
-When every relevant category has an explicit position and every claim is falsifiable, the AI writes the change intent file to `change-intent/YYYY-MM-DD-slug.md` and presents it for final review. If the human approves, the file is committed on the change's branch — the baseline the review pass later diffs against — and the implementation phase begins. From that point until merge, the intent changes only through the amendment process ([Amending the intent](#amending-the-intent)); at merge it freezes for good.
+**Phase 4 — discussion and approval.** Rulings are applied as diffs, not re-dumps. Before offering the file for approval, the skill red-teams its own draft once: the most plausible implementation that satisfies every claim and is still not what the author wants — the gaps become claims or are accepted aloud. On approval the scaffolding is stripped, the file is written and committed on the change's branch (the baseline the review pass later diffs against), and parked items are emitted as seeds for future intents. If the author abandons, nothing is written. From approval until merge, the intent changes only through the amendment process ([Amending the intent](#amending-the-intent)); at merge it freezes for good.
 
 ### Depth calibration
 
 Not every change deserves a fifteen-page intent file. Depth should scale with risk, detected from the existing code:
 
-- **Light pass**: 2-5 acceptance criteria, zero or one invariants, single category. Leaf utility, pure helper, isolated refactor.
+- **Light pass**: one to five acceptance criteria, zero or one invariants, single category. Leaf utility, pure helper, isolated refactor, one-line fix — every change gets an intent, and the smallest look like this.
 - **Medium pass**: 5-10 acceptance criteria, 1-3 invariants, multiple categories. Typical feature work touching one or two services.
 - **Deep pass**: many acceptance criteria, multiple invariants, all categories covered. Changes to concurrency primitives, public APIs, security-relevant paths, hot paths, mutation paths — anything that historically required care.
 
@@ -469,11 +397,11 @@ The risk profile comes from the existing code, not the proposed change (which do
 
 The skill is "done" when:
 
-- Every category flagged as applicable has either an explicit position or an explicit not-applicable
+- Every open decision has the author's ruling
 - Every claim is falsifiable
-- The human approves the produced artifact
+- The author approves the produced artifact
 
-Without an explicit stopping rule, elicitation either runs forever or stops too early.
+Without an explicit stopping rule, the dialogue either runs forever or stops too early.
 
 ---
 
@@ -488,7 +416,7 @@ Without an explicit stopping rule, elicitation either runs forever or stops too 
 - No existing cache in this service
 - Similar caching pattern exists in `OrderService` using `CacheManager` interface
 
-**AI presents baseline and conducts elicitation.** After dialogue, the produced file at `change-intent/2026-05-16-add-getuser-cache.md`:
+**The skill explores and proposes; the author rules on the open decisions.** The approved file at `change-intent/2026-05-16-add-getuser-cache.md`:
 
 ```markdown
 ## Outcomes
@@ -516,7 +444,7 @@ immediate consistency, is migrated to a new GetUserUncached method.
 - If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers
 
 ## Out of scope
-- **The cache implementation itself.** Using the existing CacheManager interface; no new caching primitives are introduced.
+- **New caching primitives.** The existing CacheManager interface is sufficient; building a new caching layer was considered and excluded.
 - **Eviction policy customization.** CacheManager defaults (LRU with a 100k entry limit) are sufficient for the access patterns we've measured.
 - **Distributed cache coordination.** Single-node cache only. Cross-node consistency would require a separate design and isn't justified by current request volume.
 - **A dedicated API for cache inspection or invalidation.** Not included here. A follow-up PR will add inspection endpoints once production data shows whether on-demand invalidation is needed.
@@ -613,7 +541,7 @@ Once authored, the same artifact does work at two downstream stages. The impleme
 
 The discipline is built to work without humans entirely. The intent author — currently a human in dialogue with the authoring skill — can be an AI orchestrator in autonomous chains, producing the same artifact for the same downstream pipeline. That's what carries the design forward into the trajectory where humans gradually exit the loop: same dialogue shape, same artifact, same review process, just different agents in the role.
 
-**The skill to build:** a structured-dialogue tool that takes a seed intent, reads the affected code surface, walks the intent author through acceptance-criteria elicitation, then invariant elicitation, then category coverage, and refuses to settle for unfalsifiable claims. The output is a change intent file ready to drive implementation and pass review. That skill ships as part of a small mechanics package — an agents-file block, the authoring skill, an implementation reference, and a review skill — stubbed in [mechanics/](mechanics/README.md). The design stays out of the prompt-level engineering those instruments carry; they stay out of the argument this document makes.
+**The skill to build:** a structured-dialogue tool that assembles the author's direction into a confirmed brief, explores the affected surface, and returns a proposed intent — open decisions first, closed forks with the authority that closed them, every claim source-tagged — refusing to settle for unfalsifiable claims. The output is a change intent file ready to drive implementation and pass review. That skill ships as part of a small mechanics package — an agents-file block, the authoring skill, an implementation reference, and a review skill — stubbed in [mechanics/](mechanics/README.md). The design stays out of the prompt-level engineering those instruments carry; they stay out of the argument this document makes.
 
 ---
 
