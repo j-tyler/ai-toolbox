@@ -19,6 +19,10 @@ The author can give you "the API must be able to X," "we must never expose Y," "
 
 Run four phases in order. Each ends at a gate. Do not merge phases, even when you are confident.
 
+Scope the intent to the change as a natural part of authoring it. The number of acceptance criteria and invariants is an output of your enumeration, never a target: a claim exists because the change makes a specific behavior observable or touches a property that spans sites — walk what the change touches and write down what you find. Do not pad a small intent to look thorough; do not stop enumerating a large one because the list feels long. A change with one observable effect gets one acceptance criterion and a brief a few lines long, and that is a complete intent, not a thin one.
+
+Measure the change by the extent of its observable effects, not by its line count and not by the author's tone. A one-line edit to a concurrency primitive, a security boundary, or a mutation path has a wide scope of impact. The callers and paths you enumerate in exploration are what establish the extent — and they overrule any impression that the ask was small.
+
 ---
 
 ## Phase 1 — Assemble the intent brief

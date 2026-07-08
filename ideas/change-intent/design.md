@@ -387,15 +387,11 @@ The skill produces a change intent file through structured dialogue with the int
 
 **Phase 4 — discussion and approval.** Rulings are applied as diffs, not re-dumps. Before offering the file for approval, the skill rereads every claim as written rather than as intended, asking what each permits that the author would refuse — the gaps become claims or are accepted aloud. On approval the scaffolding is stripped, the file is written and committed on the change's branch (the baseline the review pass later diffs against), and parked items are emitted as seeds for future intents. If the author abandons, nothing is written. From approval until merge, the intent changes only through the amendment process ([Amending the intent](#amending-the-intent)); at merge it freezes for good.
 
-### Depth calibration
+### Scaling the intent to the change
 
-Not every change deserves a fifteen-page intent file. Depth should scale with risk, detected from the existing code:
+Not every change deserves a large intent file. Nor should any change receive one padded to look thorough. The intent scales with the change without any size classification being made: the claim count is an output of the skill's enumeration, not a target it aims for. Each acceptance criterion exists because the change makes a specific behavior observable; each invariant exists because the change touches a property that spans sites. The skill walks what the change touches and records what it finds. A one-line fix yields an intent of a few lines; a change with a wide surface yields claims to match. No tier or threshold decides which is which, so there is no boundary to argue and no size judgment for an agent to get wrong.
 
-- **Light pass**: one to five acceptance criteria, zero or one invariants, single category. Leaf utility, pure helper, isolated refactor, one-line fix — every change gets an intent, and the smallest look like this.
-- **Medium pass**: 5-10 acceptance criteria, 1-3 invariants, multiple categories. Typical feature work touching one or two services.
-- **Deep pass**: many acceptance criteria, multiple invariants, all categories covered. Changes to concurrency primitives, public APIs, security-relevant paths, hot paths, mutation paths — anything that historically required care.
-
-The risk profile comes from the existing code, not the proposed change (which doesn't exist yet). If the touched surface has historically required care, the skill pushes deeper regardless of how casually the human stated the intent.
+The measure is the extent of the change's observable effects, not its diff size and not how casually the author stated it. A one-line edit to a concurrency primitive, a security boundary, or a mutation path has a wide scope of impact. The caller and path enumeration from exploration establishes that extent, and it overrules the impression left by a small ask.
 
 ### Stopping condition
 
