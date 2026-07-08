@@ -4,7 +4,7 @@
 
 The block below is what a team copies into their project's agents file (`AGENTS.md`, `CLAUDE.md`, or equivalent) so every agent working in the project is intent-aware without further setup. It is written for an AI agent reading it at the start of a context window, with no prior knowledge of change intent: decision procedure first, hard rules second, explanation only where it makes the rules execute faithfully. Seat-specific instructions stay out; they live in the instrument each agent loads when it takes the seat ([authoring-skill.md](authoring-skill.md), [implementation-reference.md](implementation-reference.md), [review-skill.md](review-skill.md)).
 
-Before pasting, customize the `[BRACKETED]` spots: the skill names, the observable-behavior channel list, and the when-required policy. Everything else is designed to be used verbatim.
+Before pasting, customize the `[BRACKETED]` spots: the skill names and the observable-behavior channel list. Everything else is designed to be used verbatim.
 
 ---
 

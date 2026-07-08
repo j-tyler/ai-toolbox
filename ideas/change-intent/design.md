@@ -265,6 +265,8 @@ The amendment channel exists to repair a wrong intent, not to improve a good one
 
 1. **A claim is falsified.** An acceptance criterion or invariant cannot hold as written, for a discoverable reason. The amendment relaxes or replaces the claim.
 
+    This trigger also covers a claim that is true but unprovable. An acceptance criterion promises a proving test that ships with the diff; if that test cannot be written in the repository's harness, the criterion cannot hold as written, regardless of whether the behavior it describes is real. The amendment rewords the claim into a provable form or moves its substance to Outcomes, recorded like any other repair.
+
 2. **The scope is unsatisfiable.** The change necessarily produces observable behavior the intent takes no position on, so no implementation can deliver the change and pass the bidirectional scope check. This is the only door for adding acceptance criteria or invariants mid-implementation, and it is narrow: the behavior must be *forced by the change*, not adjacent to it. In the worked example below, caching `GetUser` unavoidably either caches missing-user lookups or doesn't — the intent must say which. "The admin endpoint could also use pagination" does not qualify; nothing about the change forces it.
 
 Everything else — better ideas, opportunistic hardening, adjacent fixes, "while we're in here" — is not an amendment. A discovery that would *improve* the change is a seed for the next change intent: its own file, own date, own slug, own deciding moment. The pressure that would otherwise bloat the amendment channel gets redirected into the artifact system, and the deferred idea stays discoverable in `change-intent/` instead of dying as a rejected request.
@@ -497,6 +499,10 @@ Untouched code has no documented invariants. The AI's enumeration of what curren
 
 The review pass searches prior change intents to flag contradictions with the current change. In a mature repository this is potentially thousands of files. The pass can't load them all on every review. Options to explore: filter by file/package overlap with the current diff, embedding search over intent contents, time-window restrictions, or a combination. Picking a strategy that's both cheap and high-recall is a real engineering question, not a free check.
 
+### Concurrent changes cannot see each other's intents
+
+The past-intent search covers merged intents plus the current branch's own file. Two changes in flight at the same time each carry their intent on their own branch, so neither review pass can see the other's claims: two intents that contradict each other both pass review, and the conflict surfaces at merge or in production. Options to explore: search open pull requests' intent files alongside merged ones at review time, or re-check the intent at merge against intents merged since its approval. Until a strategy is picked, the merged-history check should not be read as full coverage of intent contradictions.
+
 ### Spike-then-formalize
 
 Exploratory work doesn't fit this model — you don't know the right invariants until you've tried something. The skill should support a "draft mode" that produces tentative invariants for spike work, with full discipline applied when the change moves toward merge. Forcing full intent rigor on exploratory code will kill the practice.
@@ -515,7 +521,6 @@ Three questions surfaced while specifying the mechanics ([mechanics/](mechanics/
 
 - **Should invariants carry their blast radius?** The authoring surface read finds the caller list; the intent file currently drops it. Checking a named list is verifiable; regenerating the list is where an implementation agent silently drops a site.
 - **Where does the authoring surface read persist?** It is evidence the review pass consumes — caller lists, existing guarantees, prior intents on the same surface — so its home is part of the artifact spec.
-- **What about claims that are true but unprovable in this repository?** An acceptance criterion whose proving test can't be written in the project's harness is neither a falsified claim nor unsatisfiable scope; the necessity test has no door for it. Either an authoring-time feasibility check closes the gap, or the amendment protocol needs a third trigger.
 
 ---
 
