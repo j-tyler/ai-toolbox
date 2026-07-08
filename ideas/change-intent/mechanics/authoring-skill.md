@@ -68,12 +68,12 @@ The constraint tags are your translation plan and you will be checked against it
 
 ## Phase 2 — Explore
 
-No author interaction in this phase, with one exception at the end. Read: the code the change touches, its callers (enumerate them), its tests, its doc comments; `change-intent/` for prior intents on the same surface (search by file, function, and area — check their out-of-scope sections for deferred work this change may be delivering); design docs if the project has them.
+Read: the code the change touches, its callers (enumerate them), its tests, its doc comments; `change-intent/` for prior intents on the same surface (search by file, function, and area — check their out-of-scope sections for deferred work this change may be delivering); design docs if the project has them.
 
 Maintain three running lists as you read:
 
 1. **Facts, each confidence-marked.** `⟨verified⟩` — you saw the code or a test enforcing it. `⟨documented, unenforced⟩` — a comment claims it, nothing checks it. `⟨inferred⟩` — you believe it, nothing states it. Never let an inferred fact wear a verified voice: a fluent wrong baseline poisons every claim you build on it, and the author cannot catch it — they don't know the code.
-2. **Forks.** Every structural choice with more than one reasonable shape. You are biased against noticing these: a resolved draft feels more complete than one with open questions, so your default is to close forks silently — and that completeness is fake. Counter it mechanically: every structural choice your draft makes (where the change sits, which layer, what is keyed, which pattern) gets a fork entry, because each of those slots could have been filled another way. If your fork list is empty for a non-trivial change, you skipped this step; go back.
+2. **Forks.** Every structural choice with more than one reasonable shape. You are biased against noticing these: a resolved draft feels more complete than one with open questions, so your default is to close forks silently — and that completeness is fake. Counter it mechanically: every structural choice your draft makes (where the change sits, which layer, what is keyed, which pattern) gets a fork entry, because each of those slots could have been filled another way. If your fork list is empty for a non-trivial change, you skipped this step; go back. A fork both of whose resolutions satisfy every claim is implementation's to make — it appears in neither Decisions nor Paths not taken.
 3. **Parked items.** Adjacent improvements you notice ("the error handling here is also bad"). Never widen scope for them. They surface at approval as seeds for future intents.
 
 For each acceptance criterion taking shape, check that its proving test is writable in this repository's actual harness. A claim that is true but unprovable here gets flagged now, in your output, not discovered as a dead end mid-implementation — and it is resolved with the author before approval: reword the claim into a provable form, or move its substance to Why. An acceptance criterion that cannot be proven in this repository never enters the change intent.
@@ -82,7 +82,7 @@ Before drafting, sweep the categories yourself: concurrency, error handling, obs
 
 Exploration runs in as many passes as it needs. At the end of a pass, if something genuinely blocks drafting, bring it to the author with the evidence before the next pass. Examples of things that block:
 
-- Two author statements that cannot both hold. A contradiction is the author's to resolve, never yours to resolve silently.
+- Two author statements that cannot both hold. A contradiction is the author's to resolve, never yours to resolve silently — in any phase, including a ruling that collides with a confirmed constraint.
 - A fork the draft cannot be written both ways around.
 - Evidence the change's premise is false — the outcome already holds, or the why rests on a mistaken belief about the code. Ask whether the change still stands.
 
