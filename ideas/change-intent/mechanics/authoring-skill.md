@@ -28,7 +28,7 @@ Two entry modes:
 - **Session harvest.** The change was already discussed in this session. Harvest only what the author affirmed. Directions that were considered and discarded go under **Rejected in discussion**. If you cannot tell whether something was decided or merely discussed, it goes under **Deferred to exploration** — never into What.
 - **Cold start.** Ask for the outcomes, the why, and any constraints, in the author's words, in one message. Take what they give and sort it into the template. Do not run a questionnaire. A bare one-sentence request is a cold start, not a harvest.
 
-Emit exactly this format:
+Emit exactly this format (the closing confirmation lines are author-facing text — include them):
 
 ```markdown
 ## Intent brief: <working title>
@@ -80,7 +80,13 @@ For each acceptance criterion taking shape, check that its proving test is writa
 
 Before drafting, sweep the categories yourself: concurrency, error handling, observability, security boundaries, audit, performance, backward compatibility, resource cleanup, failure modes. For each: cite evidence from the surface that it applies, or drop it. Only categories with evidence appear anywhere in your output — the author never sees a not-applicable checklist.
 
-**The one permitted question:** if a fork blocks drafting entirely — the draft genuinely cannot be written both ways — ask it now, alone, in the Decision format from Phase 3. Everything else waits for the proposal.
+Exploration runs in as many passes as it needs. At the end of a pass, if something genuinely blocks drafting, bring it to the author with the evidence before the next pass. Examples of things that block:
+
+- Two author statements that cannot both hold. A contradiction is the author's to resolve, never yours to resolve silently.
+- A fork the draft cannot be written both ways around.
+- Evidence the change's premise is false — the outcome already holds, or the why rests on a mistaken belief about the code. Ask whether the change still stands.
+
+Everything that doesn't block waits for the proposal.
 
 ---
 
@@ -93,6 +99,7 @@ Exact format: four sections, this order. The order is the author's reading proto
 
 ## 1. Decisions needed
 (your ruling required — the draft assumes my recommendation until you say otherwise)
+Draft currently assumes: 1→B, 2→B, 3→A. <questions already answered during exploration appear here as "0→A (answered)">
 
 ### Decision <n>: <the question, in plain words>
 **The situation, in plain terms.** <2-4 sentences an author who has never
@@ -128,8 +135,9 @@ affected, named concretely, with file:line evidence. Then cost/benefit.>
 
 ## 3. Proposed intent file: change-intent/<YYYY-MM-DD>-<slug>.md
 [The complete draft, in the file format defined at the end of this
-skill — Outcomes, Why, Acceptance criteria, Invariants, Out of scope.
-Every claim tagged with its source:]
+skill, final-file rules applying inside it — no Amendments section,
+empty sections omitted. Outcomes, Why, Acceptance criteria, Invariants,
+Out of scope. Every claim tagged with its source:]
   ⟨yours — "<fragment of what they actually said>"⟩
   ⟨code — <the convention or evidence that motivated it>⟩
   ⟨Decision <n>, option <X> — flips if you rule otherwise⟩
@@ -138,6 +146,8 @@ Every claim tagged with its source:]
 ## 4. Surface read
 (what I read and how sure I am)
 - <fact> ⟨verified / documented, unenforced / inferred⟩
+- Callers of <the changed surface>: <each with file:line, and how you
+  enumerated them>
 - Prior intents on this surface: <files, and conflict/no-conflict finding>
 - Design docs consulted: <list or "none found">
 - Test harness check: <every proposed AC has a writable test in <suite>,
@@ -146,17 +156,19 @@ Every claim tagged with its source:]
 
 **The triage rule — apply it to every fork before you place it.** Name the authority that closes the fork. The author's brief or hard evidence → Paths not taken, citing that authority. Your own judgment → Decisions needed, no matter how confident you are. If you catch yourself writing a rejection reason that traces to nothing but your sense of what's better, you have found a Decision mislabeled as a path not taken. Expect the author to spot-check the tracing.
 
+A specific value the author never gave — a threshold, a time window, a limit — is not a Decision. Propose the value inline with a range in the claim's own text ("pauses after 5 consecutive failed deliveries — 3 to 10, implementation's choice") and tag it ⟨proposed⟩. The range survives into the final file as the implementer's latitude.
+
 **Decision entries are written for an author who cannot read the code.** Before emitting each one, apply the test: *could the author rule from this entry alone, without opening a single file?* If not, rewrite it. Behavior consequences come before mechanisms; affected parties are named in product terms ("signups would intermittently fail"), with the code reference as evidence, not prerequisite.
 
 **Any claim with a `⟨proposed⟩` tag is a claim you invented.** That is allowed — proposing is your job — but the tag is how the author finds what needs their ruling. Stripping it, or wording an invented claim so fluently it reads as translation of their words, is the exact failure this skill exists to prevent.
 
 ---
 
-## Phase 4 — Discuss, red-team, approve
+## Phase 4 — Discuss, tighten, approve
 
-Apply the author's rulings as **diffs, not re-dumps**: "Decision 1 → B: AC 3 becomes <new text>." Re-emit the full file only when they ask or when changes compound.
+Apply the author's rulings as **diffs, not re-dumps**: "Decision 1 → B: AC 3 becomes <new text>." Re-emit the full file only when they ask or when changes compound. If a ruling adds behavior neither option described, restate the addition as claim diffs and get an explicit yes — and reread it hardest in the step below, since it is the only content exploration never touched.
 
-Before offering the file for approval, red-team your own draft once: construct the most plausible implementation that satisfies every claim in it and is still not what the author wants. Present the gap in plain terms. Each gap becomes a new claim, or the author accepts it aloud — no silent closures here either.
+Before offering the file for approval, reread every claim as written, not as intended — the way an implementer who never heard this conversation will read it. For each claim, ask what it permits that the author would refuse. One line per gap; do not build anything. Each gap becomes a new claim, or the author accepts it aloud — no silent closures here either. Implementation will catch a claim that cannot hold (that is what amendments are for); it will never catch a claim that is too loose, because every downstream check verifies the code against the claims.
 
 At approval:
 
@@ -164,7 +176,7 @@ At approval:
 - **Strip the scaffolding.** Source tags and section wrappers go; decision outcomes are already embodied in the claims. The change intent file is clean, in the file format below, nothing else.
 - **Emit parked items** as one-line seeds the author can turn into future intents.
 
-Approval is explicit. Present the final file and state what it means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file on the change's branch before any implementation begins: that commit is the baseline the review pass diffs against when it verifies amendments were recorded. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before anything is approved.
+Approval is explicit. Present the final file and state what it means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file before any implementation begins: that commit is what the review pass later diffs against to verify amendments were recorded. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before anything is approved.
 
 If the author abandons at any point, write nothing. There is no half-approved intent.
 
