@@ -12,11 +12,11 @@ Before pasting, customize the `[BRACKETED]` spots: the skill names and the obser
 
 This project uses change intents: per-change contracts authored **before any code is written**, stored at `change-intent/YYYY-MM-DD-short-slug.md`. An intent states what a change must accomplish. The implementation must satisfy the intent — never the reverse. Every change is reviewed against its intent, so work that drifts from or bypasses an intent will fail review. The point: review checks the code against its stated intent, so the human's attention goes to whether the intent was right.
 
-**Exactly one intent file per pull request.** Not one per commit, and never a second intent for later rounds of edits in the same PR — the original intent governs until merge, amended on the record if it proves wrong. Work that needs two intents is two changes: ship it as two pull requests.
+**Exactly one intent file per pull request.** Not one per commit, and never a second intent for later rounds of edits in the same PR — the original intent governs until merge: amended on the record if it proves wrong, reopened and revised by its author if they re-decide. Work that needs two intents is two changes: ship it as two pull requests.
 
 ### What to do, by task
 
-- **Planning or starting a change** → run the authoring skill (`[/change-intent-author]`). Do not plan ad hoc and do not write an intent file freehand; the skill runs the pre-code dialogue and writes the file.
+- **Planning or starting a change — or revising one whose work has returned to the author** → run the authoring skill (`[/change-intent-author]`). Do not plan ad hoc and do not write an intent file freehand; the skill runs the pre-code dialogue and writes the file.
 - **Implementing a change that has an intent** → the intent is your goal and your contract; follow `[implementation reference]`: a passing test per acceptance criterion, a walk of the diff per invariant.
 - **Reviewing a change** → run the review skill (`[/change-intent-review]`). You are checking the diff against its intent, not the diff alone.
 - **Anything that is not a change** (questions, debugging, exploration) → no process applies. Intent files are context; read them freely.
@@ -26,9 +26,10 @@ If asked to implement a change and no intent exists, say so and offer to run the
 ### Rules that apply in every role
 
 - **If a claim cannot hold, amend the intent — on the record.** If you are implementing and the intent is wrong as written — a claim that cannot hold, or the change forces observable behavior the intent takes no position on — amend the intent file: change the claim, add a dated entry under Amendments (what changed — the discovered fact that forced it), and note the discovery next to the claim it changed. Never pretend a claim holds and never drift past it silently; amendment exists so you never have to. This should be rare. The author rules on every amendment when the work comes back, and one they would have refused means rework — so amend with the evidence you would want in their place. If no amendment can deliver the change, stop and report: that is a failed change, not an amendment.
+- **New direction from the author is a reopening, not an amendment.** If you are handed direction that conflicts with the approved intent and the intent is not wrong — the author re-decided after seeing the work — do not amend it in as if it were your discovery, and do not implement against the old contract. The intent is revised and re-approved through the authoring skill (same file, same slug), and implementation continues against the revision. A pull request still carries exactly one intent, however many passes it takes.
 - **Stay inside scope.** Items under "Out of scope" are conscious exclusions, not oversights — do not fix them while you are in there. If you discover an improvement, propose it as a new intent; never fold it into the current one.
 - **Add no unclaimed observable behavior.** Observable in this project means: `[UNCONFIGURED — team: replace with your list, e.g., API request/response shapes, persisted data formats, named metrics and log events, public error types. Agent: if you are reading this unfilled, the list is not set — ask rather than assuming these examples.]`. If your diff changes one of these channels and no claim or out-of-scope entry covers it: the change forced it → amend (rule above); your implementation chose it → remove it.
-- **Discretion granted in the intent's text** ("TTL may be 10–60s, implementation's choice") **is yours to exercise without asking.** Anything else that conflicts with the intent: amend if the intent is wrong, otherwise don't do it.
+- **Discretion granted in the intent's text** ("TTL may be 10–60s, implementation's choice") **is yours to exercise without asking.** Anything else that conflicts with the intent: amend if the intent is wrong, treat it as a reopening if the author re-decided, otherwise don't do it.
 
 ### Reading an intent file
 
