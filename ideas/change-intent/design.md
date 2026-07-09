@@ -247,6 +247,10 @@ This split also separates the two cognitive tasks that get conflated in normal c
 
 Change intent splits the work so each gets done by the right agent at the right time.
 
+### When exploration comes first
+
+Work that is not intended to merge needs no intent. Some ideas need a prototype or exploratory testing before a clear intent can be stated, and this design proposes no process for that work. Change intent picks up once the author has decided what they want to do: shipping the result is a change like any other, and its intent is authored at that decision — before the implementation that will merge, even when a prototype came before it.
+
 ### The intent author doesn't have to be a human
 
 Everything in this design works if an AI orchestrator fills the dialogue role instead of a person. The orchestrator brings the intent, the authoring skill brings the structure and rigor, the result is a change intent file ready for the implementation phase — same artifact, same downstream pipeline.
@@ -508,10 +512,6 @@ The review pass searches prior change intents to flag contradictions with the cu
 ### Concurrent changes cannot see each other's intents
 
 The past-intent search covers merged intents plus the current branch's own file. Two changes in flight at the same time each carry their intent on their own branch, so neither review pass can see the other's claims: two intents that contradict each other both pass review, and the conflict surfaces at merge or in production. Options to explore: search open pull requests' intent files alongside merged ones at review time, or re-check the intent at merge against intents merged since its approval. Until a strategy is picked, the merged-history check should not be read as full coverage of intent contradictions.
-
-### Spike-then-formalize
-
-Exploratory work doesn't fit this model — you don't know the right invariants until you've tried something. The skill should support a "draft mode" that produces tentative invariants for spike work, with full discipline applied when the change moves toward merge. Forcing full intent rigor on exploratory code will kill the practice.
 
 ### Cross-cutting invariants
 

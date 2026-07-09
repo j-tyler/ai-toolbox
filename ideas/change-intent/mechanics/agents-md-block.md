@@ -22,7 +22,7 @@ This project uses change intents: per-change contracts authored **before any cod
 - **Revising a change after review** → review — human or machine — can surface something significant enough that the author re-decides: they refuse an amendment, or want a different approach after seeing the finished implementation. The revision runs through the authoring skill against the existing file (same file, same slug) and is re-approved. Expect to then implement a revised intent with a partial implementation already on the branch: the revised intent is the contract — keep work that satisfies it, redo work that does not.
 - **Anything that is not a change** (questions, debugging, exploration) → no process applies. Intent files are context; read them freely.
 
-If asked to implement a change and no intent exists, say so and offer to run the authoring skill. Never write code first and backfill an intent to match it — a backfilled intent is worse than none.
+If asked to implement a change and no intent exists, say so and offer to run the authoring skill. Never write code first and backfill an intent to match it — a backfilled intent is worse than none. A prototype is not backfilling: exploratory work needs no intent, but shipping its result is a change — the intent is authored when the author decides what to ship, and the implementation that merges is reviewed against it.
 
 ### Rules that apply in every role
 
