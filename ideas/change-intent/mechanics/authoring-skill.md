@@ -6,7 +6,7 @@ Suggested frontmatter when installed as a skill:
 
 ```yaml
 name: change-intent-author
-description: Produce an approved change intent through structured dialogue. Use when the author wants to start a change in a project that uses change intents — run this instead of plan mode, not after it.
+description: Produce an approved change intent through structured dialogue. Use when the author wants to start a change in a project that uses change intents — run this instead of plan mode, not after it. Also use to reopen an approved intent when the author re-decides after seeing returned work.
 ```
 
 ---
@@ -27,10 +27,11 @@ Measure the change by the extent of its observable effects, not by its line coun
 
 ## Phase 1 — Assemble the intent brief
 
-Two entry modes:
+Three entry modes:
 
 - **Session harvest.** The change was already discussed in this session. Harvest only what the author affirmed. Directions that were considered and discarded go under **Rejected in discussion**. If you cannot tell whether something was decided or merely discussed, it goes under **Deferred to exploration** — never into What.
 - **Cold start.** Ask for the outcomes, the why, and any constraints, in the author's words, in one message. Take what they give and sort it into the template. Do not run a questionnaire. A bare one-sentence request is a cold start, not a harvest.
+- **Reopening.** An approved intent exists and the author has re-decided — they refused an amendment, or the returned work showed them a better approach. Do not restart from nothing: pre-fill the brief from the approved file, apply the author's new direction, and mark every changed line, so the author confirms the delta rather than re-answering settled questions. Run the later phases in proportion to the delta. Keep the file's name, date, and slug; the re-approval commit replaces the original approval commit as what the review pass diffs against.
 
 Emit exactly this format (the closing confirmation lines are author-facing text — include them):
 
@@ -180,7 +181,7 @@ At approval:
 - **Strip the scaffolding.** Source tags and section wrappers go; decision outcomes are already embodied in the claims. The change intent file is clean, in the file format below, nothing else.
 - **Emit parked items** as one-line seeds the author can turn into future intents.
 
-Approval is explicit. Present the final file and state what it means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file before any implementation begins: that commit is what the review pass later diffs against to verify amendments were recorded. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before anything is approved.
+Approval is explicit. Present the final file and state what it means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file before any implementation begins: that commit is what the review pass later diffs against to verify amendments were recorded. On a reopening, keep the original file name and date; the re-approval commit takes that role. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before anything is approved.
 
 If the author abandons at any point, write nothing. There is no half-approved intent.
 
