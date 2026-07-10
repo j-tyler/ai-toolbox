@@ -490,7 +490,7 @@ When the goal clears, the AI code review pass takes the diff with this intent as
 
 ## Design Tensions
 
-A few areas where the design is not fully resolved and worth flagging for implementation:
+A few areas where the design is not fully resolved and worth flagging for implementation. Premises and direction that lie outside the design — for example, the mechanism behind "reviewing less" — are recorded in [notes.md](notes.md).
 
 ### Bidirectional scope-check by evaluator
 
