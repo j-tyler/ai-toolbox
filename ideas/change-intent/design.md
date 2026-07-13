@@ -332,6 +332,8 @@ The flow is **author → implement → review → merge**. Nothing sits between 
 
 The change intent has three downstream consumers. The implementation agent uses it as a *goal* — a completion condition to work toward. The AI code review pass uses it as a *contract* — checking the resulting diff against what was claimed. The human reviewer uses it as *evidence of the process* — confirming the design question was settled before code was written and seeing exactly what context the AI agents had. Each consumer adds verification of a different kind, and the same artifact passes through every hand — a chain of custody running from the intent author to the merge decision. By the time the human engages, they don't need to wonder what was looked at or what wasn't.
 
+What travels between the stages is deliberately thin: the intent file and the change itself — the diff and its tests. Each stage derives its own evidence from those, and its evidence ends with its session: the authoring skill's surface read informs the proposal, the implementing agent's site walks and test runs live in its transcript for the in-loop evaluator, and the review pass re-derives its own enumeration from the final diff — the only derivation that can be authoritative at review time, since the code may have moved since any earlier list was made. This is why an invariant names its span as a rule ("across all caller paths of `GetUser`"), never as a list of sites: the rule is what each stage re-applies to the code in front of it. A pipeline that can carry more — a transcript handed to review, a walk posted on the pull request — may, but nothing downstream depends on it.
+
 ### Implementation phase: the intent as the `/goal` condition
 
 Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a completion condition and have the implementation agent keep working autonomously across turns until that condition is met. After each turn, a separate evaluator model (Haiku by default) reads the conversation transcript and decides whether the condition holds. If yes, the goal clears. If no, the agent continues with the evaluator's reason as guidance for the next turn.
@@ -520,13 +522,6 @@ The change-level intent captures invariants on the touched surface, but some pro
 ### Method-level invariants are separate
 
 This document covers only the macro layer — change-scoped, human-authored (with AI assistance). There is a complementary system for method-level invariants: pedantic, AI-maintained annotations in doc comments paired with named tests, enforced by a linter, consumed by an AI-only reviewer. That system handles the micro layer. The two layers compose in the broader review pipeline but are designed independently. Method-level invariants are **out of scope** for this document and this skill.
-
-### Open artifact questions
-
-Three questions surfaced while specifying the mechanics ([mechanics/](mechanics/README.md)), parked here because they change the artifact or the protocol, not the prompts:
-
-- **Should invariants carry their blast radius?** The authoring surface read finds the caller list; the intent file currently drops it. Checking a named list is verifiable; regenerating the list is where an implementation agent silently drops a site.
-- **Where does the authoring surface read persist?** It is evidence the review pass consumes — caller lists, existing guarantees, prior intents on the same surface — so its home is part of the artifact spec.
 
 ---
 
