@@ -1,8 +1,8 @@
 # Agents-File Block
 
-**Status: drafted. Skill names are placeholders until the skills ship.**
+**Status: drafted. Bracketed names are placeholders until the instruments ship.**
 
-The block below is what a team copies into their project's agents file (`AGENTS.md`, `CLAUDE.md`, or equivalent) so every agent working in the project is intent-aware without further setup. It is written for an AI agent reading it at the start of a context window, with no prior knowledge of change intent: decision procedure first, hard rules second, explanation only where it makes the rules execute faithfully. Seat-specific instructions stay out; they live in the instrument each agent loads when it takes the seat ([authoring-skill.md](authoring-skill.md), [implementation-reference.md](implementation-reference.md), [review-skill.md](review-skill.md)).
+The block below is what a team copies into their project's agents file (`AGENTS.md`, `CLAUDE.md`, or equivalent) so every agent working in the project is intent-aware without further setup. It is written for an AI agent reading it at the start of a context window, with no prior knowledge of change intent: decision procedure first, hard rules second, explanation only where it makes the rules execute faithfully. Seat-specific instructions stay out; they live in the instrument each agent loads when it takes the seat ([authoring-skill.md](authoring-skill.md), [implementation-reference.md](implementation-reference.md), [review-guidance.md](review-guidance.md)).
 
 Before pasting, customize the `[BRACKETED]` spots: the skill names and the observable-behavior channel list. Everything else is designed to be used verbatim.
 
@@ -18,7 +18,7 @@ This project uses change intents: per-change contracts authored **before any cod
 
 - **Planning or starting a change** → run the authoring skill (`[/change-intent-author]`). Do not plan ad hoc and do not write an intent file freehand; the skill runs the pre-code dialogue and writes the file.
 - **Implementing a change that has an intent** → the intent is your goal and your contract; follow `[implementation reference]`: a passing test per acceptance criterion, a walk of the diff per invariant.
-- **Reviewing a change** → run the review skill (`[/change-intent-review]`). You are checking the diff against its intent, not the diff alone.
+- **Reviewing a change** → follow `[your team's review process]`; its instructions carry the change-intent review guidance. You are checking the diff against its intent, not the diff alone.
 - **Revising a change after review** → review — human or machine — can surface something significant enough that the author re-decides: they refuse an amendment, or want a different approach after seeing the finished implementation. The revision runs through the authoring skill against the existing file (same file, same slug) and is re-approved. Expect to then implement a revised intent with a partial implementation already on the branch: the revised intent is the contract — keep work that satisfies it, redo work that does not.
 - **Anything that is not a change** (questions, debugging, exploration) → no process applies. Intent files are context; read them freely.
 
