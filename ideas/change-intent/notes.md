@@ -30,3 +30,19 @@ whole way. Just as deliberately, nothing in the design works against
 that future. This matters when adopting a process while the future is
 uncertain: what a team adopts today should still fit the future when it
 arrives.
+
+## What the design leaves to the team
+
+Change intent adds one artifact to a repository — the intent file — and
+asks the project's agents to honor it. Everything else about how a team
+works is left alone on purpose: where review findings live, who holds
+the author and reviewer seats and when each first reads an intent.
+Teams run design and review in ways we cannot predict, and every rule
+about their process would shrink the set of teams the design fits. A
+team that wants more can add it; nothing in the design is in the way.
+
+The same holds for urgent changes, for a different reason: there is no
+fast path because none is needed. The authoring dialogue scales down
+with the change — for a small fix it is a few minutes of work, and no
+release is so urgent that a few minutes to confirm the fix is not
+itself broken are too many.
