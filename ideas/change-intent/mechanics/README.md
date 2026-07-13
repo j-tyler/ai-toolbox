@@ -1,6 +1,6 @@
 # Change Intent: Mechanics
 
-**Status: the agents-file block, the authoring skill, and the review guidance are drafted; the implementation reference is a stub, to be built after the design is settled.**
+**Status: all four instruments are drafted.**
 
 [design.md](../design.md) states the design in full — the argument, the artifact, the amendment protocol, the downstream integration, the authoring workflow. This folder holds the operational instruments a project actually installs to run it: skill files, prompt blocks, templates, tool bindings. The boundary is readability, not content: the design says everything the idea needs said; the mechanics carry the implementation detail — prompt-level engineering, harness specifics, agent failure-mode countermeasures — that would make the design read like a manual.
 
@@ -8,7 +8,7 @@ The package, in the order a team adopts it:
 
 1. [agents-md-block.md](agents-md-block.md) — pasted into the project's agents file; always-loaded orientation, rules, shared vocabulary, and routing to the other three instruments
 2. [authoring-skill.md](authoring-skill.md) — the skill that runs the pre-code elicitation dialogue and writes the intent file
-3. [implementation-reference.md](implementation-reference.md) — how the implementation agent binds an approved intent to its harness's goal mechanism, and how it amends on the record
+3. [implementation-guidance.md](implementation-guidance.md) — guidance a team adds to its implementing agents' instructions: how to work from an approved intent, and how to amend it on the record
 4. [review-guidance.md](review-guidance.md) — guidance a team adds to its existing review instructions, so the review pass checks each diff against its intent
 
 The split matters because the two layers fail differently. A design flaw means the artifact or the process is wrong — fixed once, in design.md. A mechanics flaw means an agent runs the right process badly: an authoring skill that drafts the intent for the author instead of eliciting it, an implementation agent that quietly resolves a forced choice instead of amending on the record, a review pass that confirms instead of adversarially checks. Those failure modes are real and predictable, but they are prompt-level problems with prompt-level fixes, and they live here so the design can stay silent on them on purpose.

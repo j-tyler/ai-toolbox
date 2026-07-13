@@ -15,4 +15,4 @@ The change intent file also includes any of the following when their conditions 
 
 Each section serves a distinct downstream purpose: Why carries motivation to future readers; acceptance criteria are mechanically checked test-by-test; invariants invite property thinking across the diff; out of scope signals conscious exclusion to every downstream consumer; amendments preserve the chain of custody, recording how the contract bent when reality pushed back. A section being absent means there's nothing for it to hold, not that the author skipped it.
 
-See [design.md](design.md) for the full design, secondary effects, and the authoring-skill specification. The mechanics that make it runnable in a project — the agents-file block, authoring skill, implementation reference, and review guidance teams borrow — are in [mechanics/](mechanics/README.md).
+See [design.md](design.md) for the full design, secondary effects, and the authoring-skill specification. The mechanics that make it runnable in a project — the agents-file block, authoring skill, implementation guidance, and review guidance teams borrow — are in [mechanics/](mechanics/README.md).
