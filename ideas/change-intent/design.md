@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-The goal: construct changes in a way that they're **reviewable**. Less focus on the change itself, more focus on the review process around it. By the time a change reaches a human reviewer, design intent has already driven the implementation and been verified by automated review — the reviewer knows the process the change went through and what each step already checked, so their attention goes to the judgment question *is this the right intent?* Today that means reviewing better; as the machines earn trust, it means reviewing less.
+The goal: construct changes in a way that they're **reviewable**. Less focus on the change itself, more focus on the review process around it. By the time a change reaches a human reviewer, design intent has already driven the implementation and been verified by automated review — the reviewer knows the process the change went through and what each step already checked, so their attention goes to the judgment question *is this the right intent?* Today that means reviewing better; over time, it means reviewing less.
 
 A **change intent** is a per-change artifact authored before any code is written. It captures the design intent in a form that can drive the implementation agent, can be checked against the resulting diff by an AI review pass, and remains in the repository as a persistent record. Machine verification lands a change on the human reviewer's plate already aligned with its stated intent.
 
@@ -328,7 +328,7 @@ In the worked example: reading the finished change, the reviewer prefers invalid
 
 ## How It Integrates Downstream
 
-The flow is **author → implement → review → merge**. Nothing sits between these stages, and nothing should be added between them: the design succeeds only if, as models and harnesses improve, this flow can run end to end without a human. Today humans hold two positions in it — they author, with the skill's help, and they review, after the machine review — and the human reviewer can send a change back to implementation, their direction entering through a reopened intent like all direction does. That loop shrinks as the machine layers earn trust. The flow does not change shape.
+The flow is **author → implement → review → merge**. Nothing sits between these stages, and nothing should be added between them: the design succeeds only if, as models and harnesses improve, this flow can run end to end without a human. Today humans hold two positions in it — they author, with the skill's help, and they review, after the machine review — and the human reviewer can send a change back to implementation, their direction entering through a reopened intent like all direction does. That loop shrinks over time. The flow does not change shape.
 
 The change intent has three downstream consumers. The implementation agent uses it as a *goal* — a completion condition to work toward. The AI code review pass uses it as a *contract* — checking the resulting diff against what was claimed. The human reviewer uses it as *evidence of the process* — confirming the design question was settled before code was written and seeing exactly what context the AI agents had. Each consumer adds verification of a different kind, and the same artifact passes through every hand — a chain of custody running from the intent author to the merge decision. By the time the human engages, they don't need to wonder what was looked at or what wasn't.
 
