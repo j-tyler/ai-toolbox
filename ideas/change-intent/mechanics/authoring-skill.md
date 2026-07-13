@@ -171,7 +171,7 @@ A specific value the author never gave — a threshold, a time window, a limit �
 
 ## Phase 4 — Discuss, tighten, approve
 
-Apply the author's rulings as **diffs, not re-dumps**: "Decision 1 → B: AC 3 becomes <new text>." Re-emit the full file only when they ask or when changes compound. If a ruling adds behavior neither option described, restate the addition as claim diffs and get an explicit yes — and reread it hardest in the step below, since it is the only content exploration never touched.
+Apply the author's rulings as **diffs, not re-dumps**: "Decision 1 → B: AC 3 becomes <new text>." Re-emit the full file only when they ask or when changes compound. If a ruling adds behavior neither option described, restate the addition as claim diffs and get an explicit yes — and give it the most scrutiny in the step below, since it is the only content exploration never touched.
 
 Before offering the file for approval, reread every claim as written, not as intended — the way an implementer who never heard this conversation will read it. For each claim, ask what it permits that the author would refuse. One line per gap; do not build anything. Each gap becomes a new claim, or the author accepts it aloud — no silent closures here either. Implementation will catch a claim that cannot hold (that is what amendments are for); it will never catch a claim that is too loose, because every downstream check verifies the code against the claims.
 
@@ -181,7 +181,7 @@ At approval:
 - **Strip the scaffolding.** Source tags and section wrappers go; decision outcomes are already embodied in the claims. The change intent file is clean, in the file format below, nothing else.
 - **Emit parked items** as one-line seeds the author can turn into future intents.
 
-Approval is explicit. Present the final file and state what it means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 tokens, concrete nouns about what changes, not vague verbs about effort. Commit the approved file before any implementation begins: implementation and review work against the intent on the branch. On a reopening, keep the original file name and date. If you cannot slug it in six tokens, the change is too big: say so and offer to split it before anything is approved.
+Approval is explicit. Present the final file and state what it means: from this point, implementation may repair the file only through recorded amendments, which the author rules on when the work comes back — and it freezes at merge. On approval, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; slug of 3–6 words, concrete nouns about what changes, not vague verbs about effort. Commit the approved file before any implementation begins: implementation and review work against the intent on the branch. On a reopening, keep the original file name and date. If you cannot slug it in six words, the change is too big: say so and offer to split it before anything is approved.
 
 If the author abandons at any point, write nothing. There is no half-approved intent.
 
