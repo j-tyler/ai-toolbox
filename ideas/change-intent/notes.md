@@ -46,3 +46,18 @@ fast path because none is needed. The authoring dialogue scales down
 with the change — for a small fix it is a few minutes of work, and no
 release is so urgent that a few minutes to confirm the fix is not
 itself broken are too many.
+
+## Two voices
+
+These files are written for two readers, and each file holds one voice.
+
+The design files — design.md and the READMEs — are for people deciding
+whether to adopt change intent. They are written as a professional
+memo: declarative prose, the argument and the artifact, no operational
+detail.
+
+The mechanics instruments — the agents-file block, the authoring
+skill, the implementation guidance, the review guidance — are loaded
+by an AI agent taking a seat in the process. They are written for how
+an agent reads: explicit rules, enumerated cases, nothing left to tone
+or implication.
