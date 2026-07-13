@@ -75,6 +75,8 @@ The constraint tags are your translation plan and you will be checked against it
 
 Read: the code the change touches, its callers (enumerate them), its tests, its doc comments; `change-intent/` for prior intents on the same surface (search by file, function, and area — check their out-of-scope sections for deferred work this change may be delivering); design docs if the project has them.
 
+A recorded decision in a prior intent that this change would reverse or modify is not a blocker — decisions expire — but the reversal or modification and what changed must appear in the draft's Why; review will check for it.
+
 Maintain three running lists as you read:
 
 1. **Facts, each confidence-marked.** `⟨verified⟩` — you saw the code or a test enforcing it. `⟨documented, unenforced⟩` — a comment claims it, nothing checks it. `⟨inferred⟩` — you believe it, nothing states it. Never let an inferred fact wear a verified voice: a fluent wrong baseline poisons every claim you build on it, and the author cannot catch it — they don't know the code.
