@@ -1,7 +1,9 @@
 # Change Intent: Multi-Angle Design Review
 
-**Reviewed revision:** `b9c3c71` (`codex/change-intent-decision-complete-h`)  
-**Review date:** 2026-07-15  
+**Reviewed revision:** `b9c3c71` (`codex/change-intent-decision-complete-h`)
+
+**Review date:** 2026-07-15
+
 **Scope:** Every file under `ideas/change-intent/`, plus the root framing and the related Working in Public stub.
 
 ## Method
