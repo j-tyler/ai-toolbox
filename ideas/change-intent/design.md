@@ -2,9 +2,9 @@
 
 ## Overview
 
-The goal: construct changes in a way that they're **reviewable**. Less focus on the change itself, more focus on the review process around it. By the time a change reaches a human reviewer, design intent has already driven the implementation and been verified by automated review — the reviewer knows the process the change went through and what each step already checked, so their attention goes to the judgment question *is this the right intent?* Today that means reviewing better; over time, it means reviewing less.
+The goal: construct changes in a way that they're **reviewable**. Less focus on the change itself, more focus on the review process around it. By the time a change reaches a human reviewer, design intent has already driven the implementation and informed an automated review assessment. The reviewer knows that the goal evaluator checked the implementation evidence and what the review agent could or could not establish independently, so their attention can go to the judgment question *is this the right intent?* Today that means reviewing better; over time, it means reviewing less.
 
-A **change intent** is a per-change artifact authored before any code is written. It captures the design intent in a form that can drive the implementation agent, can be checked against the resulting diff by an AI review pass, and remains in the repository as a persistent record. Machine verification brings the change to the human reviewer already aligned with its stated intent.
+A **change intent** is a per-change artifact whose initial form is approved before implementation begins. It captures the design intent in a form that can drive the implementation agent, can be checked against the resulting diff by an AI review pass, and remains in the repository as a persistent record after merge. Before merge, returned work may cause the author to replace the current unmerged intent; implementation and review then run again against the replacement. The implementation goal establishes its own completion evidence; the review pass independently assesses the resulting change using the evidence and capabilities available in the team's review operation.
 
 This document covers the concept, the problems it addresses, the artifact's structure, how it integrates downstream, and how a skill could produce these intent documents through structured dialogue. The operational instruments that carry it into a project — skill files, prompt blocks, tool bindings — live in [mechanics/](mechanics/README.md): this document makes the argument; those files make it runnable.
 
@@ -18,13 +18,13 @@ Just as autonomous vehicles will eventually drive themselves and we'll think not
 
 Until we're there, change intent addresses several failure modes of today's review process:
 
-1. **Post-facto rationalization.** PR descriptions are written *after* the change is made. In the age of AI code generation, they're often just a summary of what the AI produced — and an AI reviewer can derive that summary from the code itself, so the description carries little information the reviewer doesn't already have. And because descriptions are written after, they get shaped to fit the change the author ended up with, covering what the code does but not what was intended before starting or wasn't considered along the way. Either way, reviewers get little signal about whether design intent actually drove the change. Change intent inverts the direction: intent is authored before code, the code must satisfy the intent, and the description can't retroactively absorb whatever the code did.
+1. **Post-facto rationalization.** PR descriptions are written *after* the change is made. In the age of AI code generation, they're often just a summary of what the AI produced — and an AI reviewer can derive that summary from the code itself, so the description carries little information the reviewer doesn't already have. And because descriptions are written after, they get shaped to fit the change the author ended up with, covering what the code does but not what was intended before starting or wasn't considered along the way. Either way, reviewers get little signal about whether design intent actually drove the change. Change intent inverts the direction: the initial intent is approved before implementation, and every implementation and review pass works against the current approved intent. If the author replaces an unmerged intent after seeing returned work, the replacement becomes a new baseline and the affected work is assessed again.
 
-2. **Unconsidered cases.** Most production bugs aren't "I thought X would happen and Y happened." They're "I didn't think about case Z, and the code now does something weird in case Z." The pre-code dialogue forces the author and the AI to walk through use cases the change will touch — surfacing unconsidered ones at the only moment the author still has an unbiased view of what they wanted to do. Once code exists, the author has anchored on the implementation, and cases that weren't considered tend to stay unconsidered.
+2. **Unconsidered cases.** Most production bugs aren't "I thought X would happen and Y happened." They're "I didn't think about case Z, and the code now does something weird in case Z." The initial pre-code dialogue forces the author and the AI to walk through use cases the change will touch, surfacing unconsidered ones before implementation begins. Returned work may later give the author reason to replace that intent, but it does not remove the value of making the first direction explicit before code starts shaping it.
 
-3. **Unverifiable claims.** Vague claims like "faster" or "more secure" are too abstract to use cleanly downstream — the implementation agent can't satisfy them (faster than what?) and the AI review pass can't verify them (measured how?). The review pass doesn't know a change's intent on its own; it sees the diff plus whatever context is provided. Change intent is how the intent gets communicated, with each claim specific enough that the review pass can compare the diff against it and say "met" or "not met, more work needed." Falsifiability is what makes that comparison possible.
+3. **Unverifiable claims.** Vague claims like "faster" or "more secure" are too abstract to use cleanly downstream — the implementation agent can't satisfy them (faster than what?) and the AI review pass can't assess them (measured how?). The review pass doesn't know a change's intent on its own; it sees the intent, diff, tests, and repository. Change intent makes each claim specific enough that the review pass can report `met`, `not met`, or `cannot verify` from those inputs. Falsifiability is what makes that assessment possible.
 
-4. **Lost context.** Commit messages are too compressed to carry the full intent of a change; they're a summary, not a record. And while AI can read git history well, most first-pass searches happen via `grep` over the working tree — which doesn't see git history at all. Change intent files live in the repository alongside the code, so they're discoverable the same way code is: a future engineer or AI grepping for a function name, an issue area, or a past concern will find the intents that touched it without walking git log.
+4. **Lost context.** Commit messages are too compressed to carry the full intent of a change; they're a summary, not a record. Change intent preserves why this pull request was needed, what change was approved, and the boundaries used for implementation and review. It remains a record of this change after merge, without becoming a requirement for later changes.
 
 5. **Conflation of multiple tasks.** Human reviewers today are nominally doing four jobs at once:
 
@@ -39,51 +39,79 @@ Until we're there, change intent addresses several failure modes of today's revi
 
 ## Design principles
 
-Four principles govern this design.
+Five principles govern this design.
 
-**Used beats better.** A process only pays off if the team actually runs it, so the bar to start is as low as we can make it: the project's agents file explains what change intents are, the coding and review agents are made intent-aware, and the ask of a teammate is one sentence — run the change-intent skill instead of the coding harness's built-in plan mode. Change intent adds no new activity to a project. You already plan implementations; this plans one as a change intent. You already review code; code review now starts with the output of a consistent pipeline. Mechanically stronger ideas exist — structural coverage over the intent's tests, per-routine contracts, machine-checked proofs — and they are stronger precisely because they demand more: team effort, specific languages, dedicated tooling. When strength and adoption pull in different directions, this design sides with adoption.
+**Used beats better.** A process only pays off if the team actually runs it, so the bar to start is as low as we can make it: the project's agents file explains what change intents are, the coding and review agents are made intent-aware, and the ask of a teammate is one sentence — run the change-intent skill instead of the coding harness's built-in plan mode. Change intent adds no new kind of project activity: teams still plan, implement, test, and review changes. It improves those existing activities by giving implementation and review the same approved intent. Mechanically stronger ideas exist — structural coverage over the intent's tests, per-routine contracts, machine-checked proofs — and they are stronger precisely because they demand more: team effort, specific languages, dedicated tooling. When strength and adoption pull in different directions, this design sides with adoption.
 
-**Diligence to agents, judgment to humans.** Rigor is cheap for an agent and expensive for a human. The agents carry the mechanical work in this design: the authoring skill reads the affected code and runs the authoring dialogue, the implementation agent writes the tests and walks the diff for each invariant, the review agent checks the diff against the intent and any amendments. The human supplies judgment: they author the intent, they rule on any amendment when the work returns, and they decide at merge whether the change was the right one.
+**Diligence to agents, judgment to humans.** Rigor is cheap for an agent and expensive for a human. The agents carry the mechanical work in this design: the authoring skill reads the affected code and runs the authoring dialogue, the implementation agent writes the tests and reasons across the affected change for each invariant, and the review agent checks the diff against the intent and any amendments. The human supplies judgment: they author the intent, they rule on any amendment when the work returns, and they decide at merge whether the change was the right one.
 
-**Every claim is falsifiable.** An acceptance criterion can be refuted by a test; an invariant can be refuted by reasoning over the diff. Anything the pipeline is asked to verify has to be specific enough to fail.
+**Every claim is falsifiable.** An acceptance criterion can be refuted by a test; an invariant can be refuted by reasoning over the diff. Anything the pipeline is asked to verify has to be specific enough to fail. Outcomes and constraints are not claims: they orient and bound engineering judgment without promising proof that the available environment cannot provide.
 
-**No adversary.** This is a workflow teams adopt for their own benefit, not a control imposed on them, so the design assumes cooperative actors. The pipeline checks compliance — agents check other agents' work at every stage — but it does not try to prove it: the authoring date is self-reported, intent-before-code is not attested, and the Amendments section is a plain record rather than an audit trail. The checks catch mistakes, not forgery. Proof would defend against a bad actor the design assumes away, and charge for that defense in adoption cost — the used-beats-better tradeoff again, decided the same way. Gaming the process is easy and pointless: its only output is review quality for the team running it.
+**No adversary.** This is a workflow teams adopt for their own benefit, not a control imposed on them, so the design assumes cooperative actors. The pipeline checks compliance — agents check other agents' work at every stage — but it does not try to prove it: the authoring date and initial approval timing are self-reported, and the Amendments section is a plain record rather than an audit trail. The checks catch mistakes, not forgery. Proof would defend against a bad actor the design assumes away, and charge for that defense in adoption cost — the used-beats-better tradeoff again, decided the same way. Gaming the process is easy and pointless: its only output is review quality for the team running it.
+
+**Every role has a defined continuation path.** The process assigns an action for each unresolved condition. The authoring agent may request a decision from the author. The implementation agent has authority over unconstrained technical choices and may amend a newly discovered change-defining decision. The review agent may report `cannot verify` or raise a finding without repairing the change. The process stops only when no amendment can preserve the approved outcomes and constraints.
+
+| Role and situation | Path forward |
+| --- | --- |
+| Authoring: a change-defining decision is unresolved | Ask the author, with concrete options and their effects on the intent |
+| Authoring: the approved direction or an explicit constraint settles the choice | Apply it, cite its source, and continue |
+| Authoring: a relevant surface cannot be inspected or bounded confidently | Name the blind spot and ask the author to supply context, narrow the change, or make an explicit decision that governs the surface |
+| Implementation: the intent leaves a technical choice open | Choose using normal engineering judgment and continue |
+| Implementation: a constraint cannot be proved in the available environment | Use it as a design boundary and continue; lack of proof is not a violation or amendment trigger |
+| Implementation: a claim cannot be delivered within the approved boundaries or a necessary change-defining decision is missing | Amend on the record and continue |
+| Implementation: no repair can preserve the approved outcomes and constraints | Stop and report a failed change |
+| Review: evidence cannot establish a claim | Report `cannot verify` and name the missing evidence |
+| Review: the diff violates or silently changes a decision in this intent | Raise a finding; do not repair it in review |
+
+The following distinction determines whether a choice belongs in the intent:
+
+```text
+Do the branches decide which change will be delivered?
+├─ no  → different implementations of the same change: implementation latitude
+└─ yes → is the choice already settled by the approved intent?
+         ├─ yes → apply it
+         └─ no  → authoring: ask
+                  implementation: amend and continue
+                  review: report a finding
+```
+
+A fork is change-defining only when choosing between its branches decides what change will be delivered. Ask whether the author could approve the change once and allow implementation to choose either branch while still receiving the change they approved. If so, the fork is implementation latitude. If choosing one branch would make the other a different change, the intent must settle it. A technical or observable difference alone does not make a decision change-defining; ordinary engineering and review still apply.
 
 ---
 
 ## What an intent file contains
 
-A change intent file is a per-change document authored **before any code is written**. One file per change, living alongside the rest of the repository — and a change is a pull request. Exactly one intent per PR: not one per local commit, and never a second intent for later rounds of edits within the same PR, which stay under the original intent (amended on the record if implementation proves it wrong). Work that seems to need two intents is two changes, shipped as two pull requests. Each section below is required when its conditions apply — `Outcomes` and `Why` apply to every change; `Acceptance criteria` applies when there's observable behavior to verify; `Invariants` applies when the change touches properties that span beyond a single test; `Out of scope` applies when there are conscious exclusions worth signaling; `Amendments` applies when implementation discovered the intent was wrong as written and it had to be repaired to deliver the change. A section being absent means there's nothing for it to hold, not that the author skipped it.
+A change intent file is a per-change document whose initial form is approved **before implementation begins**. It is complete over change-defining decisions and open over implementation: it identifies the approved change precisely while leaving technical choices open when they are different ways to deliver that change. Completeness is a quality requirement on the artifact and the authoring process, not a proof that no unknown dependency exists. Each pull request contains exactly one current intent file. Implementation may amend that current candidate under the narrow rules below. If returned work changes the author's direction, the author may replace the unmerged candidate; the prior candidate is superseded, the replacement becomes the approved baseline, and implementation and review run again against it. Only the intent that merges becomes frozen history. `Outcomes` and `Why` apply to every change. `Constraints`, `Acceptance criteria`, `Invariants`, `Out of scope`, and `Amendments` apply under the conditions described below. An omitted section indicates that its condition does not apply.
 
 ### Outcomes
 
-A short list of what the change is intended to make true. Each entry is an outcome — the result the author wants from the change — not the implementation chosen to produce it. "Database load from GetUser drops by roughly 70%" is an outcome; "add a cache" is not, unless the cache is itself the deliberate outcome — which is exactly the case for changes that are mechanical by nature (a migration, a rename: "auth runs on OIDC"). Take care not to smuggle an implementation choice into the outcome as an unnecessary constraint; when the author deliberately requires an approach ("must use the existing CacheManager"), that is a constraint, and it belongs in the acceptance criteria.
+A short list of what the change is intended to make true. Each entry is an outcome — the result the author wants from the change — not the implementation chosen to produce it. "Database load from GetUser drops by roughly 70%" is an outcome; "add a cache" is not, unless the cache is itself the deliberate outcome — which is exactly the case for changes that are mechanical by nature (a migration, a rename: "auth runs on OIDC"). Take care not to smuggle an implementation choice into the outcome as an unnecessary constraint; when the author deliberately requires an approach ("must use the existing CacheManager"), record it under `Constraints`.
 
 Outcomes may be individually testable or not, and both belong here. "GetUser returns the user's email address" is provable by a test; "database load drops by half" is observable only in production, long after review. This section doesn't promise proof — the claims below do that. It records the *intended* outcome: what the author meant the change to accomplish, and the standard the reviewer judges the claims against — do these acceptance criteria and invariants plausibly deliver these outcomes? Intent and achievement can diverge: a change can merge having proven every claim and still miss its outcome. Recording what was intended is what lets a future reader see that divergence plainly, instead of reading the result as if it had been the goal.
 
 ### Why
 
-A thorough, clear paragraph (or a few) that captures the high-value context surrounding the change — the kind of reasoning a future reader (engineer or AI) couldn't reconstruct from the diff alone. The Why is written as prose, not a Q&A. The prompts below are the kinds of information to weave in, in whatever order makes sense — not a list to answer point-by-point:
+A short prose explanation of the problem, event, or need that caused the change to be made. Include the context necessary to understand why the outcomes matter and why the change is being made. Requirements and implementation direction live in the sections that define them; nothing is binding merely because it appears in `Why`.
 
-- What problem is being solved?
-- What triggered this change — a bug, a metric regression, user feedback, a planned migration, a product request?
-- What domain context isn't obvious from the code but shapes the decision? Constraints, prior decisions, system behavior the reader needs to know.
-- What tradeoffs were accepted, and which alternatives were rejected for reasons that shaped the design? "We chose X over Y because Z" — carried with its reason, so a future reader can see when Z has stopped being true and the rejection has expired with it. Alternatives that were never serious don't belong here.
-- What context will a future engineer (or AI) reading this a year from now need to make sense of why this happened?
+### Constraints
 
-This is where the high-value context from the pre-code dialogue lands — the reasoning that wouldn't survive in a commit message and can't be recovered from the diff. Err toward including too much rather than too little; the Why is durable storage for context that's expensive or impossible to reconstruct later.
+Conditions and non-behavioral boundaries that every acceptable implementation must be designed around. A constraint can prohibit an otherwise reasonable implementation choice, establish an operating condition the design must account for, or require an approach for a non-behavioral reason. It is included only when the author's direction or an explicit project instruction supplies the boundary; engineering preference is not a constraint.
+
+Constraints guide and bound engineering judgment; they are not automatically proof obligations. Some are directly checkable in the diff, such as "do not add a third-party runtime dependency." Others can be assessed only through engineering judgment before production, such as "the design must account for sustained production traffic of 10,000 requests per second." Lack of proof is not a violation. Implementation and review act on affirmative evidence that the change conflicts with a constraint, and otherwise use the constraint to guide their assessment without manufacturing a test, amendment, or definitive verdict.
+
+An environment-dependent target is an outcome when achieving it is the purpose of the change and a constraint when it is an operating boundary the change must preserve or account for. It can be both important and unprovable before production; that does not move it into an acceptance criterion. If implementation discovers an actual conflict, it changes the implementation. If no reasonable in-scope implementation can honor the constraint, it reports a failed change rather than weakening an approved boundary.
 
 ### Acceptance criteria
 
-A list of falsifiable scenarios that must hold for the change to be **accepted**. Each one describes specific observable behavior — what a caller, user, or operator can do or see after the change ships. Each AC must be provable by a single test in principle (unit, integration, or one-shot measurement), but **at authoring time you do not name the test**. The implementation agent writes the test as part of the work; the test shows up in the transcript when it runs.
+A list of falsifiable scenarios that must hold for the change to be **accepted**. Each one proves a selected outcome, guarantee, guardrail, or decision through specific behavior — what a caller, user, or operator can do or see after the change ships. Each AC must have a focused proving test in principle (unit, integration, or one-shot measurement), but the test is not named during authoring. The implementation agent writes the test as part of the work and reports its result during implementation.
 
 This is what authors usually have pre-code — "user calls X and sees Y," "field C appears in response D," "when E happens, metric F is emitted." Each AC is a focused scenario.
 
-**ACs are decision criteria, not exhaustive specs.** They capture what this change introduces or alters that needs verification before accepting it. Properties covered by the project's default standards — general performance characteristics, basic style, default error handling, existing test coverage — don't need to be restated as ACs. The AC list should be sized to the change: a small or internal change may have few or no ACs; a large change may have tens or even hundreds. A short list isn't a defect any more than a long list is — what matters is whether each AC describes a claim the change is making.
+**ACs are proof obligations, not an exhaustive behavioral specification.** Each independent decision should have an identifiable proof path, but it does not require a separate AC. One realistic scenario may prove several decisions when each is asserted distinctly and a failure remains diagnosable. Variants may share an AC when one assertion structure can falsify the same claim for each variant. Branches should not be combined solely because they share an implementation helper, and a claim should not be split solely because its implementation affects several observable surfaces. Project defaults and incidental implementation effects remain ordinary engineering and review concerns.
 
 The list is forward-looking. It states what the change establishes or demonstrates, not a catalog of existing behavior. If a behavior is already true and your change isn't adding or altering it, it doesn't belong here.
 
-**Each AC must be provable by a test that ships with the diff.** If there's no integration test, unit test, or one-shot measurement that can be run against the change to demonstrate the claim, it doesn't belong here. "Cache hit rate exceeds 60% in production," for example, can't be verified at change time — production isn't running the diff when the review happens. Claims like that are outcomes: state them in `Outcomes`, which records intent without requiring proof at change time.
+**Each AC must be provable by a test that ships with the diff.** If there's no integration test, unit test, or one-shot measurement that can be run against the change to demonstrate the claim, it doesn't belong here. "Cache hit rate exceeds 60% in production," for example, can't be verified at change time — production isn't running the diff when the review happens. State it as an outcome when it describes what the change is intended to achieve, or as a constraint when it is an operating boundary every implementation must account for. Neither classification manufactures a proof obligation.
 
 **Examples of falsifiable acceptance criteria:**
 
@@ -110,7 +138,7 @@ Concrete but not provable by a test that ships with the diff:
 - "Cache hit rate exceeds 60% under production traffic over a rolling 24h window" — specific, but observable only after deployment
 - "GetUser p95 latency drops below 10ms under 1000 RPS" — specific, but requires production-scale load to verify
 
-Claims in the second category belong in `Outcomes`, not in the AC list.
+Statements in the second category belong in `Outcomes` or `Constraints`, depending on whether they describe the result the change seeks or a boundary the implementation must account for. They do not belong in the AC list.
 
 #### Performance acceptance criteria
 
@@ -121,7 +149,7 @@ Include a performance AC only when **both** conditions hold:
 1. The change is **performance-constrained** — performance is the reason for the change, or a specific bound is a hard requirement.
 2. The measurement is **environment-independent** — it produces the same answer regardless of machine, OS, or concurrent load.
 
-Memory allocation, allocation count, database-query count, network-call count, and algorithmic complexity (operations as a function of input size) are environment-independent and make good benchmark-style ACs. Wall-clock latency, throughput, and percentile latencies under load are environment-dependent and don't — they need different verification paths (staging load tests, production monitoring, perf regression suites), not single-test ACs.
+Memory allocation, allocation count, database-query count, network-call count, and algorithmic complexity (operations as a function of input size) are environment-independent and make good benchmark-style ACs. Wall-clock latency, throughput, and percentile latencies under load are environment-dependent and don't — they need different verification paths (staging load tests, production monitoring, perf regression suites), not focused proving-test ACs.
 
 **Examples of good performance ACs:**
 - "A single `ProcessOrder` call makes at most one database query"
@@ -131,17 +159,17 @@ Memory allocation, allocation count, database-query count, network-call count, a
 - "GetUser returns in under 10ms" — depends on machine, DB connection, concurrent load
 - "Throughput exceeds 1000 req/s" — depends on hardware, parallelism, network
 
-If your change needs an environment-dependent performance bound, that's not an AC — it's a separate verification track (benchmark suite, load test, production SLI). The intent file is the wrong artifact for that.
+If your change needs an environment-dependent performance bound, that bound is not an AC. Record it as an outcome or constraint and let the team's normal performance systems provide whatever evidence they can. Change intent does not require the authoring agent to design that verification or require implementation and review to prove what their environments cannot establish.
 
 ### Invariants
 
-A list of properties that must hold *across* the change — properties that **can't be proven by a single test** because they span multiple call sites, code paths, or states. Read-after-write consistency across all callers, availability under failure, audit-log-on-every-mutation, thread safety across all access paths — these are invariant-shaped.
+A list of properties that must remain true across the parts of the system affected by the change. Their full obligation cannot be closed by test evidence alone because implementation and review must also reason across the affected change. Read-after-write consistency across callers, availability under failure, audit-log-on-every-mutation, and thread safety across access paths are invariant-shaped.
 
-Where an acceptance criterion is closed by one passing test, an invariant requires reasoning across the diff. The implementation agent demonstrates each invariant by walking the affected code paths and confirming the property holds at each; the AI review pass independently scrutinizes the whole diff through the invariant's lens. Spot-check tests may help — they pin down specific cases — but the invariant is closed by analysis, not by any single test passing alone.
+Tests should exercise an invariant where useful, but passing tests do not close it by themselves. The implementation agent must also reason across the affected diff and relevant surrounding paths; the AI review pass independently applies the same property to the resulting change. Tests establish concrete cases, while the reasoning addresses the property across the change.
 
-As with ACs, invariants are written at authoring time **without naming specific tests**. The shape of the claim is the contract; the implementation figures out how to verify it.
+The intent states the property in plain language, not every location where it applies and not every test that might exercise it. Discovering the relevant locations and choosing useful tests are implementation and review responsibilities.
 
-The invariants section is required when the change touches scope-spanning properties. It can be small or empty for trivial changes whose impact is fully captured by acceptance criteria. Heavier changes — concurrency primitives, mutation paths, security boundaries, cross-cutting behaviors — should have more invariants by definition, because their scope of impact is wider.
+Authoring does not attempt to enumerate every desirable invariant of the system. Include an invariant when it is part of the change the author is approving and its obligation extends beyond a focused acceptance scenario. Ordinary correctness, security, concurrency, and quality concerns remain part of implementation and review even when they are not written as intent invariants. The section may therefore be small or absent when acceptance criteria capture the approved change.
 
 **Examples of invariants:**
 - "Read-after-write: a user updated via `UpdateUser` is visible to `GetUser` across all caller paths, within the staleness window"
@@ -149,7 +177,7 @@ The invariants section is required when the change touches scope-spanning proper
 - "The cache layer is safe for concurrent reads and writes from multiple callers, across all access paths added by this change"
 - "If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers"
 
-Note the shape: each one reaches into the codebase beyond a single test — "across all caller paths," "across all mutation sites," "across access paths," "every code path." That reach is what distinguishes an invariant from an acceptance criterion.
+Note the shape: each states one property whose reach extends beyond a focused proving test. It names that reach as a rule rather than inventorying the files, callers, branches, or tests that implementation must inspect.
 
 ### Out of scope
 
@@ -157,7 +185,7 @@ A list of things this change explicitly is *not* doing — work the author consi
 
 What it does:
 
-- **Signals to the author at authoring time.** Writing an out-of-scope item often prompts "wait, should this actually be in scope?" That reflection happens before any code is written — before the implementation itself starts to bias the author's view of what the change should be.
+- **Signals to the author at initial authoring time.** Writing an out-of-scope item often prompts "wait, should this actually be in scope?" That reflection happens before implementation begins — before implementation starts to bias the author's view of what the change should be.
 - **Signals to the implementation agent.** These areas are excluded from the goal, so the agent doesn't drift into them while satisfying the ACs and invariants.
 - **Signals to the AI review pass.** Items listed here were a conscious choice, not an oversight. The review pass doesn't flag the absence of an out-of-scope item as a defect.
 - **Signals to the human reviewer.** If a related item is missing from this list and the reviewer would expect it to be considered, that's a question to ask — the author may not have thought about it.
@@ -172,35 +200,27 @@ Out-of-scope items are typically multi-sentence — enough to convey what was co
 
 Each item is something the author thought about and explicitly excluded. Note the third example: an out-of-scope item can flag work the author has explicitly deferred. That signals to the reviewer that more work is coming, and gives a later reader the ability to check whether the follow-up actually landed.
 
-**Why no dedicated Alternatives or Risks sections?** Two shapes common in design docs are handled differently in this artifact:
+**Why no dedicated Alternatives or Risks sections?** Alternatives may appear temporarily while the author makes a decision. The final file keeps the selected consequence under Outcomes, Constraints, Acceptance criteria, Invariants, or Out of scope. Rejected alternatives do not move into `Why`.
 
-- *Alternatives considered* gets no section of its own; the load-bearing subset lives in `Why`. An alternative rejected for a reason that shaped the design — "we chose X over Y because Z" — is exactly the context a future reader can't reconstruct from the diff. Recording the reason is also the defense against anchoring: a bare list of rejected names creates gravity around old decisions, but a rejection carried with its reason expires visibly — the moment Z stops being true, the reader can see the rejection no longer applies and the decision is open for re-evaluation. What stays out is the survey: options that were never serious, comparisons that didn't shape the outcome.
-- *Risks* are converted, not listed. A risk worth recording is a claim about what could go wrong — and if it can be made falsifiable, it belongs in the artifact as an acceptance criterion or invariant. "The cache might mask database failures" isn't a risk entry; it's the invariant "if the cache backend is unreachable, every read path falls back to the database." A risk that resists conversion is exactly the unfalsifiable speculation the artifact already refuses everywhere else. The review-bias concern — a listed risk becomes the reviewer's checklist, and unlisted risks get less scrutiny than fresh eyes would give them — is real but argues for conversion, not exclusion: converted risks are checked like every other claim, and the AI review pass runs its open-ended sweep blind to any author-stated framing.
-
-What remains excluded is the residue — speculative risks that resist conversion, and alternative-surveys that didn't shape the design. Those belong in less-permanent artifacts: discussion threads, working design docs, postmortems. If the reasoning shaped the change, it's in `Why`; if it's a checkable worry, it's a claim; only what's neither stays out.
+A risk belongs in the file only when it changes the approved intent. Express the resulting requirement as an acceptance criterion or invariant, or the engineering boundary as a constraint. Other risks remain part of ordinary implementation and review rather than becoming an author-provided checklist.
 
 ### Amendments
 
-A dated record of repairs made to the intent during implementation — present only when the intent proved wrong as written and had to change for the change to be deliverable. Most intents never get one; an absent Amendments section means the contract held as authored. The process that produces these entries — who may amend, when, and what each amendment must leave behind — is covered in [Amending the intent](#amending-the-intent).
+A dated record of repairs made during implementation — present only when a claim proved wrong or a necessary change-defining decision surfaced after approval. Most intents never get one; an absent Amendments section means the current approved intent held as written. The current intent must remain complete and understandable without this section. Amendments exists only for a reader who wants to see what implementation changed from the approved wording.
 
-Each entry is one line with two required fields beyond the date:
+Each amendment receives a short identifier local to the file. It states the discovered system fact, then quotes the affected item's previous and current wording verbatim with the section where each belongs:
 
-```
-- <DATE> — <WHAT: the delta, at claim granularity> — <WHY: the discovered fact that forced it>
-```
-
-The WHY must name a fact about the system, not an activity of the author — a statement that would still be true and checkable if the rest of the file were deleted. This is the same falsifiability discipline the artifact applies to acceptance criteria, pointed at the amendment entries:
-
-```
-Fails — activity-shaped, tells a future reader nothing:
-- 2026-07-08 — AC 2 changed — ran into implementation issues
-
-Passes — fact-shaped, verifiable against the codebase:
-- 2026-07-08 — AC relaxed: revocation latency 1m → 5m — AuthMiddleware caches
-  token validation for 5m with no invalidation hook
+```markdown
+- **A<N> — <DATE>.** <The discovered fact that forced the repair.>
+  - Was — <Section>: <verbatim previous item>
+  - Now — <Section>: <verbatim current item>
 ```
 
-The Amendments section is an index, not the story. Every semantic amendment also leaves a discovery note in the body, attached to the claim it changed — that's where a future reader actually learns why (the discovery-note rule in [Amending the intent](#amending-the-intent)). The two homes serve different readers at different times: the merge-time reviewer reads the entries top to bottom and sees everything that changed since approval in a few lines; the month-later reader reads the body and gets complete understanding without ever reaching the entries. Neither should have to join the two against each other.
+For an addition, write `Was: not present`. For a removal, write `Now: removed`. A move or reclassification names the previous section under `Was` and the current section under `Now`. If one discovery changes several items, the same amendment may contain several `Was` and `Now` pairs.
+
+The discovered fact must describe the system, not the author's activity: something still true and checkable if the rest of the file were deleted. `Ran into implementation issues` fails; `AuthMiddleware caches token validation for 5m with no invalidation hook` passes.
+
+No amendment marker or discovery note appears beside the current item. A reader first reads the body as the complete current intent, then reads Amendments only to understand its implementation-time changes. The terminal verbatim `Now` wording makes the affected current item easy to find without adding identifiers to the body. The process that permits and checks these entries is covered in [Amending the intent](#amending-the-intent).
 
 ---
 
@@ -224,21 +244,21 @@ Three design choices are wrapped up here, each worth being explicit about:
 
 **1. The date comes first so the folder is linearly scannable.** A repository accumulates intent files over time — hundreds, eventually thousands in a long-lived codebase. Sorting by name gives you sorting by time, so a reader can scan the folder and see what happened when without digging into git history. The date is the *authoring* date, set at file creation, and never changes through review, merge, or squash.
 
-**2. The slug is short, descriptive, and required up front.** The intent file gets its 3-6 token kebab-case slug at the moment of creation. This is intentional: if the change can't be compressed into a three-to-six-token slug, the change might be too big — break it into smaller changes, each with its own intent. The slug is essentially the commit title you'd write if you were committing — same level of compression, same level of specificity.
+**2. The slug is short, descriptive, and required up front.** The intent file gets a concise kebab-case slug at the moment of creation, normally three to six tokens. The target is commit-title specificity: use the shortest wording that clearly identifies the change. Slug length is naming guidance, not a scope test; exceeding six tokens is not by itself a reason to stop or split the change. Work that contains independently deliverable changes should be split, with a separate intent for each.
 
-**3. The slug is meant to be token-rich for future discovery.** The slug list is itself a useful artifact. Someone working in a new part of the codebase, or revisiting an old one, can scan the `change-intent/` folder and find prior intents that touched the same area or addressed the same concern — then read those intents to understand the reasoning behind earlier decisions. The slug should be written with that future reader in mind: concrete nouns about what was changed, not vague verbs about effort. `add-getuser-cache` is far more useful than `cache-improvements`; `migrate-auth-to-oidc` is far more useful than `auth-refactor`.
+**3. The slug identifies the change.** Use concrete nouns about what this pull request changes, not vague verbs about effort. A specific slug makes the intent recognizable in the current review and leaves a legible historical record without making that record an input to later changes. `add-getuser-cache` is more useful than `cache-improvements`; `migrate-auth-to-oidc` is more useful than `auth-refactor`.
 
-Once its change merges, an intent file is frozen — never edited, never renamed, never deleted; it's a historical record. Before merge, the file is a live contract that can change in exactly two ways: the implementing agent may repair it through the amendment process described in [Amending the intent](#amending-the-intent), and the author may reopen and revise it ([Reopening the intent](#reopening-the-intent)). Follow-up changes to the same area get their own file with their own date and slug; the date prefix makes the lineage visible without explicit cross-references.
+Once its change merges, an intent file is frozen — never edited, never renamed, never deleted; it is a historical record. Before merge, the current approved candidate governs implementation and review. The implementation agent may amend that candidate through the process described in [Amending the intent](#amending-the-intent). If returned work changes the author's direction, the author may replace the candidate through [Revision before merge](#revision-before-merge). The replacement supersedes the prior unmerged candidate; the process does not preserve its revision history. Follow-up changes to the same area get their own file with their own date and slug; the date prefix makes the lineage visible without making earlier intents govern later changes.
 
 ---
 
-## Why "Before Any Code"
+## Why the initial intent comes first
 
 Two reasons, both about timing.
 
 **It's a forcing function.** The moment you try to state precisely what must hold, you discover where your thinking is fuzzy. Most software bugs aren't reasoning errors; they're cases the author didn't consider. Articulating acceptance criteria and invariants explicitly surfaces those cases at the cheapest possible time, before the code exists.
 
-**It's the last point where the intent author is in the loop.** Once the change intent is set, the downstream agents work in narrower modes: the implementation agent thinks about *how* to satisfy the intent (write code, run tests, walk the diff for invariants), and the review pass thinks about *whether the implementation matches the stated intent*. Neither is asking "what should the change be?" — that's been settled. The downstream work is more focused and more verifiable precisely because the design question has already been answered. The intent describes the change in full — whatever isn't in the intent isn't part of this change. It's the contract between the deciding step and the doing step; once approved, the doing is on its own. If the doing discovers the contract itself is wrong — a claim that can't hold, a forced behavior the intent takes no position on — the remedy is a recorded amendment ([Amending the intent](#amending-the-intent)), not silent discretion.
+**Approval gives implementation a direction before it starts.** Once the initial change intent is approved, downstream agents work in narrower modes: the implementation agent decides *how* to satisfy it, and the review pass checks *whether the implementation honors it*. The approved artifact settles which change to deliver, not every implementation decision. If implementation discovers that a claim cannot be delivered within the approved boundaries or that it cannot continue without deciding which change will be delivered, the remedy is a recorded amendment ([Amending the intent](#amending-the-intent)). If every reasonable branch still delivers the approved change, the implementer chooses and continues. Returned work may later cause the author to approve a replacement intent, which begins another implementation and review pass.
 
 This split also separates the two cognitive tasks that get conflated in normal code review:
 
@@ -249,90 +269,98 @@ Change intent splits the work so each gets done by the right agent at the right 
 
 ### When exploration comes first
 
-Work that is not intended to merge needs no intent. Some ideas need a prototype or exploratory testing before a clear intent can be stated, and this design proposes no process for that work. Change intent picks up once the author has decided what they want to do: shipping the result is a change like any other, and its intent is authored at that decision — before the implementation that will merge, even when a prototype came before it.
+Work that is not intended to merge needs no intent. Some ideas need a prototype or exploratory testing before a clear intent can be stated, and this design proposes no process for that work. Change intent picks up once the author has decided what they want to do: the initial intent is approved before implementation begins, even when a prototype came before it. If returned work later changes the author's direction, the replacement intent is approved before the affected implementation and evidence are reassessed.
 
 ### The intent author doesn't have to be a human
 
 Everything in this design works if an AI orchestrator fills the dialogue role instead of a person. The orchestrator brings the intent, the authoring skill brings the structure and rigor, the result is a change intent file ready for the implementation phase — same artifact, same downstream pipeline.
 
-This is what lets the discipline carry forward into the autonomous trajectory. As humans gradually exit the loop (the autonomous-vehicle arc described at the top of this document), the artifact and process don't change: the orchestrator-implementer-reviewer chain runs end-to-end without a human, each step a different agent with a different job, the change intent file the contract between them. The skill that runs the dialogue with a human today is the same skill that serves an orchestrator later — same shape, same artifact, same pipeline.
+This is what lets the discipline carry forward into the autonomous trajectory. As humans gradually exit the loop (the autonomous-vehicle arc described at the top of this document), the artifact and process do not change: the orchestrator, implementation agent, and review agent use the same decision record for their respective roles. The skill that runs the dialogue with a human today can serve an orchestrator later without changing the artifact or downstream process.
 
 ---
 
 ## Amending the intent
 
-"Before any code" doesn't mean the author knows everything before starting — implementation is contact with reality, and reality sometimes proves the intent wrong. The design absorbs this with one principle: **immutability attaches at merge time, not authoring time**. Before merge, the intent is a live contract that can be repaired through the process below. After merge, it is frozen history.
+Approving the initial intent before implementation does not require the author to know every implementation fact in advance. Implementation may expose an incorrect claim or a missing decision. The implementation agent can repair the current candidate through a narrow amendment; the author can instead replace an unmerged candidate when returned work changes their direction. After merge, the intent is frozen history.
 
 ### The necessity test
 
-The amendment channel exists to repair a wrong intent, not to improve a good one. An amendment is justified only when **the change cannot be correctly delivered under the intent as written** — when the contract and the deliverable cannot both hold. Exactly two triggers meet the test:
+The amendment mechanism corrects an inaccurate or decision-incomplete intent; it is not an implementation log or an escape from a difficult implementation. Exactly two conditions permit an amendment:
 
-1. **A claim is falsified.** An acceptance criterion or invariant cannot hold as written, for a discoverable reason. The amendment relaxes or replaces the claim.
+1. **A claim cannot be delivered within the approved boundaries.** Facts discovered during implementation show that no reasonable implementation can make an acceptance criterion or invariant hold without violating the approved outcomes, constraints, or exclusions. Failure of the current approach is not enough: if another reasonable in-scope implementation can satisfy the claim, the agent changes the implementation rather than the intent. The amendment relaxes or replaces the claim only as far as the discovered fact requires.
 
-    This trigger also covers a claim that is true but unprovable. An acceptance criterion promises a proving test that ships with the diff; if that test cannot be written in the repository's harness, the criterion cannot hold as written, regardless of whether the behavior it describes is real. The amendment rewords the claim into a provable form or moves its substance to Outcomes, recorded like any other repair.
+    This trigger also covers an acceptance criterion whose behavior can be delivered but cannot be proved by any reasonable test available to the change. An acceptance criterion promises a proving test that ships with the diff. When the behavior is real but that proof obligation cannot be met, the amendment rewords the criterion into a provable form without weakening its substance, or moves the statement to Outcomes or Constraints according to the role it plays. A constraint's lack of proof never triggers an amendment; constraints are not claims. An invariant's need for reasoning beyond test evidence is part of its ordinary evidence shape, not an amendment trigger.
 
-2. **The scope is unsatisfiable.** The change necessarily produces observable behavior the intent takes no position on, so no implementation can deliver the change and pass the bidirectional scope check. This is the only door for adding acceptance criteria or invariants mid-implementation, and it is narrow: the behavior must be *forced by the change*, not adjacent to it. In the worked example below, caching `GetUser` unavoidably either caches missing-user lookups or doesn't — the intent must say which. "The admin endpoint could also use pagination" does not qualify; nothing about the change forces it.
+2. **A necessary change-defining decision is missing.** Implementation cannot complete without choosing which change will be delivered, and the approved intent does not make that choice. The process authorizes the implementation agent to select a resolution using the shared precedence below, record it as an amendment, and continue. A decision is not necessary merely because the selected implementation happens to expose a fork; if either reasonable branch still delivers the approved change, the agent chooses an implementation without amending. A technical fork, incidental observable effect, better idea, or ordinary engineering tradeoff does not qualify by itself.
+
+This is a bounded engineering test, not a proof of impossibility. A reasonable alternative is one supported by the current repository and normal scope of the pull request, not a hypothetical redesign outside the approved boundaries. Before amending, the implementation agent names the plausible in-scope alternatives revealed by the work. If one can satisfy the current approved baseline, the agent uses it or another qualifying alternative. An amendment may repair a claim or settle a missing decision only while preserving approved outcomes, constraints, and exclusions. If every reasonable in-scope resolution would violate one of those boundaries, the agent reports a failed change.
+
+When the second condition applies, the implementation agent compares the reasonable in-scope resolutions in this order: preserve the approved outcomes; honor explicit constraints and exclusions; preserve existing external behavior unless the intent changes it; minimize scope; prefer the more reversible resolution. It selects the first resolution distinguished by that order. If the full precedence leaves reasonable resolutions tied, it selects either, records that the precedence did not distinguish them, and continues. Every missing-decision amendment is a provisional implementation-time decision that the author rules on when the work returns. Code, tests, documentation, and project instructions are evidence about the system and constraints the implementation must honor; they are not a separate source of product direction. The amendment records the decision, the discovered fact, and the precedence basis for the selection. The record distinguishes the implementation-time decision from the author's approval of the current baseline.
 
 Everything else — better ideas, opportunistic hardening, adjacent fixes, "while we're in here" — is not an amendment. A discovery that would *improve* the change is a seed for the next change intent: its own file, own date, own slug, own deciding moment. The pressure that would otherwise bloat the amendment channel gets redirected into the artifact system, and the deferred idea stays discoverable in `change-intent/` instead of dying as a rejected request.
 
+An editorial correction that preserves a claim's meaning is not an amendment and is not needed for implementation; the implementation agent leaves the approved wording unchanged. If the ambiguity could describe different changes, the issue is semantic rather than editorial and must satisfy the amendment necessity test.
+
 ### Who amends: the agent, on the record
 
-Amendments are the exception, not a phase of every change — the authoring dialogue exists to make them rare, and most intents merge exactly as approved. If implementation proves a claim wrong, the implementation agent amends the intent itself. The author is unlikely to ever write this file by hand: the authoring skill writes it during the dialogue, and the implementing agent repairs it during implementation.
+Amendments are the exception, not a phase of every change — the authoring dialogue exists to make them rare, and most intents merge exactly as approved. If implementation proves that a claim cannot be delivered within the approved boundaries, the implementation agent amends the intent itself. The author is unlikely to ever write this file by hand: the authoring skill writes it during the dialogue, and the implementing agent repairs it during implementation.
 
 The channel exists because an agent that discovers a wrong claim mid-implementation, with no sanctioned way to repair it, fails in predictable ways: it fabricates success, drifts past the problem silently, or stalls. Amendment preempts all three by sanctioning the correct move — change the claim, record what changed and the fact that forced it, keep working. Work on unaffected claims never stops.
 
-Nothing changes invisibly. Every repair leaves a dated entry and a discovery note on the claim it changed, so the author reviewing the returned work sees what they approved and what changed, at claim granularity.
+Nothing changes invisibly within the current candidate. Every repair leaves an identified, dated entry that states the discovered fact and quotes the affected item's previous and current wording verbatim. The current body contains only the intent as it now stands, so it reads cleanly without the amendment history.
 
-The author still rules on every amendment — at review rather than mid-implementation. When the work comes back, the author reads the Amendments section and accepts or rejects each repair; a rejected amendment cannot simply be reverted — the discovered fact still stands — so the author repairs the claim differently by reopening the intent ([Reopening the intent](#reopening-the-intent)). Moving the ruling to review has a known cost: a repair the author would have decided differently is discovered after the work is done, not before. The design accepts that cost deliberately — rework is cheap for an agent, and stopping mid-implementation to wait on a decision is expensive for everyone — and states it here so a future reader doesn't reintroduce mid-implementation approval as a fix.
+The author still rules on every amendment — at review rather than mid-implementation. When the work comes back, the author may accept the current candidate or replace it under [Revision before merge](#revision-before-merge). A replacement incorporates relevant discovered facts into its ordinary current wording and starts as a clean baseline without the superseded candidate's Amendments section. Moving the ruling to review has a known cost: a repair the author would have decided differently is discovered after the work is done, not before. The design accepts that cost deliberately — rework is cheap for an agent, and stopping mid-implementation to wait on a decision is expensive for everyone — and states it here so a future reader doesn't reintroduce mid-implementation approval as a fix.
 
-One boundary stays hard: an amendment repairs a deliverable change. If no repair can deliver it — the change itself no longer makes sense — that is not an amendment; the agent stops and reports. Amendment sanctions repairing the contract, not redefining the mission.
+One boundary remains fixed: an amendment repairs a deliverable change. If no amendment can preserve the approved outcomes and constraints, the agent stops and reports a failed change. The amendment process does not authorize replacement of those outcomes with a different change.
 
 Two supporting rules keep the channel quiet and enforceable:
 
-- **Discretion is granted inside the contract, not exercised as amendments to it.** If a detail is genuinely the implementation's call, the intent says so up front ("TTL may be anywhere in 10–60s, implementation's choice"). Bounded discretion written into the approved text is exercised silently; the amendment channel is reserved for claims the contract got wrong.
-- **The review pass checks the record mechanically.** The amendment record must be coherent on its face: every entry names the discovered fact that forced it, every semantic amendment has a discovery note next to the claim it changed, and every discovery note has a matching entry. An incoherent record fails review, with the same severity as a failing acceptance criterion. The check reads the file alone; it does not reconstruct the file's history, so a repair recorded nowhere is invisible to it. Per the no-adversary principle, that is accepted: the rule that no claim changes without an entry binds the implementing agent, and the check catches the realistic mistake — a record half-kept — not forgery.
+- **Implementation latitude does not need to be enumerated.** The intent may explicitly bound a choice ("TTL may be anywhere in 10–60s"), but the implementation agent also owns unspecified choices when every reasonable branch still delivers the approved change. The same precedence applies when the agent must settle a missing change-defining decision: approved outcomes, explicit constraints and exclusions, existing external behavior unless the intent changes it, minimum scope, and reversibility. Rationale for ordinary technical choices is recorded where normal engineering practice requires it; an amendment is not required merely to document the choice.
+- **The review pass checks eligibility and coherence.** The reviewer assesses whether the discovered fact satisfies the necessity test and whether a missing-decision amendment applied the precedence above. It then checks that every entry quotes the `Was` wording and section verbatim, quotes the `Now` wording and section verbatim or states that the item was removed, and forms a coherent chain if the same item changed more than once. An addition states `Was: not present`. The current intent must remain coherent without Amendments, and each terminal `Now` item must match the current body. An ineligible or incoherent record is reported with the same severity as a `not met` acceptance criterion. The reviewer does not reconstruct Git history to prove the `Was` text; the rule binds the implementing agent in this cooperative process.
 
 ### What an amendment leaves behind
 
-Every amendment has two components with different lifespans. The **decision** — claim changed from X to Y — lives in the final text itself and needs only a one-line entry in the Amendments section as its record. The **discovery** — the fact about the system that forced the change — is durable knowledge, and usually the most valuable tokens in the file: it is both non-obvious (it was missed at authoring time) and empirically verified (learned by contact with the code, not speculated). The discovery gets folded into the body, next to the claim it affected.
+The current body is the complete normative intent. Amendments does not carry requirements that are absent from the body, and the body does not depend on amendment markers. The section adds only the short implementation-time history:
 
-Concretely, an amendment produces:
+```markdown
+- **A<N> — <DATE>.** <The discovered fact that forced the repair.>
+  - Was — <Section>: <verbatim previous item>
+  - Now — <Section>: <verbatim current item>
+```
 
-- **An entry** in the [Amendments](#amendments) section: `<DATE> — <WHAT> — <WHY>`, with the WHY naming the discovered fact.
-- **A discovery note, required for every semantic amendment.** A short note attached to the changed claim — one to three sentences carrying the mechanism and its forward-looking implication, marked as discovered during implementation. The marker is signal, not decoration: it tells a future reader the fact was non-obvious and paid for. Wording-only amendments are exempt; they have no WHY worth carrying. The review pass rejects a semantic amendment whose WHY exists only in the Amendments section.
-- **For relaxations, notes in two places.** When a claim is weakened and the original strength is deferred rather than abandoned, the discovery note lands on the weakened claim *and* an Out of scope entry records the deferral. The pairing keeps a relaxation from silently becoming the permanent state of the world — a future reader can check whether the follow-up ever landed.
+Use `Was: not present` for an addition and `Now: removed` for a removal. When an item moves between sections, quote its previous section and wording under `Was` and its current section and wording under `Now`. When one discovery changes several items, include one `Was`/`Now` pair for each. A missing-decision entry also names the precedence rule that selected the resolution or states that the precedence left the reasonable resolutions tied.
 
-The result reads coherently for both readers the file serves. The merge-time reviewer reads the Amendments section and sees, in a few lines, what changed since approval and why. The month-later reader reads the body and gets complete understanding without reaching the Amendments section — the intent as if authored by someone who knew everything known at merge time, with the discoveries marked in place.
+When a claim is weakened and its prior strength is deferred rather than abandoned, the current body also contains the corresponding Out of scope item. The amendment quotes both affected item transitions where necessary; it does not annotate them in place.
 
-This is not the post-facto rationalization the design warns against. The sin of post-facto writing was never that it is written late — it is that it erases the gap between what was intended and what happened. An amended intent preserves the gap at claim granularity in the Amendments section and marks each discovery where it lives. A traditional PR description hides the journey by never having recorded a destination; an amended intent recorded the destination, marks where the route changed, and hands the reader the map with the detours labeled.
+The result serves two independent reads. A reader can understand the change by reading the current intent alone. A reader who continues into Amendments can see the exact approved wording implementation encountered, the wording now in force, and the system fact that required the repair.
 
 ### Why rarity is load-bearing
 
 Amendments should be rare, and the design leans on that rarity three ways:
 
-- **Every amendment is a decision made under anchoring.** The argument for "before any code" is that it is the only moment the author has an unbiased view. An amendment reopens the deciding question after implementation has started shaping everyone's view of the change. Sometimes that is unavoidable — reality falsified the plan, and re-deciding with better information is the process working — but it is never free. A process where amendments are routine is a process where deciding happens continuously during implementation: the pre-intent world, rebuilt with extra paperwork.
+- **Every amendment is a decision made under anchoring.** Initial authoring is the moment before implementation starts shaping everyone's view. An amendment settles a question after that shaping has begun. Sometimes that is unavoidable — reality falsified the plan, and deciding with better information is the process working — but it is never free. A process where amendments are routine is a process where deciding happens continuously during implementation: the pre-intent world, rebuilt with extra paperwork.
 - **Rarity is what earns each amendment the author's full attention.** When amendments appear only on falsification, an Amendments section on a returned change is a signal worth reading carefully. If amendments appeared for every nice-to-have, the author would learn to skim them — and a skimmed Amendments section carries no signal at all.
 - **Amendment count becomes a diagnostic.** Every amendment marks a spot where confusion was confirmed in practice — the author, the authoring dialogue, and the surface read all missed something that reality then surfaced. One or two entries is ordinary contact with reality. Six entries on a small change points at the authoring dialogue (it missed real interactions with the touched surface) or at the code itself (the area is genuinely hard to reason about). Either way the signal is actionable: a surface that accumulates amendments across changes has earned extra scrutiny in review passes, and a deeper authoring pass the next time a change touches it.
 
 ---
 
-## Reopening the intent
+## Revision before merge
 
-The amendment process constrains the implementing agent; it does not prevent the author from changing their own decision. When the work returns, the author may conclude the intent should be different — because they refuse an amendment, or because the finished implementation shows a better approach. The remedy is to reopen the intent: the author revises it, approves the revision, and the change goes back through implementation and review. The file keeps its name, date, and slug — one change, one pull request, one intent. A revision that abandons the change's outcomes for different ones is not a reopening; it is a new change with its own intent.
+The amendment process constrains the implementing agent; it does not prevent the author from changing direction after seeing returned implementation or review. When that happens, the author replaces the current unmerged intent and approves the replacement. The prior candidate is superseded rather than amended or archived by this process. Change intent does not preserve or ask review to reconstruct the iterations that did not merge.
 
-Reopening requires no justification. An amendment is a judgment call made mid-implementation by an agent, unreviewed until the work returns — that is why amendments must be rare. A reopening is the author exercising the judgment the process exists to support, and its cost — the change repeats implementation and review — is enough to keep it deliberate. Some improvements only become visible in a finished implementation; a process that treats that moment as a failure would be brittle in exactly the situations real teams face. The rule that improvements discovered mid-implementation become seeds for future intents is unchanged: it limits what the implementing agent may do on its own, not what the author may decide.
+The replacement is a new approved baseline at the same intent path. Relevant implementation discoveries are incorporated into its ordinary current wording, and the superseded candidate's Amendments section is removed. Existing code may be retained where it satisfies the replacement, but affected implementation and evidence are reassessed before review runs again. At every point, implementation and review have exactly one current approved intent.
 
-In the worked example: reading the finished change, the reviewer prefers invalidating the cache entry on `UpdateUser` over adding `GetUserUncached`. Nothing in the intent is wrong, so no amendment applies. The author reopens the intent, the affected criteria are revised and re-approved, and implementation runs again against the revised intent.
+In the worked example, the returned change may cause the author to require invalidating the cache entry on `UpdateUser` rather than allowing AuditLog to bypass the cache. The author replaces the current intent with that direction, approves it, and sends the change through implementation and review again. The merged intent describes the change that landed; it does not explain the superseded candidate.
 
 ---
 
 ## How It Integrates Downstream
 
-The flow is **author → implement → review → merge**. Nothing sits between these stages, and nothing should be added between them: the design succeeds only if, as models and harnesses improve, this flow can run end to end without a human. Today humans hold two positions in it — they author, with the skill's help, and they review, after the machine review — and the human reviewer can send a change back to implementation, their direction entering through a reopened intent like all direction does. That loop shrinks over time. The flow does not change shape.
+The flow is **author → implement → review → merge**. Nothing sits between these stages, and nothing should be added between them: the design succeeds only if, as models and harnesses improve, this flow can run end to end without a human. Today humans hold two positions in it — they author, with the skill's help, and they review after the machine review. Returned work may send the change through the same flow again with a replacement intent. That loop shrinks over time; the flow does not change shape.
 
-The change intent has three downstream consumers. The implementation agent uses it as a *goal* — a completion condition to work toward. The AI code review pass uses it as a *contract* — checking the resulting diff against what was claimed. The human reviewer uses it as *evidence of the process* — confirming the design question was settled before code was written and seeing exactly what context the AI agents had. Each consumer adds verification of a different kind, and the same artifact passes through every hand — a chain of custody running from the intent author to the merge decision. By the time the human engages, they don't need to wonder what was looked at or what wasn't.
+The change intent has three downstream consumers. The implementation agent uses it as a *goal and decision boundary*, with latitude over choices it does not constrain. The AI code review pass uses it as a *basis for review*, not as an exhaustive specification. The human reviewer uses it as *evidence of the process*. The role-path table above governs unresolved conditions for each role. Each pass uses the one current approved artifact, and only the version that merges becomes durable.
 
-What travels between the stages is deliberately thin: the intent file and the change itself — the diff and its tests. Each stage derives its own evidence from those, and its evidence ends with its session: the authoring skill's surface read informs the proposal, the implementing agent's site walks and test runs live in its transcript for the in-loop evaluator, and the review pass re-derives its own enumeration from the final diff — the only derivation that can be authoritative at review time, since the code may have moved since any earlier list was made. This is why an invariant names its span as a rule ("across all caller paths of `GetUser`"), never as a list of sites: the rule is what each stage re-applies to the code in front of it. A pipeline that can carry more — a transcript handed to review, a walk posted on the pull request — may, but nothing downstream depends on it.
+What travels between the stages is deliberately thin: the intent file and the change itself — the diff and its tests. The implementation agent produces test results, semantic would-fail demonstrations, and invariant reasoning in its session. The in-loop goal evaluator sees that context and uses it to decide whether implementation is complete. Review does not depend on receiving that session context: the reviewer independently assesses the implementation and the evidence available through the team's review operation, using inference where direct implementation evidence is absent. An invariant states a property and its intended reach, never a list of sites or tests. Implementation and review each apply that rule across the affected diff and relevant surrounding paths. A pipeline may carry more evidence forward; the design does not prescribe how a team's review operation reads, runs, or otherwise examines the change.
 
 ### Implementation phase: the intent as the `/goal` condition
 
@@ -340,75 +368,77 @@ Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a complet
 
 **Key architectural detail:** the evaluator only sees what's surfaced in the conversation. So the condition must be something the implementation agent can prove through its own output — tests passing, builds clean, benchmarks meeting targets, files matching some shape. The evaluator can't run commands itself.
 
-A change intent file is naturally shaped to be a `/goal` condition. The acceptance criteria and invariants together form the completion condition, and the implementation agent's job differs slightly for each:
+A change intent file is naturally shaped to be a `/goal` condition. The acceptance criteria and invariants form the proof obligations; constraints bound the engineering judgment used to satisfy them:
 
-- **For each acceptance criterion**: write a test that exercises the scenario, run it, and surface the passing result in the transcript. The test is the agent's own work; the AC didn't name it.
-- **For each invariant**: write spot-check test(s) for specific cases *and* walk the diff to confirm the property holds at every site where it could be violated. The spot-check passing doesn't close the invariant — the agent has to demonstrate, in the transcript, that it has considered the property at every relevant site.
-- **If it discovers the intent is wrong** — a claim that can't hold, or forced observable behavior the intent takes no position on — the agent neither fabricates the claim nor drifts past it: it amends the intent on the record ([Amending the intent](#amending-the-intent)) — the claim changed, an amendment entry added, a discovery note left on the claim — and keeps working against the amended contract.
+- **For each acceptance criterion**: write a test that exercises the scenario, run it, and surface the passing result in the transcript. Then temporarily make the criterion's defining condition false with a reversible product change or, when that is unsafe, a controlled configuration or dependency negative control. Show that the test fails for the expected, claim-specific reason, restore the temporary state, and show the test passing again. One falsification may support multiple criteria only when each criterion's own proving test fails on its own claim. The test is the agent's own work; the AC didn't name it.
+- **For each invariant**: add tests for concrete cases where they provide useful protection, then reason across the affected diff and relevant surrounding paths. Passing tests do not close the invariant by themselves. The implementation agent surfaces its analysis and any material uncertainty in the transcript; the intent author was not required to enumerate the locations or tests in advance.
+- **For each constraint**: account for it in the implementation. Directly check it when the diff permits; otherwise use it as an engineering boundary. The agent does not owe proof of a production-only condition and does not amend or stop merely because its environment cannot establish one. It acts when affirmative evidence shows a conflict.
+- **If it discovers that the intent is inaccurate or decision-incomplete** — a claim cannot be delivered within the approved boundaries, or implementation cannot continue without deciding which change will be delivered — the agent records an amendment ([Amending the intent](#amending-the-intent)) and continues. If every reasonable branch still delivers the approved change, the agent selects an implementation without amendment.
 
-The in-loop evaluator checks the transcript for both kinds of evidence each turn. It's a fast first pass; the more reliable check — particularly on invariants — happens next.
+The in-loop evaluator checks the transcript for the passing tests, semantic would-fail demonstrations, invariant reasoning, and any known conflict with a constraint. It does not demand proof that an unavailable environment cannot provide. This is the only stage required to verify the temporary falsification evidence directly. The review that follows has a different role and different inputs.
 
 ### Review phase: the intent as the AI reviewer's target
 
-After the goal clears, an AI code review pass runs against the resulting diff with the change intent as context. The review pass validates five things on top of the standard checks you'd expect:
+After the goal clears, an AI code review pass independently reviews the implementation and its available evidence with the change intent as context. What the reviewer can inspect or execute is defined by the team's review operation, not by change intent. It assesses four things:
 
-1. **Is the intent itself well-described?** Are claims falsifiable, are all relevant categories addressed, is the scope clearly bounded? A vague or incomplete intent is a defect in its own right and fails review before the diff is even examined.
-2. **Does the diff match the intent?** Every acceptance criterion is exercised by a test in the diff, that test passes, and it would fail if the claim were false — a test that can't fail proves nothing. Every invariant holds across the diff — not just where the spot-check tests assert it, but at every site where the property could be violated. The review pass's work on invariants is the heaviest single thing it does: scrutinize the whole diff through each invariant's lens. Nothing externally observable shows up in the diff that isn't covered by the listed claims or the "out of scope" section.
-3. **Does the change reverse or modify a recorded decision without saying so?** Past intents record decisions, not standing claims — a change is free to overturn one outright or to change behavior so that an old intent's claims no longer hold, and review never holds an old intent against the new change. What review checks is that the reversal or modification is deliberate. The review pass searches the `change-intent/` folder for past intents that touched related surface; when the diff reverses or modifies a decision recorded there — e.g., weakening a consistency guarantee an older intent established, or changing behavior an older intent's acceptance criteria verified — it looks to the new intent's Why for the answer: what changed, and why the old decision's reason no longer holds. Explained, the reversal or modification is a decision like any other, and the reasoning behind it is exactly what the human reviewer should weigh. Unexplained, it is a finding — the author may not have known the decision existed. This is the right place for that check: the review pass pays the cost of loading prior context once, instead of forcing every author to enumerate prior decisions up front.
-4. **Is the amendment record coherent?** The review pass checks the record inside the file: every amendment entry names the discovered fact that forced it, every semantic amendment has a discovery note next to the claim it changed, every discovery note has a matching entry, and a relaxed claim has its deferral recorded under Out of scope ([Amending the intent](#amending-the-intent)). A record that fails these joins is grounds for rejection on its own. Amendments also get the review pass's particular scrutiny: each is a decision made during implementation that no one has reviewed yet, at a spot where the intent already proved wrong once.
-5. **Does the pull request conform to the intent folder's rules?** Exactly one intent file arrives with the pull request — its own — and no merged intent is touched. Merged intents are frozen history: the review pass rejects any edit, rename, or deletion of one, and rejects a second intent file in the same pull request.
+1. **Is the intent itself well-described?** Are claims falsifiable, are the change-defining decisions complete, and are conscious exclusions clear? A vague or decision-incomplete intent is a defect; absence of implementation detail is not.
+2. **Does the diff match the intent?** Every acceptance criterion must be exercised by a test whose assertions would detect the claimed behavior becoming false. The reviewer uses available evidence and inference to assess that relationship between the criterion, test, and implementation. For every invariant, the reviewer uses available tests and reasons across the affected diff and relevant surrounding paths; no passing test closes the property by itself. Constraints bound the reviewer's engineering judgment but do not each require a test or conclusive verdict; lack of proof is not a violation. In the reverse decision check, the reviewer asks whether the diff selected which change to deliver where the approved intent left that choice unresolved. If every reasonable alternative would still deliver the approved change, the choice is implementation latitude and remains subject to ordinary review rather than an intent finding.
+3. **Is the amendment eligible and coherent?** The reviewer checks whether the discovered fact shows that the pre-amendment `Was` claim could not be delivered within the approved outcomes, constraints, and exclusions, or that implementation could not complete the change without settling a missing change-defining decision. Difficulty with the chosen approach is not enough. The reviewer then reads the current intent independently and checks the amendment record: each entry quotes the prior section and item verbatim under `Was`, quotes the current section and item verbatim under `Now` or records addition/removal explicitly, and forms a coherent chain when an item changed more than once. Each terminal `Now` item must match the current body. For a missing-decision amendment, the reviewer also assesses whether implementation applied the shared precedence and recorded either the selecting rule or a full tie. A relaxed claim records an Out of scope deferral only when the prior strength is actually deferred rather than abandoned. Review does not reconstruct Git history to prove the prior wording.
+4. **Does this pull request conform to the intent folder's rules?** The pull request carries exactly one intent file: the intent for this change. The assessment is scoped to that file and this change; it does not compare the change against earlier intent files or other branches.
 
-The would-fail clause in check 2 exists because until this point the pipeline has been checking its own work. The implementation agent writes the code, writes the tests that prove its acceptance criteria, and produces the only transcript the in-loop evaluator sees — so a test that exercises the scenario while asserting almost nothing clears the goal, and nothing inside the loop can tell. The review pass is the first layer that holds the diff and has no stake in the goal clearing. Reading each AC test with the claim in hand — break the behavior, confirm the test catches it — is a check the loop cannot run on itself.
+The semantic would-fail requirement belongs to implementation completion. It addresses the risk that the implementation agent writes both the code and the tests used to accept it. For each acceptance criterion, the implementation agent demonstrates in its session that the proving test fails for the expected, claim-specific reason when the criterion's defining condition is temporarily made false. A reversible product mutation is preferred; a controlled configuration or dependency negative control is used when that is unsafe. One falsification may support multiple criteria only when each criterion's own proving test produces its own claim-specific failure. The in-loop evaluator can see those demonstrations. Review does not require that session context: the reviewer independently assesses each acceptance criterion's proving test and each invariant across the affected change, using available evidence and inference. A team may give its reviewer additional evidence or execution capabilities. When the review operation cannot support a conclusion, the reviewer reports `cannot verify`. `Cannot verify` is a complete review result, not a successful verification: the available inputs establish neither `met` nor `not met`, and the team decides what that uncertainty means for the change.
 
-This is independent from and stronger than the in-loop `/goal` evaluator. The evaluator is a fast Haiku pass over a transcript; the review pass is a slower, stronger model with access to the full diff, the repository, and the history of prior intents. It also runs the usual review checks — concurrency hazards, security boundaries, error handling, comment clarity — but now with the intent as additional context shaping what to focus on.
+The two machine roles are complementary. The in-loop `/goal` evaluator sees the implementation transcript and judges whether the implementation agent demonstrated completion. The review pass keeps intent alignment and ordinary code review as distinct judgments, regardless of input order. It uses the intent to assess the approved change but never treats the intent's silence, exclusions, or decisions as an excuse for a defect in code the pull request ships. Neither role substitutes for the other.
 
-### Human review: the intent as evidence of the process
+### Human review: the chain of custody pays out
 
-After both machine layers approve, the change reaches the human reviewer. The change intent serves them differently from how it served the AI agents: it's evidence that the design question was settled before code was written, that the implementation agent worked from a stated intent, and that the AI review pass had that intent as context for its checks. The human reviewer doesn't need to wonder what the AI agents had in front of them — the intent file is the record, sitting in the repository alongside the change.
+By the time a change reaches human review, it has passed through a repeatable chain of custody. The approved intent records what the author and authoring agent settled. The implementation and tests show what the implementation agent built, while the cleared implementation goal establishes that its required completion demonstrations were evaluated. Any amendments identify change-defining decisions made during implementation. The review assessment records what the review agent concluded and what it could not verify independently.
 
-This is the chain of custody paying out. The reviewer knows what the intent author settled, what the implementation agent built toward, and what the review agent validated — not because they watched it happen, but because every change in the project goes through the same steps. A teammate's change reads the same as their own. On the rare change that carries an Amendments section, those entries are the highest-signal lines in the file: each is a judgment call made during implementation that the author has not yet seen. What's left is the one task only a human can do: deciding whether this was the right change to make. The intent everything was checked against is right there in the file.
+This gives the human reviewer a consistent frame for how AI participated in developing the change: what authoring decided, what implementation produced and demonstrated, and what review examined. Because every change passes through the same chain, the team can learn the strengths, weaknesses, and quirks of each AI seat and use that knowledge to decide where human attention is most valuable. A teammate's change arrives with the same frame as the reviewer's own.
 
 ### Workflow
 
-1. Human (with skill assistance) produces a change intent file at `change-intent/YYYY-MM-DD-slug.md`
-2. Implementation phase: `/goal` with the acceptance criteria and invariants as the condition. Agent writes code, runs tests, demonstrates each acceptance criterion, and walks the diff to confirm each invariant. In-loop evaluator (Haiku) confirms each turn. In the rare case the agent discovers the intent cannot be delivered as written, it amends the intent on the record and keeps working.
-3. When the goal clears, the AI code review pass runs against the diff with the intent as context, validates intent quality and intent-vs-diff alignment (with particular scrutiny on invariants), and runs standard review checks.
-4. Once the review pass approves, the change reaches the human reviewer. Any amendments are the highest-signal part of the returned work — judgment calls no one has yet reviewed. Beyond those, the reviewer focuses on the judgment question — *is this the right intent?* — not on verifying the code matches it (that has already been checked twice). They merge, or reopen the intent with their direction and send the change back through implementation; the reworked change returns through review.
+1. Human (with skill assistance) produces and approves an initial change intent file at `change-intent/YYYY-MM-DD-slug.md` before implementation begins.
+2. Implementation phase: `/goal` with the acceptance criteria and invariants as proof obligations and the constraints as engineering boundaries. Agent writes code, runs tests, demonstrates each acceptance criterion, applies each invariant across the affected diff and relevant surrounding paths, and accounts for each constraint without manufacturing unavailable proof. In-loop evaluator (Haiku) confirms each turn. In the rare case the agent discovers the intent cannot be delivered as written, it amends the intent on the record and keeps working.
+3. When the goal clears, the AI code review pass reads the diff, tests, repository, and intent; assesses intent quality and intent-vs-diff alignment; runs standard review checks; and reports findings and limits such as `cannot verify`.
+4. Once the review assessment is complete, the change reaches the human reviewer. Any amendments are the highest-signal part of the returned work — judgment calls no one has yet reviewed. The human also receives any review findings or limits, then decides whether this is the right change to merge or replaces the unmerged intent and sends the change through implementation and review again.
 
 ### Sample `/goal` invocation
 
 ```
-/goal All acceptance criteria and invariants in change-intent/2026-05-16-add-getuser-cache.md are demonstrated in this transcript:
+/goal The change in change-intent/2026-05-16-add-getuser-cache.md is complete:
 - Every acceptance criterion is exercised by a test the agent wrote, and the test passes
-- Every invariant has its spot-check tests passing AND the agent has walked the diff to confirm the property holds at every site where it could be violated
-- The change does not introduce externally observable behavior outside the listed claims and the "out of scope" section
+- For every acceptance criterion, a reversible product mutation or, when that is unsafe, a controlled configuration or dependency negative control makes the defining condition false and its proving test fails for the expected, claim-specific reason; one falsification serves multiple criteria only when each test fails on its own claim, and every temporary change is restored before the tests pass again
+- Every invariant has useful concrete tests where appropriate, and the agent has reasoned across the affected diff and relevant surrounding paths and surfaced any material uncertainty
+- The implementation accounts for the outcomes, constraints, exclusions, and amendments without claiming proof for constraints the available environment cannot establish
+- Any newly discovered change-defining decision is amended on the record; ordinary technical choices remain implementation latitude
 ```
 
-The last line is the **bidirectional check** at the change level: not just "did the agent prove what it was supposed to," but "did the agent stay within scope." This check runs both in-loop (Haiku, fast) and again in the AI review pass (stronger model, full diff visibility). The in-loop pass is a fast first cut; the review pass is the more reliable gate. Whether the Haiku evaluator alone can reliably catch out-of-scope behavior is an open question — see Design Tensions below.
+The last two lines form the **decision-alignment check**. They require the implementation to honor approved decisions and to record any newly necessary change-defining decision. The implementation loop evaluates the transcript evidence; AI review independently assesses the final diff without depending on that transcript. Neither check requires every observable effect to appear in the intent.
 
 ---
 
 ## The Authoring Skill
 
-The skill produces a change intent file through structured dialogue with the intent author — a human today, possibly an AI orchestrator in autonomous chains. The division of labor: **the author owns direction** — the outcomes, the why, what the change must and must not do — and **the skill owns the map**, the code as it exists today, which the author may not know at all, especially where agents wrote it. The author speaks in outcomes and plain-language constraints; the skill translates them into falsifiable claims. The prompt-level instrument lives in [mechanics/authoring-skill.md](mechanics/authoring-skill.md); this section fixes the design it implements.
+The skill produces a change intent file through structured dialogue with the intent author — a human today, possibly an AI orchestrator in autonomous chains. During authoring, **the author owns direction** — the outcomes, the why, what the change must and must not do — and **the skill owns the map**, the code as it exists today, which the author may not know at all, especially where agents wrote it. The author speaks in outcomes and plain-language constraints; the skill translates testable behavior into falsifiable claims and preserves genuine engineering boundaries as constraints. The prompt-level instrument lives in [mechanics/authoring-skill.md](mechanics/authoring-skill.md); this section fixes the design it implements.
 
-**Critical constraint: the skill drafts everything and decides nothing.** It may write the whole file, including claims the author never stated — proposing is its job — but every claim carries its source (the author's words, the code, or the skill's own proposal), every structural fork it closed is shown with the authority that closed it, and every fork it could not close on the author's authority is presented as an explicit decision. What it may never do is exercise a judgment call silently, or word an invented claim so fluently it reads as the author's. The file states only forward-looking claims — what the change will prove — never a catalog of existing behavior.
+**Critical constraint: the skill drafts the artifact but does not decide change-defining questions.** It may propose claims the author did not state, but every claim identifies its source, every settled change-defining fork cites the approved direction or explicit constraint that settled it, and every remaining fork is presented to the author as an explicit decision. Repository contents establish facts about the current system; they do not independently decide what the change should be. Ordinary implementation choices are not elevated into author questions. The resulting file contains forward-looking claims rather than a catalog of existing behavior.
 
 ### Workflow
 
 **Phase 1 — the intent brief.** The skill assembles the author's direction — harvested from the session when the change was already discussed there, asked for otherwise — into a short fixed-format brief: outcomes, why, constraints, directions explicitly rejected, questions deferred to exploration. The author corrects and confirms it before anything else happens. The gate is cheap and load-bearing: it is where a misread of the author's direction gets caught, before exploration is spent on the wrong change.
 
-**Phase 2 — exploration.** The skill reads the affected surface: the code, its callers, its tests, prior intents on the same surface, design docs. Every fact it collects is confidence-marked — verified, documented-but-unenforced, or inferred — because a fluently stated wrong baseline poisons every claim built on it, and the author cannot catch it. It keeps a running list of structural forks (each slot in the draft that could be filled another way), checks that each forming acceptance criterion has a writable test in the project's harness, and parks adjacent improvements rather than widening scope.
+**Phase 2 — exploration.** The skill reads the affected surface and records a confidence level for each fact. It retains decision candidates as private working state through a coverage pass and includes only admitted forks in author-facing output. For every outcome, it traces the input or starting condition through the immediate result and any later behavior that can observe or depend on that result. A pure transformation ends at its result; a continuing path is examined for repetition, progression, retry, and early termination. The analysis identifies lifecycle decisions without converting every path into a claim. The skill also confirms that each proposed acceptance criterion has a writable test and records adjacent improvements without expanding scope. If a relevant caller, lifecycle, data boundary, or other required surface cannot be inspected or bounded confidently, the skill names that blind spot instead of asserting completeness.
 
-**Phase 3 — the proposed intent.** One fixed-format output, ordered as a reading protocol for the author: the decisions needing their ruling, each written to be answerable without opening a single file — the situation in plain terms, the code as annotated evidence, options with behavior-first consequences, and each option's effect on the file; the paths not taken — forks the skill closed, each citing the brief line or hard evidence that closed it, because a fork closed by the skill's own judgment is not allowed there and must be presented as a decision; the complete draft, every claim source-tagged; and the surface read with its confidence marks.
+**Phase 3 — the proposed intent.** The skill produces one fixed-format proposal in a defined reading order: change-defining decisions that require an author ruling, each answerable without opening a file; intent-level alternatives already settled by the approved direction or an explicit constraint; the complete draft with a source for every claim and constraint; and the surface read with confidence levels and any coverage limits. Technical alternatives that do not change the intent are omitted from the decision sections. Settled alternatives are approval scaffolding only; the final intent keeps their selected consequences and discards the alternatives themselves.
 
-**Phase 4 — discussion and approval.** Rulings are applied as diffs, not re-dumps. Before offering the file for approval, the skill rereads every claim as written rather than as intended, asking what each permits that the author would refuse — the gaps become claims or are accepted aloud. On approval the scaffolding is stripped, the file is written and committed on the change's branch, and parked items are emitted as seeds for future intents. If the author abandons, nothing is written. From approval until merge, the intent changes only through the amendment process ([Amending the intent](#amending-the-intent)) or a reopening by the author ([Reopening the intent](#reopening-the-intent)); at merge it freezes for good.
+**Phase 4 — discussion and approval.** Rulings are applied as diffs rather than full-file restatements. Before approval, the skill reads each claim literally and checks for contradictions, missing change-defining decisions, unfalsifiable claims, and exclusions that conflict with the outcomes. Unspecified details remain implementation latitude when every reasonable branch still delivers the approved change. On approval, the proposal scaffolding is removed, the file is written and committed on the change's branch, and parked items are reported as candidates for future intents. If the author abandons the change, no file is written. Before merge, implementation may amend the current candidate, or the author may replace it and begin another implementation and review pass. At merge, the current intent becomes frozen history.
 
 ### Scaling the intent to the change
 
-Not every change deserves a large intent file. Nor should any change receive one padded to look thorough. The intent scales with the change without any size classification being made: the claim count is an output of the skill's enumeration, not a target it aims for. Each acceptance criterion exists because the change makes a specific behavior observable; each invariant exists because the change touches a property that spans sites. The skill walks what the change touches and records what it finds. A one-line fix yields an intent of a few lines; a change with a wide surface yields claims to match. No tier or threshold decides which is which, so there is no boundary to argue and no size judgment for an agent to get wrong.
+Intent size follows the number and scope of change-defining decisions and proof obligations, not the number of implementation details or observable channels. The file should not be expanded to create an appearance of thoroughness. Each acceptance criterion proves a selected decision; each invariant protects a property across the affected change without inventorying every site or test. A one-line fix can require a substantial intent when it changes a security boundary or caller guarantee, while a broad internal refactor may require few claims when its alternatives are different ways to deliver the same change.
 
-The measure is the extent of the change's observable effects, not its diff size and not how casually the author stated it. A one-line edit to a concurrency primitive, a security boundary, or a mutation path has a wide scope of impact. The caller and path enumeration from exploration establishes that extent, and it overrules the impression left by a small ask.
+The measure is the extent of the change's decisions and guarantees, not its diff size and not how casually the author stated it. Bounded exploration of callers and paths can reveal guarantees, system facts, and explicit constraints, but the authoring artifact does not inventory every effect or every location where an invariant might apply.
 
 ### Stopping condition
 
@@ -416,6 +446,7 @@ The skill is "done" when:
 
 - Every open decision has the author's ruling
 - Every claim is falsifiable
+- Every relevant coverage limit has been resolved by supplied context, narrower scope, or an author-approved decision recorded as an outcome, claim, constraint, or exclusion
 - The author approves the produced artifact
 
 Without an explicit stopping rule, the dialogue either runs forever or stops too early.
@@ -436,23 +467,30 @@ Without an explicit stopping rule, the dialogue either runs forever or stops too
 **The skill explores and proposes; the author rules on the open decisions.** The approved file at `change-intent/2026-05-16-add-getuser-cache.md`:
 
 ```markdown
+# Change intent: Cache GetUser reads
+
 ## Outcomes
 - Database load from `GetUser` reads drops by roughly 70% at current traffic.
 - `GetUser` P95 latency drops from ~80ms to under 10ms on repeated reads.
 - AuditLog has immediate read-after-write consistency.
 
 ## Why
-GetUser is read-heavy (40k req/s peak). P95 latency is 80ms, dominated by 
-the DB round-trip. Adding a 30-second TTL cache should drop P95 below 10ms 
-on cache hits and reduce DB load by ~70% based on access patterns in 
-production traces. The 30s TTL aligns with the staleness budget product 
-approved for user profile data. AuditLog, the one caller that needs 
-immediate consistency, is migrated to a new GetUserUncached method.
+GetUser is read-heavy at 40k requests per second during peak traffic. Its
+P95 latency is 80ms, dominated by the database round-trip, and these reads
+now account for most UserService database load.
+
+## Constraints
+- The design must account for sustained production traffic of 40k requests
+  per second; this operating condition guides implementation and review but
+  is not expected to be reproduced by a repository test.
+- Use the existing CacheManager rather than introducing a new caching
+  primitive.
+- Do not introduce distributed cache coordination.
 
 ## Acceptance criteria
 - On a cache hit, `GetUser` returns the cached value without querying the database
 - On a cache miss, the `cache_misses` counter is incremented; on a hit, `cache_hits` is incremented
-- `GetUserUncached` returns fresh data from the database on every call, never reading from the cache
+- After `UpdateUser` successfully changes a user's email, AuditLog's next read of that user returns the new email even if the ordinary `GetUser` cache entry has not expired
 - When `UpdateUser` is called with a new email, a subsequent `GetUser` for that user returns the new email within 30 seconds
 
 ## Invariants
@@ -461,33 +499,34 @@ immediate consistency, is migrated to a new GetUserUncached method.
 - If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers
 
 ## Out of scope
-- **New caching primitives.** The existing CacheManager interface is sufficient; building a new caching layer was considered and excluded.
 - **Eviction policy customization.** CacheManager defaults (LRU with a 100k entry limit) are sufficient for the access patterns we've measured.
-- **Distributed cache coordination.** Single-node cache only. Cross-node consistency would require a separate design and isn't justified by current request volume.
 - **A dedicated API for cache inspection or invalidation.** Not included here. A follow-up PR will add inspection endpoints once production data shows whether on-demand invalidation is needed.
 ```
 
-**A mid-implementation amendment.** While wiring the cache, the implementation agent hits a fact the intent takes no position on: `GetUser` returns nil for users that don't exist, and the change must either cache those negative results or not. Either choice is observable — caching negatives means a just-created user can stay invisible for up to 30 seconds to any caller that looked them up pre-creation; not caching them means missing-user lookups always hit the database. This meets the necessity test (the scope is unsatisfiable as written), so the agent amends on the record: it chooses not to cache negatives — user-creation flows read right back after creation, and missing-user traffic is negligible — and the intent gains one acceptance criterion and one amendment entry:
+**A mid-implementation amendment.** While implementing the cache, the implementation agent discovers that `GetUser` returns nil for users that do not exist, while the approved intent does not address whether negative results are cached. Caching negative results would allow a newly created user to remain invisible for up to 30 seconds after a missing lookup; not caching them preserves existing immediate post-creation visibility. Those branches deliver different changes rather than different implementations of the same change, and the approved intent does not choose between them. The shared precedence selects not caching negative results because it preserves existing external behavior. The intent gains one acceptance criterion and one amendment entry:
 
 ```markdown
-## Acceptance criteria (addition)
+## Acceptance criteria
 - A `GetUser` for a nonexistent user is never served from the cache: a user
   created immediately after a missing lookup is returned by the next `GetUser`
-  call. *(Added during implementation: `GetUser` returns nil for missing
-  users, and the intent took no position on caching negatives — caching them
-  would leave a just-created user invisible for up to the TTL.)*
+  call.
 
 ## Amendments
-- 2026-05-19 — AC added: missing-user lookups never cached — `GetUser`
-  returns nil for nonexistent users; caching negatives would delay visibility
-  of newly created users by up to the TTL
+- **A1 — 2026-05-19.** `GetUser` returns nil for nonexistent users; caching
+  those results would delay visibility of newly created users by up to the
+  TTL. Precedence rule 3 selects preserving existing immediate post-creation
+  visibility.
+  - Was: not present
+  - Now — Acceptance criteria: - A `GetUser` for a nonexistent user is never
+    served from the cache: a user created immediately after a missing lookup
+    is returned by the next `GetUser` call.
 ```
 
-Implementation continues against the amended contract. At review, the intent author weighs the amendment — accept the repair, or send the change back for rework.
+Implementation continues against the amended intent. At review, the intent author accepts the current candidate or replaces it and sends the change through implementation and review again.
 
-The implementation agent takes this file as the `/goal` condition. For each acceptance criterion, the agent writes a test that exercises the scenario, runs it, and surfaces the passing result. For each invariant, the agent writes spot-check test(s) for specific cases *and* walks the diff to confirm the property holds at every site where it could be violated — every caller path of `GetUser` for the read-after-write window, every access path into the cache for thread safety, every cache-read code path for the backend-unreachable fallback. The in-loop evaluator checks the transcript for both kinds of evidence.
+The implementation agent takes this file as the `/goal` condition. For each acceptance criterion, the agent writes a test that exercises the scenario, runs it, and surfaces the passing result. It also completes the semantic would-fail demonstration for every criterion, reusing a safe falsification only when each proving test fails for its own claim, and restores every temporary change before showing the tests passing again. For each invariant, it adds tests for concrete cases where useful and reasons across the affected cache diff and relevant surrounding paths. The intent states the invariant properties; it does not enumerate the callers, access paths, or tests the agent must consider. The in-loop evaluator checks the transcript for both kinds of evidence.
 
-When the goal clears, the AI code review pass takes the diff with this intent as context. It validates the alignment under a stronger model — with particular scrutiny on invariants, where the review pass walks the whole diff through each invariant's lens — searches the `change-intent/` folder for recorded decisions this change may reverse or modify, and runs the standard checks (concurrency, errors, security, clarity). Only then does the change reach the human reviewer — who focuses not on the code itself but on whether the intent captured here was the right one to ship.
+When the goal clears, the AI code review pass takes the diff with this intent as context. It assesses the alignment from the final code and tests—with particular scrutiny on invariants, where the review pass walks the whole diff through each invariant's lens—and runs the standard checks (concurrency, errors, security, clarity). It reports both findings and anything it cannot verify from those inputs. The change then reaches the human reviewer with that assessment.
 
 ---
 
@@ -495,30 +534,19 @@ When the goal clears, the AI code review pass takes the diff with this intent as
 
 A few areas where the design is not fully resolved and worth flagging for implementation. Premises and direction that lie outside the design — for example, the mechanism behind "reviewing less" — are recorded in [notes.md](notes.md).
 
-### Bidirectional scope-check by evaluator
+### Decision completeness is diligent, not omniscient
 
-Whether the Haiku evaluator can reliably detect "the agent did something not claimed in the intent" is an open question. The simple direction (every claim demonstrated) is easy to check. The hard direction (no unclaimed behavior) requires understanding the diff and comparing it to the scope, which may exceed Haiku's reliability. The artifact alone delivers better review; less review depends on this check being reliable. Options to explore:
+The admission test can classify a decision only after the process discovers the relevant fork. Authoring and reverse review therefore inspect the defined affected surfaces and settle every change-defining decision they find, but neither pass proves that no unknown dependency exists. "Complete over change-defining decisions" is a quality requirement: a decision that a diligent pass should have found is a defect when later discovered, not evidence that the process had to search without bound.
 
-- Make the constraint very explicit in the goal prompt and rely on Haiku's pattern-matching
-- Add a separate analysis pass before evaluator review
-- Use a stronger model for this specific check
-- Have the implementation agent itself produce an "evidence summary" the evaluator checks against
+When authoring cannot inspect or confidently bound a relevant surface, it exposes the specific blind spot to the author. The author supplies context, narrows the change, or makes a decision that governs the surface and can be recorded as an outcome, claim, constraint, or exclusion. If none of those paths resolves the blind spot, the intent is not ready for approval. Review independently repeats the bounded decision sweep and may report `cannot verify` when its available view cannot support a conclusion. These paths preserve the completeness standard without encouraging manufactured decisions or indefinite exploration.
 
 ### Cold start on existing codebases
 
-Untouched code has no documented invariants. The AI's enumeration of what currently holds — used in the authoring dialogue to sharpen the human's claims — is partly inferential and may miss real interactions the change will have. The file itself only states forward-looking claims, so this affects elicitation quality more than file correctness, but a missed interaction can still produce a change intent that doesn't ask the right questions.
-
-### Scoping the past-intent search
-
-The review pass searches prior change intents for recorded decisions the current change reverses or modifies. In a mature repository this is potentially thousands of files. The pass can't load them all on every review. Options to explore: filter by file/package overlap with the current diff, embedding search over intent contents, time-window restrictions, or a combination. Picking a strategy that's both cheap and high-recall is a real engineering question, not a free check.
-
-### Concurrent changes cannot see each other's intents
-
-The past-intent search covers merged intents plus the current branch's own file. Two changes in flight at the same time each carry their intent on their own branch, so neither review pass can see the other's claims: two intents that contradict each other both pass review, and the conflict surfaces at merge or in production. Options to explore: search open pull requests' intent files alongside merged ones at review time, or re-check the intent at merge against intents merged since its approval. Until a strategy is picked, the merged-history check should not be read as full coverage of intent contradictions.
+Existing codebases rarely document every property a change may affect. The author's direction and the AI's bounded surface read may therefore miss a real interaction. The intent still records only the invariants that belong to the approved change; authoring does not compensate by inventorying every property or location in the system. The coverage-limit path above handles known uncertainty, but it cannot expose a dependency that no available evidence reveals.
 
 ### Cross-cutting invariants
 
-The change-level intent captures invariants on the touched surface, but some properties are system-wide ("every mutation of user data produces an audit log entry"). These need a separate registry that the intent can reference. Not covered by this document, but worth flagging that the macro intent layer is not the complete invariant story.
+Some properties are system-wide ("every mutation of user data produces an audit log entry"). A change intent includes such a property only when it is part of the change being approved, and states the property without requiring the author to enumerate every mutation site. Existing project-wide rules remain applicable through normal project instructions and ordinary implementation and review; this design does not require a separate registry before a team can use change intent.
 
 ### Method-level invariants are separate
 
@@ -528,15 +556,15 @@ This document covers only the macro layer — change-scoped, human-authored (wit
 
 ## Where this is heading
 
-A change is the package of the work that produced it — the decisions, the intent, the falsifiable claims, the consciously-excluded scope — bundled with the code itself. An AI or future engineer should be able to open a single merged change and reconstruct it from the change alone: the what, the why, the tradeoffs that were accepted, all the important reasoning that went into producing the change saved alongside it.
+A change is the package of the work that produced it — the intent, its decisions, its falsifiable claims, its constraints, and its consciously excluded scope — bundled with the code itself. An AI or future engineer should be able to open a single merged change and understand what change was intended, why it was needed, and which boundaries governed it.
 
 That's the deeper claim. Change intent is one expression of it, scoped to 2026 tools.
 
 What this looks like a year or two from now is probably different. Code review may not use git as the substrate. Intent may be captured through richer interactions than markdown files. The specific conventions here will evolve.
 
-We don't have to be exactly right about the future to be directionally right. The asymmetry that matters: information saved now can be reshaped into whatever future tooling needs; information that wasn't saved can't be reconstructed. As long as we capture the substance — the work, the decisions, the intent that went into the change — the format can adapt to whatever future review processes look like. The conviction underneath is that the future will want a lot more information about each change than the executable code carries on its own.
+We don't have to be exactly right about the future to be directionally right. The asymmetry that matters: information saved now can be reshaped into whatever future tooling needs; information that wasn't saved can't be reconstructed. Capturing why the change was needed, what was approved, and the boundaries used for implementation and review gives future tooling more than executable code carries on its own while leaving the format free to evolve.
 
-The form feels durable: every change carrying the structured reasoning that produced it, retrievable indefinitely. Change intent is what that form looks like today, with the tools and the intelligence level of current foundation models, structured to be a net value add to the review process rather than ceremony on top of it. The artifact will change; the goal of opening a change and recovering the reasoning that produced it will not.
+The form feels durable: every change carrying its purpose, approved direction, and decision boundaries, retrievable indefinitely. Change intent is what that form looks like today, with the tools and the intelligence level of current foundation models, structured to be a net value add to the review process rather than ceremony on top of it. The artifact will change; the goal of opening a change and understanding those decisions will not.
 
 ---
 
@@ -544,16 +572,16 @@ The form feels durable: every change carrying the structured reasoning that prod
 
 The case for change intent is structural, not aesthetic. AI generates code far faster than humans can review it, and the gap is widening. Post-facto PR descriptions don't help — in the AI era they're often just a summary of what the AI did, and an AI reviewer can derive that from the diff. What the review process is missing is signal about whether design intent actually drove the change.
 
-Change intent provides that signal by inverting the direction of fit: intent is authored before code, the code must satisfy the intent, and the implementation can't retroactively absorb whatever happened to get built. The artifact has a small set of sections — *Outcomes* and *Why* always, plus *Acceptance criteria*, *Invariants*, *Out of scope*, and *Amendments* when their conditions apply — and a naming convention (`change-intent/YYYY-MM-DD-short-slug.md`) that makes it discoverable forever via the same tools the rest of the codebase uses.
+Change intent provides that signal by inverting the direction of fit: the initial intent is approved before implementation begins, and every implementation and review pass works against the current approved intent. The artifact has a small set of sections — *Outcomes* and *Why* always, plus *Constraints*, *Acceptance criteria*, *Invariants*, *Out of scope*, and *Amendments* when their conditions apply — and a naming convention (`change-intent/YYYY-MM-DD-short-slug.md`) that makes the merged intent discoverable via the same tools the rest of the codebase uses.
 
-Once authored, the same artifact does work at two downstream stages. The implementation agent treats it as a `/goal` condition: a passing test for every acceptance criterion, a walk over the diff for every invariant, and a refusal to drift outside the listed scope. In the rare case implementation proves the intent wrong — a falsified claim, a forced behavior the intent didn't cover — the agent amends on the record rather than fabricating or stalling: the Amendments section records what changed and the fact that forced it, the author rules on every amendment at review, and the intent freezes at merge. When the returned work changes the author's mind instead, they reopen the intent: revise it, re-approve it, and run the change through implementation and review again. The AI review pass treats it as a contract: it confirms the intent is itself well-described, that the diff matches it, and that any reversal or modification of a decision recorded in a prior intent is explained, not silent. By the time the change reaches a human reviewer, machines have already verified that the implementation matches the stated intent — the human arrives knowing what was settled, what was built toward, and what was checked. Their attention goes to the four-task model's only judgment task, *is this the right change to make,* while the other three (implementation choice, correctness, clarity) recede onto the AI at the pace the machines prove reliable — no faster.
+The artifact serves two downstream stages. The implementation agent uses it as a `/goal` and a decision boundary: prove each acceptance criterion, test invariant cases where useful and reason across the affected change, account for each constraint, honor the exclusions, and apply normal engineering judgment when reasonable branches are different ways to deliver the approved change. A constraint whose truth depends on production guides that judgment without becoming a proof obligation. If a claim cannot be delivered within the approved boundaries or implementation cannot continue without deciding which change will be delivered, the agent records an eligible amendment and continues. It stops only when no amendment can preserve the approved outcomes and constraints. The AI review pass independently assesses claims in the forward direction and decisions in reverse while retaining ordinary correctness, security, performance, and clarity review. It reports findings or `cannot verify` without expanding the intent into an exhaustive specification. When returned work changes the author's direction, the author replaces the current unmerged intent; retained work is reassessed and implementation and review run again against the replacement.
 
 The discipline is built to work without humans entirely. The intent author — currently a human in dialogue with the authoring skill — can be an AI orchestrator in autonomous chains, producing the same artifact for the same downstream pipeline. That's what carries the design forward into the trajectory where humans gradually exit the loop: same dialogue shape, same artifact, same review process, just different agents in the role.
 
-**The skill to build:** a structured-dialogue tool that assembles the author's direction into a confirmed brief, explores the affected surface, and returns a proposed intent — open decisions first, closed forks with the authority that closed them, every claim source-tagged — refusing to settle for unfalsifiable claims. The output is a change intent file ready to drive implementation and pass review. That skill ships as part of a small mechanics package — an agents-file block, the authoring skill, implementation guidance, and review guidance for the team's review pass — in [mechanics/](mechanics/README.md). The design stays out of the prompt-level engineering those instruments carry; they stay out of the argument this document makes.
+**The skill to build:** a structured-dialogue tool that assembles the author's direction into a confirmed brief, explores the affected surface, applies the change-defining fork admission test, and returns a proposed intent. The proposal presents open decisions first, cites the approved direction or explicit constraint for each settled intent-level alternative, and records the source of every claim and constraint while leaving technical latitude to implementation. The resulting intent is suitable as the goal for implementation and the basis for review. The skill is part of the mechanics package in [mechanics/](mechanics/README.md), together with the agents-file block, implementation guidance, and review guidance.
 
 ---
 
 ## Related
 
-Change intent is one instance of a broader pattern this repository explores: [**working in public**](../working-in-public/README.md) — capturing the high-value structured work between humans and AI in artifacts that persist for future agents and humans to reference, rather than letting it die with the context window it happened in. The pre-code dialogue here produces high-value tokens; the change intent file is how those tokens get preserved beyond the session that produced them.
+Change intent is one instance of a broader pattern this repository explores: [**working in public**](../working-in-public/README.md) — capturing the high-value structured work between humans and AI in artifacts that persist for future agents and humans to reference, rather than letting it die with the context window it happened in. The merged change intent preserves the approved result of that dialogue beyond the session that produced it.

@@ -2,73 +2,98 @@
 
 **Status: drafted.**
 
-[design.md](../design.md) states how implementation integrates downstream, including binding the intent to a harness mechanism such as Claude Code's `/goal`. That binding is the team's setup, not this file's. This file is what a team adds to its implementing agents' instructions — a CLAUDE.md, an agents file, a system prompt — so an agent holding an approved intent knows how to work from it. Copy the block below and shape it to your project.
+[design.md](../design.md) defines the implementation role, including optional integration with a harness mechanism such as Claude Code's `/goal`. This file contains the agent-facing instructions a team adds to its implementation environment. The block below may be copied and adapted to the project.
 
 ---
 
 ## Change intent: how to implement against one
 
-This section governs implementing a change that has an approved intent at `change-intent/YYYY-MM-DD-short-slug.md`; a task with no intent is not governed by it. The intent is your goal and your contract: the change is complete when every claim in it is demonstrated, and the change contains nothing the intent does not cover. What the change should be was settled at approval; how to satisfy it is yours.
+Apply this section only when the change has a current approved intent at `change-intent/YYYY-MM-DD-short-slug.md`. Treat that intent as the decision boundary and completion condition. The change is complete only when every claim is demonstrated, every change-defining decision is honored, and no known conflict with a constraint remains. You own technical choices that the intent and applicable project instructions leave open.
 
 ### The intent file, from the implementation seat
 
 - **Outcomes** — what the change is meant to make true. They orient your choices; the claims below are what you must prove.
-- **Why** — the reasoning behind the change. Where the claims leave a choice open, choose in the direction the Why points.
-- **Acceptance criteria** — each needs a proving test, written by you, in this change, shown by the would-fail demonstration below. Write other tests freely; each claim needs its one.
-- **Invariants** — properties that span sites ("across all caller paths…"); closed by the written walk below, not by tests alone.
-- **Out of scope** — fences, not suggestions. Do not fix, improve, or touch what is listed, even when it is easy.
-- **Amendments** — your one way to change the contract, described below.
+- **Why** — the problem, event, or need that caused the change. It explains the work; it does not settle implementation choices or establish requirements.
+- **Constraints** — conditions and non-behavioral boundaries every acceptable implementation must be designed around. Use them to guide engineering judgment. They do not each require a test or conclusive proof. Lack of proof is not a violation or amendment trigger; act when evidence shows a conflict.
+- **Acceptance criteria** — for each criterion, add a proving test and complete the semantic would-fail procedure below. Add any other tests required by ordinary engineering practice.
+- **Invariants** — properties that must remain true across the parts of the system affected by the change. Add tests for concrete cases where useful, but do not treat passing tests as closure; also reason across the affected diff and relevant surrounding paths.
+- **Out of scope** — work this change does not deliver. Do not implement or expand into the excluded outcome, even when it is easy. You may edit a shared surface when necessary to deliver the included change without delivering the excluded work; a surface that must remain literally unchanged is an explicit constraint, not an Out of scope entry.
+- **Amendments** — the only implementation-time process for changing the approved intent, described below.
 
 ### Demonstrate, don't just do
 
-Surface the evidence — tests run with results shown, the would-fail demonstrations, the invariant walks — where your team checks completion: the session transcript, the pull request description. It does not need to outlive your session; what crosses to review is the diff, its tests, and the intent file. Do not thin the evidence on the grounds that review will redo it, and do not skip it on the grounds that no one will look.
+Report test results, semantic would-fail demonstrations, and invariant reasoning in the implementation session so the goal evaluator can determine whether the change is complete. This evidence may remain session-scoped. The later review independently assesses the implementation and whatever evidence the team's review operation makes available; it does not depend on receiving your session proof. Produce the full implementation evidence even when review uses different mechanics.
 
-**The would-fail demonstration, per acceptance criterion.** A test that cannot fail proves nothing — and you are the most likely person to write one, because you are testing your own work:
+**The semantic would-fail demonstration, per acceptance criterion.** A test that cannot fail when its criterion is false proves nothing:
 
 1. Write the test that proves the claim. Run it; show it passing.
-2. Break the behavior in the product code — a temporary edit that falsifies the claim; invasive is fine, the break is temporary. Never edit the test to make it fail.
+2. State the criterion's defining condition. Prefer a reversible temporary product-code edit that makes that condition false. If that is unsafe, use the closest claim-level negative control: a controlled product configuration or dependency state that makes the defining condition false. Mutate the promised behavior, not merely an internal branch that another valid path can compensate for. Never edit the proving test to make it fail.
 3. Run the test; show the failure — and check that it fails *on the claim*. A crash or an unrelated error demonstrates nothing about what the test guards.
-4. Restore the code and confirm the break is fully removed. Run the test; show it passing again.
+4. Restore the product code, configuration, or dependency state and confirm the break is fully removed. Run the test; show it passing again.
 
-Never commit while a break is in the tree. A claim with nothing to break at runtime — a dependency absent, a file removed — is proven by its test alone; state why the demonstration does not apply.
+If another path leaves the criterion true, reject the falsification and choose one that actually makes the criterion false. One falsification may support multiple acceptance criteria only when each criterion's own proving test fails for the expected, claim-specific reason. One demonstration does not need to cover every possible failure. Identify a configuration or dependency fallback as a negative control. If neither a safe product mutation nor a controlled negative state can produce an observed claim-specific failure, report the evidence gap to the goal evaluator; do not count reasoning alone as the demonstration or amend a true intent merely to avoid it. Never commit a temporary mutation or other falsifying state.
 
-**The invariant walk, per invariant:** enumerate the sites first — everywhere the span rule reaches that your change could affect, in changed and unchanged code alike — then write one entry per site: the site (file and function), how the property could break there, and why it does not. A site you cannot close is never skipped — it is a fix, or it is an amendment.
+**The invariant analysis, per invariant.** Add tests for concrete cases where they provide useful protection. Then reason across the affected diff and the relevant surrounding paths: explain how the change could affect the property, what you inspected, and why the property remains true. Name material uncertainty in the session evidence rather than manufacturing closure. Do not treat a passing test as sufficient, and do not expect the intent author to have listed every location or test in advance.
 
 ### When the intent is wrong: amend, on the record
 
-Exactly two cases qualify:
+Exactly two cases qualify. Apply these tests to the approved change, not only to your current implementation:
 
-- **A claim cannot hold** — an acceptance criterion or invariant is false for a reason you discovered, or true but unprovable in this repository's tests.
-- **The scope is unsatisfiable** — the change forces observable behavior the intent takes no position on, so no implementation can deliver the change and stay inside the claims.
+- **A claim cannot be delivered within the approved boundaries** — discovered facts show that no reasonable implementation can make an acceptance criterion or invariant hold without violating the approved outcomes, constraints, or exclusions. Failure of your selected approach is not enough. If another reasonable in-scope implementation can satisfy the claim, change the implementation instead. An acceptance criterion whose behavior can be delivered but cannot be proved by any reasonable test available to the change may be reworded without weakening it or moved to Outcomes or Constraints according to the role it plays. An invariant's need for reasoning beyond tests is not an amendment trigger. A constraint that cannot be proved does not qualify; constraints are not claims.
+- **A necessary change-defining decision is missing** — you cannot complete implementation without choosing which change will be delivered, and the approved intent does not make that choice. If either reasonable branch still delivers the approved change, choose an implementation without amending. A fork created only by your selected implementation is not necessary when another reasonable implementation avoids it while delivering the approved change.
 
-In either case the correct move — the success move, not an admission of failure — is to amend the intent and keep working. Never pretend a claim holds; never drift past it silently; never stall waiting for permission — the author rules on every amendment when your work returns.
+Do not try to prove that no imaginable implementation exists. Consider the plausible alternatives supported by the current repository and normal scope of this pull request. Before amending, name those alternatives in your implementation evidence. If any can satisfy the current approved baseline, change the implementation. An amendment may repair a claim or settle a missing decision only while preserving approved outcomes, constraints, and exclusions. If affirmative evidence shows that every reasonable in-scope implementation would violate one of those boundaries, stop and report a failed change; do not amend the boundary away. Uncertainty or unavailable production proof is not affirmative evidence of a conflict.
 
-**An amendment is three edits to the intent file, made together:**
+For a necessary missing decision, compare the reasonable in-scope resolutions in this order:
 
-1. **The claim.** Rewrite it to the text that can hold — or add it, when the scope was unsatisfiable and the intent needed a position it lacked.
-2. **The discovery note.** Immediately after the changed claim, an italic parenthetical: `*(Amended YYYY-MM-DD: <the discovered fact — one to three sentences carrying the mechanism and what it implies>.)*`
-3. **The entry.** One line under an `## Amendments` section, created at the end of the file if absent: `- YYYY-MM-DD — <what changed, at claim granularity> — <the discovered fact that forced it>`.
+1. Preserve the approved Outcomes.
+2. Honor Constraints and Out of scope exclusions.
+3. Preserve existing external behavior unless the intent changes it.
+4. Minimize scope.
+5. Prefer the more reversible resolution.
 
-The fact named in the note and the entry is a statement about the system — something still true and checkable if the rest of the file were deleted — never a description of your activity:
+Select the first resolution distinguished by that order. If the full precedence leaves reasonable resolutions tied, select either one, record that the precedence did not distinguish them, and continue. Your selection is a provisional implementation-time decision that the author rules on when the work returns. Do not use repository convention or engineering preference as an additional source of product direction.
+
+In either case, record an amendment before continuing. Do not report a false claim as satisfied, proceed past a missing change-defining decision, or wait for additional permission. The author reviews every amendment when the work returns.
+
+**A semantic amendment is two edits to the intent file, made together:**
+
+1. **Update the current body.** Rewrite, add, remove, or move the affected item only as far as the discovered fact and amendment authority permit. The body must remain a complete account of the current intent without relying on Amendments.
+2. **Add the history entry.** Assign the next local identifier (`A1`, `A2`, ...). Under an `## Amendments` section at the end of the file, state the discovered fact, then quote the complete previous and current item wording verbatim with its section:
+
+   ```markdown
+   - **A<N> — YYYY-MM-DD.** <the discovered fact that forced the repair>
+     - Was — <section>: <verbatim previous item>
+     - Now — <section>: <verbatim current item>
+   ```
+
+   Use `Was: not present` for an addition and `Now: removed` for a removal. A move names the previous section under `Was` and the current section under `Now`. If one discovery changes several items, include one `Was`/`Now` pair for each. If an item changes again, leave the prior entry unchanged and make the later amendment's `Was` equal the earlier amendment's `Now`; only the terminal `Now` wording must match the current body. For a missing decision, also state which precedence rule selected the resolution, or that the full precedence left the reasonable resolutions tied. Do not add an amendment identifier or discovery note to the current body.
+
+Do not edit the approved intent merely to improve wording. If the wording has one clear meaning, leave it unchanged. If its ambiguity could describe different changes, treat the problem as semantic and use the necessity test; any resulting amendment includes both edits above.
+
+The fact named in the entry is a statement about the system — something still true and checkable if the rest of the file were deleted — never a description of your activity:
 
 ```
-Fails — activity-shaped, tells a future reader nothing:
-- 2026-07-08 — AC 2 relaxed — ran into implementation issues
+Fails — activity-shaped and omits the exact prior and current items:
+- A1 — 2026-07-08 — AC 2 relaxed — ran into implementation issues
 
-Passes — fact-shaped, verifiable against the codebase:
-- 2026-07-08 — AC relaxed: revocation latency 1m → 5m — AuthMiddleware
-  caches token validation for 5m with no invalidation hook
+Passes — fact-shaped with verbatim item wording:
+- **A1 — 2026-07-08.** All request authorization is delegated to
+  AuthMiddleware, the approved scope excludes replacing or bypassing it, and
+  it caches validation for 5m with no invalidation or configuration hook.
+  - Was — Acceptance criteria: - Revoked tokens are rejected within 1 minute.
+  - Now — Acceptance criteria: - Revoked tokens are rejected within 5 minutes.
 ```
 
-If you weakened a claim and the original strength is deferred rather than abandoned, also record the deferral under Out of scope. The fences themselves are not yours to move: when an Out of scope entry is what blocks a claim, the repair still goes through the claim — moving the fence is the author's reopening to make. Commit the amended intent before continuing the work that depends on it.
+If you weakened a claim and the prior strength is deferred rather than abandoned, also record the deferral under Out of scope and include its own `Was`/`Now` pair in the amendment. The fences themselves are not yours to move: when an Out of scope entry is what blocks a claim, the repair still goes through the claim — moving the fence requires an author replacement. Commit the amended intent before continuing the work that depends on it.
 
 Everything else is not an amendment:
 
-- **Latitude the intent grants** ("TTL may be 10–60s, implementation's choice") is yours; exercise it without ceremony.
+- **Implementation latitude** applies whether or not the intent explicitly grants it. Ask whether the author could approve the change once and allow either reasonable branch while still receiving the change they approved. If yes, choose one and continue without amendment. A technical or observable difference alone does not require an amendment.
 - **A better idea** — an improvement, hardening, an adjacent fix — is a seed for a future intent: name it when you finish, never fold it into this change.
-- **New direction from the author** is a reopening: take their direction through the reopening process — the intent is revised and re-approved — then continue against the revised text. Do not record it as an amendment, and do not keep implementing against the old text.
+- **New direction from the author** replaces the current unmerged intent. Stop using the superseded candidate. After the replacement is approved, reassess retained code against it, redo affected evidence, and send the change through review again. Do not record a revision history or keep the superseded candidate's Amendments section.
 - **A change no repair can deliver** — the change itself no longer makes sense — is a failed change: stop and report, with the discovered facts.
 
 ### Done
 
-Every acceptance criterion has its passing test shown, with its would-fail demonstration. Every invariant has its written walk. Nothing observable in your diff — observable means the channels named in this project's agents file — falls outside the claims and the out-of-scope list; where something does, either the change forced it (amend) or you chose it (remove it). The intent file carries whatever amendments the work required, and nothing changed it without one.
+Every acceptance criterion has its passing test shown, with an observed semantic would-fail demonstration that makes the criterion false and shows the expected, claim-specific failure. One falsification may cover multiple criteria only when every criterion's own proving test produces its own claim-specific failure. Every temporary product mutation or controlled negative state is restored before the affected tests pass again. Every invariant has useful tests where appropriate and surfaced reasoning across the affected diff and relevant surrounding paths. The diff plausibly delivers the outcomes, demonstrates the claims, respects the exclusions, and accounts for the explicit constraints. A constraint whose truth depends on production does not need to be proven here; completion requires no known conflict, not manufactured certainty. Any newly discovered necessary change-defining decision is recorded as an amendment; ordinary implementation choices are explained where normal code review needs them, not manufactured into intent claims. The current body stands on its own, and every implementation-time change to its approved baseline appears under Amendments with exact `Was` and `Now` wording.

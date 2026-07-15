@@ -11,11 +11,11 @@ The design says that over time, humans review less. Two mechanisms
 produce that, and they are different in kind.
 
 The first is the codebase itself. A project that uses change intent
-gains quality over time: every merged change was built and checked
-against stated claims, and the record of past intents stays in the
-repository. Working with that record, the human reviewer learns where
-mistakes actually happen and what actually needs their attention. Their
-review gets smaller because it gets better aimed.
+gains quality over time because every merged change was built and
+reviewed against stated claims. The human reviewer learns where mistakes
+actually happen and what needs their attention. Their review gets smaller
+because it gets better aimed. Earlier intent files remain records of their
+own changes, not requirements for later ones.
 
 The second is AI getting smarter. As models improve, they make fewer
 mistakes and need less handholding in review. That is outside the scope
@@ -41,11 +41,8 @@ Teams run design and review in ways we cannot predict, and every rule
 about their process would shrink the set of teams the design fits. A
 team that wants more can add it; nothing in the design is in the way.
 
-The same holds for urgent changes, for a different reason: there is no
-fast path because none is needed. The authoring dialogue scales down
-with the change — for a small fix it is a few minutes of work, and no
-release is so urgent that a few minutes to confirm the fix is not
-itself broken are too many.
+Urgent changes use the same process because the authoring dialogue scales
+with the change.
 
 ## Two voices
 
