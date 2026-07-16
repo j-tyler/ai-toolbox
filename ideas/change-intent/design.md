@@ -271,7 +271,7 @@ Change intent splits the work so each gets done by the right agent at the right 
 
 ### When exploration comes first
 
-Work that is not intended to merge needs no intent. Some ideas need a prototype or exploratory testing before a clear intent can be stated, and this design proposes no process for that work. Change intent picks up once the author has decided what they want to do: the initial intent is approved before implementation begins, even when a prototype came before it. If returned work later changes the author's direction, the replacement intent is approved before the affected implementation and evidence are reassessed.
+Not all work results in a change: a toy, a prototype, exploratory testing — work that is not intended to merge needs no intent, and this design proposes no process for it. Change intent picks up when the author decides to ship: shipping is a change, its initial intent is authored and approved first, and everything that merges — including any prototype code the author keeps — is implemented and reviewed against it. In this design, implementation means that shipping work; a prototype that preceded the intent is exploration, not implementation begun early. If returned work later changes the author's direction, the replacement intent is approved before the affected implementation and evidence are reassessed.
 
 ### The intent author doesn't have to be a human
 
