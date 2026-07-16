@@ -155,3 +155,79 @@ Eleven findings were killed by the default-refute verification pass, typically b
 ## Final assessment
 
 Round 1 judged the design "reliable mainly on the happy path." After `47b0dcf`, the happy path is wider and the claims are more honest, and this round's harder look — five seats simulating the process concretely, with an adversarial pass killing eleven of twenty-nine findings — confirms the core is sound in all three seats. What separates it from an unqualified yes is no longer the design's shape: it is one silent authoring failure mode, a handful of instrument sentences that contradict each other or the design, a flagship example that undermines the process it demonstrates, and evidence plumbing the design now officially leaves to teams but does not help them build. All of the confirmed defects are wording-level fixes. The partially-confirmed ones are where the real design work remains — and they are the same evidence-durability and scaling questions Round 1 raised, still open, now with a narrower blast radius because the design promises less.
+
+---
+
+# Addendum — reconsideration under the design's stated constraints
+
+**Date:** 2026-07-16, same day as Round 2. This addendum responds to feedback from the design's author clarifying the constraints the review should have weighed findings against. The Round 2 body above is left unchanged as a record; this section re-triages it.
+
+## The constraints, as clarified
+
+Change intent is a **workflow contract in the same sense that "pick up a ticket, say when you're done, ask a teammate to review before merge" is one** — real, load-bearing, and almost entirely informal. The design goals that follow: the adoption bar is a few repository file changes, with no change to team structure or development practices; nothing in it may become a blocker — everything exists to make changes faster and smoother; it is cooperative, not mechanical and not adversarial; and adopting teams have structures the design cannot know, so they must be free to reshape it. Proposed fixes are therefore admissible only when they are (a) a wording repair inside an existing instrument, (b) a sentence of explicitly granted latitude, or (c) a claim honestly scoped to what the design delivers. No new phases, gates, artifacts, required formats, or tooling.
+
+The design serves five purposes that fit together, and the corpus expresses all five but never enumerates them in one place:
+
+| # | Purpose | Where it lives today |
+| --- | --- | --- |
+| 1 | The human author gets clarity about a change that usually starts muddled — especially with AI in the loop | The forcing-function argument (design.md:261) and the Phase 1–4 dialogue; framed mostly as a review benefit rather than an author benefit |
+| 2 | A platform for AI to drive itself to goal completion — specific enough that a coding-harness goal works naturally | The `/goal` integration section (design.md:367-419) |
+| 3 | The human reviewer gets confidence from **consistency** in how changes are developed, implemented, and reviewed — the thing uneven AI adoption across a team destroys | design.md:397-399 ("Because every change passes through the same chain... A teammate's change arrives with the same frame as the reviewer's own") — present but buried; this is the sharpest under-expressed purpose |
+| 4 | The highest-value tokens are saved into the repository, because future *agents* — unlike future humans — really will read past intents when shaping decisions | README.md:5, design.md:559-569, and Working in Public |
+| 5 | Forward-shaped toward less human authoring and less human review | design.md:277-281, notes.md:8-40 |
+
+Much of the framing confusion in both review rounds traces to reading the design against purpose 3's parent (reviewability) alone. A short enumeration of the five purposes in the README — a documentation edit, not a mechanic — would give every future reader, and every future reviewer, the correct acceptance test for a proposed change to the design: *does it serve one of these five without adding a step for the team?* Several Round 1 asks (state machines, evidence envelopes, hash binding, mandatory two-pass review) fail that test cleanly, which is a faster and more principled rejection than arguing each on its merits.
+
+## Re-triage of the Round 2 findings
+
+The re-triage confirms something worth stating plainly: **in a deliberately lightweight process, the instrument wording is the only mechanics there is — so wording precision is not bureaucracy, it is the entire defect surface.** Every confirmed finding survives this re-triage precisely because it is a wording defect, and each admits a fix that adds nothing to the team's experience of the process.
+
+| Finding | Disposition | Admissible fix |
+| --- | --- | --- |
+| 1. Branch-state poisoning | **Keep (major)** | Recast from "add a Phase 0" to one or two sentences in Phase 2's fact rules: the baseline is the change's base, not unmerged candidate implementation sitting on the branch; if the branch already carries implementation of the requested change, say so. Agent-side only; no new author gate; the agent already runs git. Silent poisoning of the fact base defeats purpose 1 invisibly, which is why it stays major |
+| 2. Review eligibility omits the sanctioned unprovable-AC amendment | **Keep (major)** | One sentence in review-guidance.md:23. Directly serves the not-a-blocker goal: the current text makes the review seat generate false blocking findings against legitimate repairs |
+| 3. Worked example's A1 is an authoring miss | **Keep (major)** | Documentation-only, and the cooperative framing makes the *annotation* option on-message: design.md:345 already says amendments mark authoring misses — owning that in the flagship example demonstrates the diagnostic honestly instead of undermining it |
+| 4. Restoration has no transcript-checkable evidence | **Keep, reduced** | One line in the existing would-fail procedure: surface `git status`/`git diff` after restoration. A catch-mistakes self-check — exactly the category the no-adversary principle already embraces. All envelope/attestation thinking from Round 1 is retracted below |
+| 5. Ordinary-review trace asymmetry | **Downgrade to minor, recast** | Extend the existing sentence at review-guidance.md:13 by one clause so "report what you established" covers the ordinary half. The original failure story ("shrinkage is unobservable") quietly assumed nobody reads the review output — in the actual workflow the human reviewer consumes it, which is the cooperative contract doing its job. The required verdict-table convention is retracted as a requirement |
+| 6. No incremental adoption path | **Keep, strengthened by the constraints** | The stated goal is that teams can *experiment*; the block as pasted makes the experiment repo-global and binding ("Every change," agents refuse intent-less work). One sentence of granted latitude — teams may scope adoption to a directory, subteam, or change class during a pilot — is all that's missing, and it is the same latitude move the corpus makes everywhere else |
+| 7. Eligibility enumerations omit project instructions | **Keep (minor)** | Add project instructions to the two enumerations. Pure consistency |
+| 8. Cold start can't pre-fill from a content-bearing request | **Keep** | Allow pre-filling the brief for confirmation — the same gate in one author turn instead of two. This *removes* a round trip; it is the most on-mission fix in the list |
+| 9. "Review less" collects no evidence | **Mostly dissolves** | Under purpose 5 as clarified — forward *shaping*, with AI improvement explicitly outside scope — instrumentation is out of bounds by design. The residue is one honest sentence in notes.md: a team that wants to *act* on reviewing less will need its own signal, and has latitude to build one. Same move `47b0dcf` made with chain of custody |
+| 10. Approval sequencing ambiguous | **Keep (minor)** | One sentence: when rulings were applied as diffs, confirm on the assembled final file. Protects purpose 1 at its single load-bearing moment; also gives the author seat a machine-legible approval form for the autonomous case |
+| 11–16, 18 (wording/consistency sweep) | **Keep (minor)** | All are wording repairs inside existing instruments with zero adoption cost. 13's fix is one stated assumption (exclusive worktree during temporary mutations) — which matters more, not less, under multi-agent operation |
+| 17. No over-asking diagnostic | **Mostly dissolves** | In a cooperative team the over-asking signal is the author's lived annoyance, surfaced socially — the informal contract handles it. At most one sentence naming it |
+
+## What this addendum retracts from Round 2
+
+- **Characterizing `47b0dcf`'s claim-narrowing as "shrinking the promise."** Under the stated design goals, scoping "chain of custody" to cooperative continuity and delegating evidence durability to teams was the *correct* resolution, not an evasion: a lightweight contract should promise exactly what it delivers. The delta table's facts stand; that editorial frame does not.
+- **The verdict-table/disposition convention as a definition ask.** At most, a non-normative example a team may copy. Requiring an output format is a mechanic.
+- **Any residual Round 1 machinery** endorsed by implication — state machines, revision/hash binding, evidence envelopes, mandatory two-pass review. All fail the purpose test above. The right reference class for this design is the informal ticket-review-merge contract, formalized only at the artifact.
+
+What does **not** relax: the wording-precision findings. Those get more important as the process gets lighter and as more seats go autonomous, because agents execute instruments literally, and a human's shrug at an ambiguous sentence is exactly the error-absorption that disappears when the human does.
+
+## Could change intent run entirely on AI — authoring, implementation, and review, many agents driving outcomes?
+
+**Yes — and more than "could": this design is more ready for that end state than any comparable process reviewed here, because it was visibly designed backward from it.** The features that matter for full autonomy are already the design's core features:
+
+- **Every seat is a logical responsibility with a defined continuation path.** Agent systems fail at undefined states far more than at hard work; `cannot verify`, amend-on-the-record, and report-a-failed-change mean no seat ever needs a human to get unstuck. This is the single most autonomy-critical property a process can have, and it is already the design's strongest rule.
+- **The artifact is the coordination medium.** A file-based, diffable record that is complete over decisions and open over implementation is exactly the thin durable handoff multi-agent orchestration wants. Nothing about the contract assumes a human on either end of any arrow in author → implement → review.
+- **The fork admission test doubles as an escalation rule.** For an AI orchestrator in the author seat, "does choosing between branches decide which change is delivered?" is precisely the test for *what must be pushed up to the authority boundary* versus decided locally. Humans need that discipline; orchestrators are lost without it.
+- **The amendment channel is the sanctioned repair loop autonomous implementation needs** to avoid the fabricate/drift/stall triad — which the design names explicitly and which is the observed failure profile of unsupervised coding agents.
+- **Two independent machine checks already exist** (the in-loop goal evaluator and the review pass), with the design's insistence that neither substitutes for the other.
+- As direct evidence: this review round itself ran the seats. Five AI agents independently occupied authoring, implementation, and review against this corpus, executed their instruments to completion, and returned structured judgments — including honest `cannot verify`-shaped limits. The seats are occupiable today.
+
+Three things determine how fast "could" becomes "does":
+
+1. **The author seat's authority boundary, not its dialogue.** The mechanics of authoring are automatable now; what an AI author needs is an upstream objective and an authority envelope — which the design already scopes correctly to the team's operating model (design.md:277-281) rather than pretending to solve. This is the binding constraint, and it is organizational, not technical.
+2. **Instrument wording precision.** In full autonomy the review agent executes review-guidance.md literally at scale; Finding 2's false-blocking-finding defect goes from occasional friction to a systematic tax. The wording fixes above are the cheap insurance premium for the autonomous trajectory.
+3. **Concurrency hygiene.** Many agents driving outcomes means the one-current-intent rule (natural serialization — good) plus Finding 13's unstated exclusive-worktree assumption (one sentence — needed).
+
+Purpose 3 also inverts elegantly under autonomy rather than disappearing: when no human reviews each change, the consistent per-change frame becomes the substrate a human *samples* when auditing the autonomous pipeline — the same artifact serving supervision instead of review. That continuity between today's use and tomorrow's is the design earning its forward-looking claim.
+
+## Revised recommendation order (all wording-level; nothing adds a step)
+
+1. The three confirmed majors: the Phase 2 baseline sentence; the third eligibility prong; fix or annotate the worked example.
+2. The one-turn cold start (removes a round trip) and the pilot-scoping latitude sentence (lowers the bar to experiment). These two most directly serve the stated goals.
+3. The self-check line in the would-fail procedure and the exclusive-worktree assumption.
+4. The minor wording sweep (Findings 7, 10–16, 18) plus the one-clause extension at review-guidance.md:13.
+5. Enumerate the five purposes once in the README, and scope the "review less" claim in notes.md the way chain of custody was scoped.
