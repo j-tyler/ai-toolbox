@@ -17,7 +17,7 @@ Produce an approved change-intent file at `change-intent/YYYY-MM-DD-short-slug.m
 
 The author may provide direction such as "the API must be able to X," "we must never expose Y," or "we're not touching Z" without supplying technical invariants, locations, tests, or code knowledge. Translate testable behavior into falsifiable claims, preserve genuine engineering boundaries as constraints, present supporting evidence in plain language, and expose every change-defining judgment instead of resolving it silently. Record only invariants that belong to the change the author is approving; do not inventory every desirable property of the system.
 
-Run four phases in order. Each ends at a gate. Do not merge phases, even when you are confident.
+Run four phases in order. Phase 1 confirmation and Phase 4 approval are mandatory author gates. During Phase 2, interrupt only for a blocker that prevents responsible exploration; otherwise carry direction that needs approval into the Phase 3 proposal.
 
 Scope the intent to its change-defining decisions.
 
@@ -82,6 +82,8 @@ Then **stop and wait for confirmation.** You will want to start reading code imm
 
 Use the brief's categories literally. Required or forbidden behavior that forms a focused scenario closed by a proving test becomes an acceptance criterion. A property that must remain true across the affected change and is not closed by test evidence alone becomes an invariant; useful tests may exercise concrete cases, while implementation and review also reason across the diff. Out-of-scope direction becomes an Out of scope entry. A condition or non-behavioral boundary remains a constraint when it guides acceptable implementations rather than promising proof. Do not convert a constraint into a claim merely because it is precise, require an invariant site or test inventory from the author, or require a validation plan for a constraint that can be assessed only in production.
 
+A required runtime behavior belongs in Acceptance criteria or Invariants according to its proof shape, not in Constraints merely because it is phrased as something to preserve. Implementation choices deliberately left open are omitted; they are not Out of scope.
+
 ---
 
 ## Phase 2 — Explore
@@ -90,8 +92,8 @@ Read the code the change touches, the relevant callers and paths you can identif
 
 Maintain four running lists as you read:
 
-1. **Facts, each confidence-marked.** `⟨verified⟩` — you saw the code or a test enforcing it. `⟨documented, unenforced⟩` — a comment claims it, nothing checks it. `⟨inferred⟩` — you believe it, nothing states it. Never let an inferred fact wear a verified voice: a fluent wrong baseline poisons every claim you build on it, and the author cannot catch it — they don't know the code.
-2. **Decision candidates.** Keep a private scratch list through the pre-approval coverage pass. For each candidate, record two reasonable resolutions, whether it passes admission, and whether approved direction or an explicit constraint settles it. Only admitted forks appear in the proposal: unresolved forks under Decisions needed, and settled alternatives under Paths not taken. Rejected candidates never become author-facing bookkeeping, but do not discard them before the coverage pass — a later fact may change their classification. The private list may be discarded at approval. An empty admitted list is valid.
+1. **Facts, each confidence-marked.** `⟨verified⟩` — you saw the code or a test enforcing it. `⟨documented, unenforced⟩` — a comment claims it, nothing checks it. `⟨inferred⟩` — you believe it, nothing states it. Never let an inferred fact wear a verified voice: a fluent wrong baseline poisons every claim you build on it, and the author cannot catch it — they don't know the code. Code, tests, comments, conventions, and current behavior remain facts even when verified. They may expose consequences or motivate a recommendation, but only confirmed author direction, an applicable project instruction, or an explicit normative contract supplies forward-looking direction.
+2. **Decision candidates.** Keep a private scratch list through the pre-approval coverage pass. Begin with the consequence or shared author-owned property at issue, not the mechanisms that could provide it. Suppress a mechanism fork when its branches can uphold the same property. For each remaining candidate, record two reasonable consequence-level resolutions, whether it passes admission, and whether approved direction or an explicit project constraint settles it. Only admitted forks whose direction remains unresolved appear under Needs your attention. Rejected candidates never become author-facing bookkeeping, but do not discard them before the coverage pass — a later fact may change their classification. The private list may be discarded at approval. An empty admitted list is valid.
 3. **Parked items.** Adjacent improvements you notice ("the error handling here is also bad"). Never widen scope for them. They surface at approval as seeds for future intents.
 4. **Coverage limits.** A relevant caller, lifecycle, persisted-state path, authorization or data boundary, external failure path, irreversible operation, or scope boundary you cannot inspect or bound confidently. Name the exact blind spot; do not turn uncertainty into invented decisions or a claim of complete coverage.
 
@@ -111,114 +113,102 @@ If no later behavior can observe or depend on the result — for example, a pure
 
 The sweep does not create claims by itself. It creates a decision candidate only when choosing between reasonable answers decides which change will be delivered. Keep failed candidates private under the rule above.
 
-Exploration runs in as many passes as it needs. At the end of a pass, if continuing useful exploration requires the author to decide which change will be delivered, ask with the evidence before the next pass. Examples:
+Exploration runs in as many passes as it needs. Do not interrupt merely because a change-defining fork appears. Explore reasonable branches when useful and batch their decisions into the proposal. Ask earlier only when continuing useful exploration cannot responsibly proceed across the branches because:
 
 - Two author statements that cannot both hold. A contradiction is the author's to resolve, never yours to resolve silently — in any phase, including a ruling that collides with a confirmed constraint.
-- A fork whose branches would deliver different changes and neither approved direction nor an explicit constraint settles which one the author wants.
+- An applicable project instruction conflicts with the requested direction.
 - Evidence the change's premise is false — the outcome already holds, or the why rests on a mistaken belief about the code. Ask whether the change still stands.
 - A coverage limit that could conceal a change-defining decision. Name the unavailable surface and ask the author to supply context, narrow the change so the surface is no longer implicated, or make a decision that governs the surface and can be recorded as an outcome, claim, constraint, or exclusion. If none of those paths resolves it, the intent is not ready for approval.
+- The branches require materially different exploration surfaces and neither can be bounded usefully without an author ruling.
 
-Everything that doesn't block waits for the proposal.
+When asking early, batch every blocker already known. Everything else waits for the proposal.
 
 ---
 
 ## Phase 3 — Emit the proposed intent
 
-Exact format: four sections, this order. The order is the author's reading protocol — section 1 requires their judgment, section 2 is a veto scan, section 3 is one careful read, section 4 is spot-check material. Every heading appears every time; an empty section states its emptiness affirmatively ("none — <reason>"), because a missing heading is indistinguishable from a skipped step. Every item the brief deferred to exploration is resolved somewhere in this output — as a Decision, a claim, or an explicit drop. Apply a ruling made during exploration to the proposal; do not repeat it under Decisions needed. For each decision, mark whichever option the evidence supports as `(my recommendation)` and explain why, citing evidence rather than preference.
+Use the format below. `Needs your attention` contains only direction that still requires author judgment and is omitted when empty. Every item the brief deferred to exploration is resolved in the draft, under `Needs your attention`, or by a short explanation that exploration showed it was not change-defining. Apply a ruling made during exploration to the draft; do not ask for it again.
 
 ```markdown
 # Proposed change intent: <slug>
 
-## 1. Decisions needed
-(my recommendations are reflected in the draft below)
-Draft reflects: 1→B, 2→B, 3→A.
+## Needs your attention
 
-### Decision <n>: <the question, in plain words>
-**The situation, in plain terms.** <2-4 sentences an author who has never
-seen this code can follow. State why the fork is forced and that the brief
-takes no position.>
+### Item <n>: <direction requiring approval>
+**Recommendation.** <the author-owned behavior, guarantee, boundary, or
+exclusion reflected in the draft>
 
-**What the code does today:**
-```<lang>
-// <file:line>
-<the smallest snippet that proves the situation>
-```
-<One sentence below the snippet naming the line that matters and what it
-means — the author must not need to read the code to proceed.>
+**Why.** <plain-language consequence and material evidence; include a code
+reference or snippet only when it helps the author rule>
 
-**Option A — <name>.**
-<Behavior first: what a user/caller/operator experiences. Then who is
-affected, named concretely, with file:line evidence. Then cost/benefit.>
+**Meaningful alternatives.** <each materially different consequence-level
+resolution the author could reasonably choose; omit mechanism variants>
 
-**Option B — <name>.**
-<Same shape as Option A.>
+**Draft effect.** <briefly identify the affected draft items and how they
+would change under each alternative>
 
-**Effect on the intent file:**
-- A → <which claims get added/changed>
-- B → <which claims get added/changed>
-
-## 2. Paths not taken
-(change-defining alternatives already settled; verify that each cited direction or constraint is applied accurately)
-
-1. **<The alternative>.** What it would buy: <plain terms — the author can
-   only veto what they can want back>. Not taken because:
-   <the approved direction or explicit constraint that closes it>. Revisit if: <the
-   condition under which this rejection expires>.
-
-## 3. Proposed intent file: change-intent/<YYYY-MM-DD>-<slug>.md
+## Proposed intent file: change-intent/<YYYY-MM-DD>-<slug>.md
 [The complete draft, in the file format defined at the end of this
 skill, final-file rules applying inside it — no Amendments section,
 empty sections omitted. Outcomes, Why, Constraints, Acceptance criteria,
-Invariants, Out of scope. Every claim and constraint tagged with the source
-of its direction:]
+Invariants, Out of scope. Every outcome, claim, constraint, and exclusion
+tagged with the source of its direction:]
   ⟨yours — "<fragment of what they actually said>"⟩
-  ⟨explicit constraint — <project instruction or documented contract>⟩
-  ⟨Decision <n>, option <X> — flips if you rule otherwise⟩
-  ⟨proposed — ruling needed; motivated by code: <evidence, if any>⟩
+  ⟨project direction — <applicable project instruction or explicit normative contract>⟩
+  ⟨Item <n> — approval needed⟩
 
-## 4. Surface read
-(what I read and how sure I am)
-- <fact> ⟨verified / documented, unenforced / inferred⟩
-- Relevant callers and paths inspected: <the bounded surface read, with
-  representative file:line evidence and how you found it; not an invariant
-  site inventory>
-- Design docs consulted: <list or "none found">
-- Test harness check: <every proposed AC has a writable test in <suite>,
-  or the exceptions, named>
-- Coverage limits: <none, or each relevant surface that could not be inspected
-  or bounded and how the author resolved it>
+## Confidence and limits
+- Test feasibility: <every proposed acceptance criterion has a writable focused
+  test in <suite>, or name the exception>
+- Coverage limits: <none, or each relevant limit and how it was resolved>
+
+Approve the proposal as a whole, approve it except for a named item, or
+correct an item or draft line.
 ```
 
 **Apply admission before triage.** Use this test in private working notes:
 
-1. Name two concrete, reasonable branches.
-2. Ask whether the author could approve the change once and allow implementation to choose either branch while still receiving the change they approved.
-3. If yes, reject the candidate as implementation latitude. If choosing one branch would make the other a different change, use approved direction or an explicit constraint when it settles the choice; otherwise place the fork under Decisions needed. Code, tests, and documentation may establish facts or feasibility, but do not silently decide product direction.
+1. State the consequence or author-owned property at issue before naming mechanisms. If different mechanisms can uphold the same property, reject the mechanism fork as implementation latitude. Draft the shared property only when it belongs in the approved change; if it adds direction, place it under Needs your attention.
+2. Otherwise name the concrete, reasonable, consequence-level branches supported by the affected surface and normal scope; an imaginable redesign or a branch that is merely defective is not enough. Do not stop at two when another materially different resolution remains reasonable.
+3. Ask whether the author could approve the change once and allow implementation to choose either branch while still receiving the change they approved.
+4. If yes, reject the candidate as implementation latitude. If choosing one branch would make the other a different change, use approved direction or an explicit project constraint when it settles the choice; otherwise place the fork under Needs your attention.
+
+If this test remains genuinely ambiguous, place the fork under Needs your attention rather than infer delegation from silence.
 
 Do not show rejected candidates to the author. A technical or observable difference alone does not make the branches different changes. Engineering preference is not an explicit constraint.
 
+Propose a shared guarantee only when it is needed to make approved direction coherent or its absence would leave a reasonable, materially different version of the requested change. A guarantee that merely prevents a possible implementation defect remains ordinary implementation and review work.
+
 A threshold, time window, or limit follows the same admission rule as any fork. Ask the author only when choosing among reasonable values would decide which change is delivered. If every reasonable value is a way to deliver the approved change, leave it to implementation or state a bound supplied by approved direction or an explicit constraint; do not manufacture a range merely to make the intent look complete. A production-only operating bound can remain a constraint: record it precisely enough to guide engineering judgment, but do not ask the author to invent proof that implementation or review cannot obtain.
 
-**Decision entries are written for an author who cannot read the code.** Before emitting each one, apply the test: *could the author rule from this entry alone, without opening a single file?* If not, rewrite it. Behavior consequences come before mechanisms; affected parties are named in product terms ("signups would intermittently fail"), with the code reference as evidence, not prerequisite.
+**Items under `Needs your attention` are written for an author who cannot read the code.** Before emitting each one, apply the test: *could the author rule from this entry alone, without opening a single file?* If not, rewrite it. Behavior consequences come before mechanisms; affected parties are named in product terms ("signups would intermittently fail"), with the code reference as evidence, not prerequisite.
 
-**Any claim with a `⟨proposed⟩` tag is a claim you invented.** That is allowed — proposing is your job — but the tag is how the author finds what needs their ruling. Stripping it, or wording an invented claim so fluently it reads as translation of their words, is the exact failure this skill exists to prevent.
+Before presenting the proposal, map every outcome, claim, constraint, and exclusion to confirmed author direction, an applicable project instruction or explicit normative contract, or an item under `Needs your attention`. Any normative wording you introduced must appear under `Needs your attention` and map unambiguously to the tagged draft.
 
-Code, tests, and conventions may motivate a proposed claim, but they are not a source of forward-looking direction. A claim motivated by repository evidence remains `⟨proposed — ruling needed⟩` unless the author's words, an explicit project constraint, or an author ruling supplies its direction. Keep code-only facts in the Surface read rather than promoting them into normative claims.
+Code, tests, and conventions may motivate a recommendation, but they are not a source of forward-looking direction. A source tag covers only what its cited direction entails: if the author could keep the cited direction while rejecting added specificity, that specificity requires approval under `Needs your attention`. An existing test or current behavior does not become project direction merely because it is verified. Keep code-only facts out of the normative draft.
 
 ---
 
 ## Phase 4 — Discuss, tighten, approve
 
-The author may respond to individual decisions or approve the proposal as a whole. Do not require item-by-item confirmation when the complete proposal is approved.
+The author may respond to individual items or approve the proposal as a whole. Do not require item-by-item confirmation when the complete proposal is approved. "Approve except Item 2" approves everything else and leaves only that item open.
 
-Apply the author's rulings as **targeted diffs**: "Decision 1 → B: AC 3 becomes <new text>." Re-emit the full file only when the author asks or when several changes make a partial update difficult to follow. If a ruling adds behavior that neither option described, state the resulting claim changes and obtain explicit approval before continuing.
+Apply the author's rulings as **targeted semantic diffs**: "Item 1: AC 3 becomes <new text>." Re-emit the full file only when the author asks or when several changes make a partial update difficult to follow. If a ruling adds behavior the proposal did not describe, state the resulting claim changes and obtain explicit approval before continuing.
 
 Before offering the file for approval, reread every claim and constraint as written, not as intended — the way an implementer who never heard this conversation will read it. Check for contradictions, unfalsifiable claims, missing change-defining decisions, constraints confused with proof obligations, and exclusions that defeat the outcomes. Every coverage limit must be resolved by supplied context, narrower scope, or an author-approved decision recorded as an outcome, claim, constraint, or exclusion. When you find a possible gap, run the admission rule before asking: a gap whose resolution decides which change will be delivered becomes a claim or explicit ruling; a silence under which every reasonable branch still delivers the approved change remains implementation latitude. Do not seek approval for technical completeness, enumerate every desirable invariant, or claim proof that no unknown dependency exists.
 
+For each item under `Needs your attention`, compare its recommendation and
+each alternative's draft effect against all confirmed author and project
+direction. A resolution that conflicts with or narrows confirmed direction is
+not a meaningful alternative unless the item explicitly proposes revising that
+direction. State that tension in the item and make each remaining draft effect
+internally consistent before offering approval.
+
+For every Acceptance criterion and Invariant, identify both the author, project, or approved-item direction it supports and the distinct failure that would go undetected if the item were removed. Remove or merge an item when it has no such source or catches no distinct failure. An existing test, applicable quality category, or possible implementation defect is not by itself a reason to add a claim.
+
 At approval:
 
-- **Discard paths not taken.** They are approval scaffolding. The selected consequences already live in the final Outcomes, Constraints, claims, or exclusions; rejected alternatives do not move into Why.
-- **Strip the scaffolding.** Source tags and section wrappers go; decision outcomes are already embodied in the claims. The change intent file is clean, in the file format below, nothing else.
+- **Strip the proposal scaffolding.** Source tags and section wrappers go; approved item consequences are already embodied in the clean draft.
 - **Emit parked items** as one-line seeds the author can turn into future intents.
 
 Approval is explicit. Present the final file and state what it means: implementation must honor its change-defining decisions, may choose ordinary implementation details, and may repair a false claim or missing necessary decision through recorded amendments, which the author rules on when the work comes back. For an initial intent, write `change-intent/YYYY-MM-DD-short-slug.md` — today's date; a short, concrete slug at commit-title specificity, normally 3–6 words, using nouns about what changes rather than vague verbs about effort — and commit it before implementation begins. Use the shortest slug that clearly identifies the change; exceeding six words is not by itself a reason to stop or split. Offer to split the work when it requires independently deliverable intents. For a replacement, write the clean approved baseline at the existing path, remove the superseded candidate's Amendments section, and tell the implementing agent to reassess retained code and redo affected evidence before review runs again.

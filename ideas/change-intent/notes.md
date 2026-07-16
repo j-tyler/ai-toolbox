@@ -25,21 +25,32 @@ building the process that benefits when it does.
 Both mechanisms are designed for. Change intent is deliberately built so
 that a team using it grows into this future: the codebase improves, AI
 improves alongside it, and at some point human review may go away
-altogether — while the artifact and the process keep their shape the
-whole way. Just as deliberately, nothing in the design works against
-that future. This matters when adopting a process while the future is
+altogether. The semantic responsibilities and shared decision artifact
+remain useful even as the people, agents, tools, and interactions around
+them change. This matters when adopting a process while the future is
 uncertain: what a team adopts today should still fit the future when it
 arrives.
 
+The roles are stable responsibilities, not permanent assignments to
+humans. An AI orchestrator given an upstream objective and an appropriate
+authority boundary may occupy the author seat, while multiple specialized
+agents may implement and independently review through the same artifact.
+Change intent defines the responsibilities those agents inherit while
+leaving teams substantial latitude in how they orchestrate them and
+establish authoring authority.
+
 ## What the design leaves to the team
 
-Change intent adds one artifact to a repository — the intent file — and
-asks the project's agents to honor it. Everything else about how a team
-works is left alone on purpose: where review findings live, who holds
-the author and reviewer seats and when each first reads an intent.
-Teams run design and review in ways we cannot predict, and every rule
-about their process would shrink the set of teams the design fits. A
-team that wants more can add it; nothing in the design is in the way.
+At the core adoption level, change intent adds one new durable per-change
+artifact — the intent file — and asks the project's agents to honor it.
+Teams may retain or require additional workflow evidence appropriate to
+their environment. Beyond the minimum responsibilities and logical flow
+defined by the design, teams retain substantial latitude: where review
+findings live, who or what holds the author and reviewer seats, and when
+each first reads an intent. Teams run design and review in ways we cannot
+predict, and additional core rules about their process would shrink the
+set of teams the design fits. A team that wants more can extend the workflow
+for its environment.
 
 Urgent changes use the same process because the authoring dialogue scales
 with the change.
