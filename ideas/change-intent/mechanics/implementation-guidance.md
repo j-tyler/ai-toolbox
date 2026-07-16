@@ -78,11 +78,12 @@ Fails — activity-shaped and omits the exact prior and current items:
 - A1 — 2026-07-08 — AC 2 relaxed — ran into implementation issues
 
 Passes — fact-shaped with verbatim item wording:
-- **A1 — 2026-07-08.** All request authorization is delegated to
-  AuthMiddleware, the approved scope excludes replacing or bypassing it, and
-  it caches validation for 5m with no invalidation or configuration hook.
-  - Was — Acceptance criteria: - Revoked tokens are rejected within 1 minute.
-  - Now — Acceptance criteria: - Revoked tokens are rejected within 5 minutes.
+- **A1 — 2026-07-08.** All collaborator access checks are delegated to
+  SharingMiddleware, the approved scope excludes replacing or bypassing it,
+  and it caches access grants for 5m with no invalidation or configuration
+  hook.
+  - Was — Acceptance criteria: - A removed collaborator loses edit access within 1 minute.
+  - Now — Acceptance criteria: - A removed collaborator loses edit access within 5 minutes.
 ```
 
 If you weakened a claim and the prior strength is deferred rather than abandoned, also record the deferral under Out of scope and include its own `Was`/`Now` pair in the amendment. The fences themselves are not yours to move: when an Out of scope entry is what blocks a claim, the repair still goes through the claim — moving the fence requires an author replacement. Commit the amended intent before continuing the work that depends on it.

@@ -87,9 +87,9 @@ A change intent file is a per-change document whose initial form is approved **b
 
 ### Outcomes
 
-A short list of what the change is intended to make true. Each entry is an outcome — the result the author wants from the change — not the implementation chosen to produce it. "Database load from GetUser drops by roughly 70%" is an outcome; "add a cache" is not, unless the cache is itself the deliberate outcome — which is exactly the case for changes that are mechanical by nature (a migration, a rename: "auth runs on OIDC"). Take care not to smuggle an implementation choice into the outcome as an unnecessary constraint; when the author deliberately requires an approach ("must use the existing CacheManager"), record it under `Constraints`.
+A short list of what the change is intended to make true. Each entry is an outcome — the result the author wants from the change — not the implementation chosen to produce it. "Database load from GetPlaylist drops by roughly 70%" is an outcome; "add a cache" is not, unless the cache is itself the deliberate outcome — which is exactly the case for changes that are mechanical by nature (a migration, a rename: "playlist artwork is served as WebP"). Take care not to smuggle an implementation choice into the outcome as an unnecessary constraint; when the author deliberately requires an approach ("must use the existing CacheManager"), record it under `Constraints`.
 
-Outcomes may be individually testable or not, and both belong here. "GetUser returns the user's email address" is provable by a test; "database load drops by half" is observable only in production, long after review. This section doesn't promise proof — the claims below do that. It records the *intended* outcome: what the author meant the change to accomplish, and the standard the reviewer judges the claims against — do these acceptance criteria and invariants plausibly deliver these outcomes? Intent and achievement can diverge: a change can merge having proven every claim and still miss its outcome. Recording what was intended is what lets a future reader see that divergence plainly, instead of reading the result as if it had been the goal.
+Outcomes may be individually testable or not, and both belong here. "GetPlaylist reports the playlist's total duration" is provable by a test; "database load drops by half" is observable only in production, long after review. This section doesn't promise proof — the claims below do that. It records the *intended* outcome: what the author meant the change to accomplish, and the standard the reviewer judges the claims against — do these acceptance criteria and invariants plausibly deliver these outcomes? Intent and achievement can diverge: a change can merge having proven every claim and still miss its outcome. Recording what was intended is what lets a future reader see that divergence plainly, instead of reading the result as if it had been the goal.
 
 ### Why
 
@@ -99,7 +99,7 @@ A short prose explanation of the problem, event, or need that caused the change 
 
 Conditions and non-behavioral boundaries that every acceptable implementation must be designed around. A constraint can prohibit an otherwise reasonable implementation choice, establish an operating condition the design must account for, or require an approach for a non-behavioral reason. It is included only when the author's direction or an explicit project instruction supplies the boundary; engineering preference is not a constraint.
 
-Constraints guide and bound engineering judgment; they are not automatically proof obligations. Some are directly checkable in the diff, such as "do not add a third-party runtime dependency." Others can be assessed only through engineering judgment before production, such as "the design must account for sustained production traffic of 10,000 requests per second." Lack of proof is not a violation. Implementation and review act on affirmative evidence that the change conflicts with a constraint, and otherwise use the constraint to guide their assessment without manufacturing a test, amendment, or definitive verdict.
+Constraints guide and bound engineering judgment; they are not automatically proof obligations. Some are directly checkable in the diff, such as "do not add a third-party runtime dependency." Others can be assessed only through engineering judgment before production, such as "the design must account for sustained production traffic of 40,000 `GetPlaylist` requests per second at evening listening peak." Lack of proof is not a violation. Implementation and review act on affirmative evidence that the change conflicts with a constraint, and otherwise use the constraint to guide their assessment without manufacturing a test, amendment, or definitive verdict.
 
 An environment-dependent target is an outcome when achieving it is the purpose of the change and a constraint when it is an operating boundary the change must preserve or account for. It can be both important and unprovable before production; that does not move it into an acceptance criterion. If implementation discovers an actual conflict, it changes the implementation. If no reasonable in-scope implementation can honor the constraint, it reports a failed change rather than weakening an approved boundary.
 
@@ -107,7 +107,7 @@ An environment-dependent target is an outcome when achieving it is the purpose o
 
 A list of falsifiable scenarios that must hold for the change to be **accepted**. Each one proves a selected outcome, guarantee, guardrail, or decision through specific behavior — what a caller, user, or operator can do or see after the change ships. Each AC must have a focused proving test in principle (unit, integration, or one-shot measurement), but the test is not named during authoring. The implementation agent writes the test as part of the work and reports its result during implementation.
 
-This is what authors usually have pre-code — "user calls X and sees Y," "field C appears in response D," "when E happens, metric F is emitted." Each AC is a focused scenario.
+This is what authors usually have pre-code — "a listener renames a playlist and sees the new name," "`trackCount` appears in the `GetPlaylist` response," "when a playlist fetch fails, the `playlist_fetch_errors` metric is emitted." Each AC is a focused scenario.
 
 **ACs are proof obligations, not an exhaustive behavioral specification.** Each independent decision should have an identifiable proof path, but it does not require a separate AC. One realistic scenario may prove several decisions when each is asserted distinctly and a failure remains diagnosable. Variants may share an AC when one assertion structure can falsify the same claim for each variant. Branches should not be combined solely because they share an implementation helper, and a claim should not be split solely because its implementation affects several observable surfaces. Project defaults and incidental implementation effects remain ordinary engineering and review concerns.
 
@@ -118,27 +118,27 @@ The list is forward-looking. It states what the change establishes or demonstrat
 **Examples of falsifiable acceptance criteria:**
 
 Functional behavior:
-- "When `UpdateUser` is called with a new email, a subsequent `GetUser` for that user returns the new email"
-- "`DELETE /items/{id}` returns 204 on success; a subsequent `GET /items/{id}` returns 404"
+- "When `UpdatePlaylist` renames a playlist, a subsequent `GetPlaylist` for that playlist returns the new name"
+- "`DELETE /playlists/{id}` returns 204 on success; a subsequent `GET /playlists/{id}` returns 404"
 
 Observability:
-- "When `GET /orders` returns a 500, the `get_orders_error_rate` metric is incremented"
-- "When a user is deleted, an audit log entry is written with the deleting actor's identity"
+- "When `GET /playlists/{id}` returns a 500, the `playlist_fetch_errors` metric is incremented"
+- "When a track is added to a collaborative playlist, an activity entry is written with the acting user's identity"
 
 Schema / response shape:
-- "`GetUser` response includes the user's email address as a top-level string field"
+- "`GetPlaylist` response includes the playlist's track count as a top-level integer field"
 
 These are all provable by integration or unit tests; none depend on production traffic.
 
 **Examples of claims that should be rejected:**
 
 Too abstract — what would it even mean to uphold these?
-- "GetUser is faster" — faster than what, in what scenario, by how much
+- "GetPlaylist is faster" — faster than what, in what scenario, by how much
 - "The cache is correct" — correct in what sense
 
 Concrete but not provable by a test that ships with the diff:
 - "Cache hit rate exceeds 60% under production traffic over a rolling 24h window" — specific, but observable only after deployment
-- "GetUser p95 latency drops below 10ms under 1000 RPS" — specific, but requires production-scale load to verify
+- "GetPlaylist p95 latency drops below 10ms under 1000 RPS" — specific, but requires production-scale load to verify
 
 Statements in the second category belong in `Outcomes` or `Constraints`, depending on whether they describe the result the change seeks or a boundary the implementation must account for. They do not belong in the AC list.
 
@@ -154,11 +154,11 @@ Include a performance AC only when **both** conditions hold:
 Memory allocation, allocation count, database-query count, network-call count, and algorithmic complexity (operations as a function of input size) are environment-independent and make good benchmark-style ACs. Wall-clock latency, throughput, and percentile latencies under load are environment-dependent and don't — they need different verification paths (staging load tests, production monitoring, perf regression suites), not focused proving-test ACs.
 
 **Examples of good performance ACs:**
-- "A single `ProcessOrder` call makes at most one database query"
-- "At most 10 concurrent requests can be in-flight through `ProcessOrder` at any given moment — useful for verifying bulkhead or rate-limiter patterns"
+- "A single `GetPlaylist` call makes at most two database queries, regardless of the playlist's track count"
+- "At most 10 concurrent imports can be in-flight through `ImportPlaylist` at any given moment — useful for verifying bulkhead or rate-limiter patterns"
 
 **Examples of performance claims that aren't good ACs:**
-- "GetUser returns in under 10ms" — depends on machine, DB connection, concurrent load
+- "GetPlaylist returns in under 10ms" — depends on machine, DB connection, concurrent load
 - "Throughput exceeds 1000 req/s" — depends on hardware, parallelism, network
 
 If your change needs an environment-dependent performance bound, that bound is not an AC. Record it as an outcome or constraint and let the team's normal performance systems provide whatever evidence they can. Change intent does not require the authoring agent to design that verification or require implementation and review to prove what their environments cannot establish.
@@ -174,8 +174,8 @@ The intent states the property in plain language, not every location where it ap
 Authoring does not attempt to enumerate every desirable invariant of the system. Include an invariant when it is part of the change the author is approving and its obligation extends beyond a focused acceptance scenario. Ordinary correctness, security, concurrency, and quality concerns remain part of implementation and review even when they are not written as intent invariants. The section may therefore be small or absent when acceptance criteria capture the approved change.
 
 **Examples of invariants:**
-- "Read-after-write: a user updated via `UpdateUser` is visible to `GetUser` across all caller paths, within the staleness window"
-- "Every mutation of user data produces an audit log entry"
+- "Read-after-write: a track added via `UpdatePlaylist` is visible to `GetPlaylist` across all caller paths, within the staleness window"
+- "Every mutation of a collaborative playlist writes an activity entry with the acting user's identity"
 - "The cache layer is safe for concurrent reads and writes from multiple callers, across all access paths added by this change"
 - "If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers"
 
@@ -198,7 +198,7 @@ Out-of-scope items are typically multi-sentence — enough to convey what was co
 
 - **Cache eviction policy customization.** The library defaults work for current access patterns. We can add hooks for customization later as specific callers need different policies.
 
-- **A batch `GetUsers` endpoint.** Considered but deferred. The dashboard would benefit from a multi-user fetch to reduce round-trips, but the auth model for batch requests needs its own design. A follow-up PR will deliver it once the auth approach is settled.
+- **A batch `GetPlaylists` endpoint.** Considered but deferred. The home screen would benefit from fetching a listener's playlists in one call to reduce round-trips, but the access model for batch requests — owned, collaborative, and followed playlists mixed — needs its own design. A follow-up PR will deliver it once that approach is settled.
 
 Each item is something the author thought about and explicitly excluded. Note the third example: an out-of-scope item can flag work the author has explicitly deferred. That signals to the reviewer that more work is coming, and gives a later reader the ability to check whether the follow-up actually landed.
 
@@ -220,7 +220,7 @@ Each amendment receives a short identifier local to the file. It states the disc
 
 For an addition, write `Was: not present`. For a removal, write `Now: removed`. A move or reclassification names the previous section under `Was` and the current section under `Now`. If one discovery changes several items, the same amendment may contain several `Was` and `Now` pairs.
 
-The discovered fact must describe the system, not the author's activity: something still true and checkable if the rest of the file were deleted. `Ran into implementation issues` fails; `AuthMiddleware caches token validation for 5m with no invalidation hook` passes.
+The discovered fact must describe the system, not the author's activity: something still true and checkable if the rest of the file were deleted. `Ran into implementation issues` fails; `SharingMiddleware caches access grants for 5m with no invalidation hook` passes.
 
 No amendment marker or discovery note appears beside the current item. A reader first reads the body as the complete current intent, then reads Amendments only to understand its implementation-time changes. The terminal verbatim `Now` wording makes the affected current item easy to find without adding identifiers to the body. The process that permits and checks these entries is covered in [Amending the intent](#amending-the-intent).
 
@@ -237,9 +237,9 @@ YYYY-MM-DD-short-slug.md
 Where `YYYY-MM-DD` is the date the intent was authored and `short-slug` is a kebab-case description of the change. Examples:
 
 ```
-change-intent/2026-05-16-add-getuser-cache.md
-change-intent/2026-05-22-migrate-auth-to-oidc.md
-change-intent/2026-06-03-fix-payment-timeout.md
+change-intent/2026-05-16-add-getplaylist-cache.md
+change-intent/2026-05-22-migrate-artwork-to-webp.md
+change-intent/2026-06-03-fix-offline-sync-timeout.md
 ```
 
 Three design choices are wrapped up here, each worth being explicit about:
@@ -248,7 +248,7 @@ Three design choices are wrapped up here, each worth being explicit about:
 
 **2. The slug is short, descriptive, and required up front.** The intent file gets a concise kebab-case slug at the moment of creation, normally three to six tokens. The target is commit-title specificity: use the shortest wording that clearly identifies the change. Slug length is naming guidance, not a scope test; exceeding six tokens is not by itself a reason to stop or split the change. Work that contains independently deliverable changes should be split, with a separate intent for each.
 
-**3. The slug identifies the change.** Use concrete nouns about what this pull request changes, not vague verbs about effort. A specific slug makes the intent recognizable in the current review and leaves a legible historical record without making that record an input to later changes. `add-getuser-cache` is more useful than `cache-improvements`; `migrate-auth-to-oidc` is more useful than `auth-refactor`.
+**3. The slug identifies the change.** Use concrete nouns about what this pull request changes, not vague verbs about effort. A specific slug makes the intent recognizable in the current review and leaves a legible historical record without making that record an input to later changes. `add-getplaylist-cache` is more useful than `playlist-improvements`; `migrate-artwork-to-webp` is more useful than `artwork-refactor`.
 
 Once its change merges, an intent file is frozen — never edited, never renamed, never deleted; it is a historical record. Before merge, the current approved candidate governs implementation and review. The implementation agent may amend that candidate through the process described in [Amending the intent](#amending-the-intent). If returned work changes the author's direction, the author may replace the candidate through [Revision before merge](#revision-before-merge). The replacement supersedes the prior unmerged candidate; the process does not preserve its revision history. Follow-up changes to the same area get their own file with their own date and slug; the date prefix makes the lineage visible without making earlier intents govern later changes.
 
@@ -352,7 +352,7 @@ The amendment process constrains the implementing agent; it does not prevent the
 
 The replacement is a new approved baseline at the same intent path. Approval applies to the complete replacement, including any amendment-derived wording it retains. Relevant implementation discoveries are incorporated into its ordinary current wording, and the superseded candidate's Amendments section is removed. Existing code may be retained where it satisfies the replacement, but affected implementation and evidence are reassessed before review runs again. At every point, implementation and review have exactly one current intent.
 
-In the worked example, the returned change may cause the author to require invalidating the cache entry on `UpdateUser` rather than allowing AuditLog to bypass the cache. The author replaces the current intent with that direction, approves it, and sends the change through implementation and review again. The merged intent describes the change that landed; it does not explain the superseded candidate.
+In the worked example, the returned change may cause the author to require invalidating the cached entry on `UpdatePlaylist` rather than allowing PlaybackService to bypass the cache. The author replaces the current intent with that direction, approves it, and sends the change through implementation and review again. The merged intent describes the change that landed; it does not explain the superseded candidate.
 
 ---
 
@@ -408,7 +408,7 @@ This gives the human reviewer a consistent frame for how AI participated in deve
 ### Sample `/goal` invocation
 
 ```
-/goal The change in change-intent/2026-05-16-add-getuser-cache.md is complete:
+/goal The change in change-intent/2026-05-16-add-getplaylist-cache.md is complete:
 - Every acceptance criterion is exercised by a test the agent wrote, and the test passes
 - For every acceptance criterion, a reversible product mutation or, when that is unsafe, a controlled configuration or dependency negative control makes the defining condition false and its proving test fails for the expected, claim-specific reason; one falsification serves multiple criteria only when each test fails on its own claim, and every temporary change is restored before the tests pass again
 - Every invariant has useful concrete tests where appropriate, and the agent has reasoned across the affected diff and relevant surrounding paths and surfaced any material uncertainty
@@ -457,46 +457,50 @@ Without an explicit stopping rule, the dialogue either runs forever or stops too
 
 ## Worked Example
 
-**The author's request:** "Add caching to UserService.GetUser to reduce database load."
+**The author's request:** "Add caching to PlaylistService.GetPlaylist to reduce database load."
 
 **AI reads relevant code and finds:**
-- `GetUser(userID)` returns the user, or nil for users that don't exist
+- `GetPlaylist(playlistID)` returns the playlist — its metadata and track list — or nil for playlists that don't exist
 - Documented as safe for concurrent use
-- Called by PaymentService, AuthService, AuditLog, NotificationService
+- Called by PlaybackService, SharingService, SearchIndexer, RecommendationService, and OfflineSyncService
 - No existing cache in this service
-- Similar caching pattern exists in `OrderService` using `CacheManager` interface
+- Similar caching pattern exists in `TrackCatalogService` using `CacheManager` interface
 
-**The skill explores and proposes; the author rules on the open decisions.** The approved file at `change-intent/2026-05-16-add-getuser-cache.md`:
+**The skill explores and proposes; the author rules on the open decisions.** The approved file at `change-intent/2026-05-16-add-getplaylist-cache.md`:
 
 ```markdown
-# Change intent: Cache GetUser reads
+# Change intent: Cache GetPlaylist reads
 
 ## Outcomes
-- Database load from `GetUser` reads drops by roughly 70% at current traffic.
-- `GetUser` P95 latency drops from ~80ms to under 10ms on repeated reads.
-- AuditLog has immediate read-after-write consistency.
+- Database load from `GetPlaylist` reads drops by roughly 70% at current traffic.
+- `GetPlaylist` P95 latency drops from ~80ms to under 10ms on repeated reads.
+- PlaybackService has immediate read-after-write consistency.
 
 ## Why
-GetUser is read-heavy at 40k requests per second during peak traffic. Its
-P95 latency is 80ms, dominated by the database round-trip, and these reads
-now account for most UserService database load.
+GetPlaylist is read-heavy at 40k requests per second during evening peak
+listening. Its P95 latency is 80ms, dominated by the database round-trip,
+and these reads now account for most PlaylistService database load. Search
+indexing, recommendations, share pages, and offline sync all tolerate a
+briefly stale track list; playback does not — a song a listener just added
+to a playlist must play when they tap it.
 
 ## Constraints
 - The design must account for sustained production traffic of 40k requests
-  per second; this operating condition guides implementation and review but
-  is not expected to be reproduced by a repository test.
-- Use the existing CacheManager rather than introducing a new caching
-  primitive.
+  per second at evening listening peak; this operating condition guides
+  implementation and review but is not expected to be reproduced by a
+  repository test.
+- Use the existing CacheManager, the pattern TrackCatalogService already
+  uses, rather than introducing a new caching primitive.
 - Do not introduce distributed cache coordination.
 
 ## Acceptance criteria
-- On a cache hit, `GetUser` returns the cached value without querying the database
+- On a cache hit, `GetPlaylist` returns the cached value without querying the database
 - On a cache miss, the `cache_misses` counter is incremented; on a hit, `cache_hits` is incremented
-- After `UpdateUser` successfully changes a user's email, AuditLog's next read of that user returns the new email even if the ordinary `GetUser` cache entry has not expired
-- When `UpdateUser` is called with a new email, a subsequent `GetUser` for that user returns the new email within 30 seconds
+- After `UpdatePlaylist` adds a track, PlaybackService's next read of that playlist includes the new track even if the ordinary `GetPlaylist` cache entry has not expired
+- When `UpdatePlaylist` adds a track, a subsequent `GetPlaylist` for that playlist includes the new track within 30 seconds
 
 ## Invariants
-- Read-after-write: across all caller paths through `GetUser`, no caller sees data older than 30 seconds after an `UpdateUser` for that user
+- Read-after-write: across all caller paths through `GetPlaylist`, no caller sees a track list or metadata older than 30 seconds after an `UpdatePlaylist` or `DeletePlaylist` for that playlist
 - The cache layer is safe for concurrent reads and writes from multiple callers, across all access paths added by this change
 - If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers
 
@@ -505,23 +509,23 @@ now account for most UserService database load.
 - **A dedicated API for cache inspection or invalidation.** Not included here. A follow-up PR will add inspection endpoints once production data shows whether on-demand invalidation is needed.
 ```
 
-**A mid-implementation amendment.** While implementing the cache, the implementation agent discovers that `GetUser` returns nil for users that do not exist, while the approved intent does not address whether negative results are cached. Caching negative results would allow a newly created user to remain invisible for up to 30 seconds after a missing lookup; not caching them preserves existing immediate post-creation visibility. Those branches deliver different changes rather than different implementations of the same change, and the approved intent does not choose between them. The shared precedence selects not caching negative results because it preserves existing external behavior. The intent gains one acceptance criterion and one amendment entry:
+**A mid-implementation amendment.** While implementing the cache, the implementation agent hits a question the approved intent does not settle: `GetPlaylist` returns nil for playlists that do not exist — should negative results be cached? The authoring read recorded the nil-return fact, but the dialogue never carried it forward to the fork it creates: an authoring miss, of exactly the kind the amendment channel exists to absorb without stalling the work. Caching nil would leave a playlist created immediately after a missing lookup invisible to `GetPlaylist` for up to the TTL — "playlist not found" on a playlist the listener just made; not caching negative results preserves existing immediate post-creation visibility. Those branches deliver different changes rather than different implementations of the same change, and the approved intent does not choose between them. The shared precedence selects not caching negative results because it preserves existing external behavior. The intent gains one acceptance criterion and one amendment entry:
 
 ```markdown
 ## Acceptance criteria
-- A `GetUser` for a nonexistent user is never served from the cache: a user
-  created immediately after a missing lookup is returned by the next `GetUser`
-  call.
+- A `GetPlaylist` for a nonexistent playlist is never served from the cache:
+  a playlist created immediately after a missing lookup is returned by the
+  next `GetPlaylist` call.
 
 ## Amendments
-- **A1 — 2026-05-19.** `GetUser` returns nil for nonexistent users; caching
-  those results would delay visibility of newly created users by up to the
-  TTL. Precedence rule 3 selects preserving existing immediate post-creation
-  visibility.
+- **A1 — 2026-05-19.** `GetPlaylist` returns nil for playlists that do not
+  exist; caching those results would delay visibility of newly created
+  playlists by up to the TTL. Precedence rule 3 selects preserving existing
+  immediate post-creation visibility.
   - Was: not present
-  - Now — Acceptance criteria: - A `GetUser` for a nonexistent user is never
-    served from the cache: a user created immediately after a missing lookup
-    is returned by the next `GetUser` call.
+  - Now — Acceptance criteria: - A `GetPlaylist` for a nonexistent playlist
+    is never served from the cache: a playlist created immediately after a
+    missing lookup is returned by the next `GetPlaylist` call.
 ```
 
 Implementation continues against the amended intent. At review, the intent author accepts the current candidate or replaces it and sends the change through implementation and review again.
@@ -548,7 +552,7 @@ Existing codebases rarely document every property a change may affect. The autho
 
 ### Cross-cutting invariants
 
-Some properties are system-wide ("every mutation of user data produces an audit log entry"). A change intent includes such a property only when it is part of the change being approved, and states the property without requiring the author to enumerate every mutation site. Existing project-wide rules remain applicable through normal project instructions and ordinary implementation and review; this design does not require a separate registry before a team can use change intent.
+Some properties are system-wide ("every mutation of a collaborative playlist writes an activity entry with the acting user's identity"). A change intent includes such a property only when it is part of the change being approved, and states the property without requiring the author to enumerate every mutation site. Existing project-wide rules remain applicable through normal project instructions and ordinary implementation and review; this design does not require a separate registry before a team can use change intent.
 
 ### Method-level invariants are separate
 
