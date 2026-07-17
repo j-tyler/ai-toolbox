@@ -164,6 +164,9 @@ tagged with the source of its direction:]
 - Fact confidence: <none, or each draft item or recommendation that rests on an
   ⟨inferred⟩ or ⟨documented, unenforced⟩ fact, with the fact and its standing
   stated in plain language>
+- Deferred to exploration: <none, or each brief item that is neither in the
+  draft nor under Needs your attention, with the short explanation that it
+  was not change-defining>
 
 Approve the proposal as a whole, approve it except for a named item, or
 correct an item or draft line.
