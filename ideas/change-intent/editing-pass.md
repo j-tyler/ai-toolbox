@@ -1,4 +1,11 @@
-# Human-Voice Pass: Findings
+# Editing-Pass Findings
+
+This file is the worklist for tightening the adopter-facing corpus. It holds two passes over the same revision:
+
+- **Part 1 — Voice and tone** (immediately below): terms and phrases that read as AI-written or are hard for humans to understand, with per-site rewrites.
+- **Part 2 — Repetition and structure** (second half of this file): the design concepts repeated across the corpus, which repetitions to remove, and how to restructure the major files so each concept is defined once and referenced thereafter.
+
+**Recommended order: apply Part 2 first, then Part 1.** The restructure deletes or moves much of the text Part 1 annotates; polishing sentences that are about to be cut is wasted work. After the restructure, Part 1's line numbers are stale — re-locate each entry by its quoted phrase, not its line number.
 
 **Corpus revision:** `d2d443e`. All line numbers below refer to that revision; re-verify before editing if the files have moved.
 
@@ -405,3 +412,192 @@ Lower-confidence flags. Each is defensible as-is; listed so the editing pass can
 - `design.md:17` — "The squeeze is the same on a team of two as on a team of twenty." Plain English; keep.
 - `design.md:427/429` — "proposal scaffolding" → "the proposal's working annotations (source tags, open items)." Clear enough to keep.
 - `ideas/working-in-public/README.md:12` — "the practice compounds." Finance metaphor but widely understood; keep.
+
+---
+
+# Part 2 — Repetition and Structure
+
+**Goal.** Make the major files — design.md above all — substantially shorter without losing content or introducing confusion. The method: identify each concept that is currently explained in several places, choose one canonical home for it, and reduce every other site to the term plus a link. Restructure so concepts are introduced before they are referenced.
+
+## Diagnosis: why the corpus is long
+
+Four causes, in order of impact:
+
+1. **The overview exists in four layers.** README.md, design.md's Overview (lines 3-11), design.md's Summary (lines 569-579), and fragments of notes.md all state the same definition, payoff, and workflow. README.md:3 and design.md:7 are near-verbatim copies of the same paragraph. The Summary restates the entire document it summarizes. A reader entering through the README then reading design.md top to bottom encounters the full pitch three times before reaching anything new.
+
+2. **Defensive caveats accreted at every mention site instead of at the definition site.** The corpus was built through successive review-response commits, and each round's fix was patched in wherever the concept appeared. The result: "lack of proof is not a violation" appears roughly eight times in design.md; "the intent states the property, not an inventory of sites or tests" roughly seven; "the current body must remain complete without Amendments" five (lines 211, 312, 321, 325, 380). Each caveat is correct; the repetition is what a reader experiences as length. The fix is systematic, not sentence-by-sentence: state each rule once where its concept is defined, and let other sites use the defined term without re-arguing it.
+
+3. **Design.md re-explains process rules at every stage that touches them.** The amendment rules are the worst case: format in the artifact spec (211-225), process in Amending the intent (284-337), a full re-walk in the review phase (380), echoes in the workflow list (396-398), the sample `/goal` (405-408), and the Summary (575). The would-fail demonstration is fully specified four times (367, 383, 405, 525) — the sentence "one falsification may support multiple criteria only when each test fails on its own claim" appears verbatim-adjacent in all four.
+
+4. **Design.md duplicates the instruments in memo voice.** The Authoring Skill section (415-446) walks the same four phases authoring-skill.md specifies; the amendment record grammar (213-225) is specified again in authoring-skill.md:254-265 and implementation-guidance.md:59-70; the sample `/goal` invocation (400-411) is operational content. mechanics/README.md:5 currently sanctions this ("the design says everything the idea needs said") — so cutting here requires a deliberate boundary change, flagged below as **Decision D1**.
+
+## Repetition to keep
+
+Deliberate redundancy that should survive the restructure:
+
+- **Design ↔ instruments.** Instruments are loaded by agents per role and must be self-contained; their overlap with the design (and with the always-loaded agents-md-block) is the two-voices architecture working. Part 2 shortens the *human* corpus; instrument-internal redundancy is a separate, later question with its own tradeoff (agent context cost vs. self-containment).
+- **README as compressed pitch.** The five purposes and a short definition belong in both README and design.md — entry point and full document. What should not be duplicated is the paragraph-level text itself.
+- **The fork test stated as both prose and decision tree** (design.md:68-80). Two renderings of the canonical statement serve different readers; keep both, in one place.
+- **The worked example.** Concrete redundancy with the spec is what examples are for. Trim only where it re-*tells* process rules instead of *showing* them (see R11).
+- **Short refrains** ("Today that means reviewing better; over time, it means reviewing less") — a sentence-length echo is rhetoric, not bloat.
+
+## Repeated concepts: inventory
+
+Format: canonical home (proposed) → all sites → action. Line numbers are `d2d443e`.
+
+### R1. The definition paragraph (artifact + contract + team latitude)
+
+- **Canonical:** README.md:3 (the entry point owns the pitch).
+- **Sites:** README.md:3; design.md:7 (near-verbatim duplicate); compressed echoes at design.md:353 and 575.
+- **Action:** design.md's Overview opens with one definitional sentence and links to the README instead of restating the paragraph. The echo in 353 trims to a clause; 575 goes with the Summary (R14).
+
+### R2. The Overview pre-states the whole Downstream section
+
+- **Sites:** design.md:9 states the three consumers (dup. of 355), replacement before merge (dup. of 341-347), the implementation/review evidence split (dup. of 357 and 383), and the core-adoption-level evidence rule (dup. of README.md:19 and notes.md:44-46).
+- **Action:** Overview shrinks to orientation — what the artifact is, that the document covers concept → artifact → integration → skill — and stops pre-arguing. Two to three sentences replace lines 9-11.
+
+### R3. Reviewability payoff refrain
+
+- **Canonical:** README.md:19 for the pitch; design.md:387-391 for the substantive human-review treatment.
+- **Sites:** README.md:19; design.md:5; design.md:387-391; notes.md:8-23 (mechanism discussion — distinct, keep).
+- **Action:** design.md:5 keeps one framing sentence. No other change; listed to prevent the editing pass from cutting the wrong copy.
+
+### R4. The change-defining test and implementation latitude
+
+- **Canonical:** design.md:68-80 (Design principles — prose + tree).
+- **Sites:** README.md:21 (compressed — keep); design.md:68-80; 263; 296 (partial re-derivation); 320; 379; 425.
+- **Action:** 263, 320, 379, and 425 use the term "change-defining" with a link instead of re-stating the could-the-author-approve-once test. 296 keeps only its amendment-specific nuance (a fork created by the selected implementation is not necessary) and drops the general restatement.
+
+### R5. Completeness is a quality standard, not omniscience
+
+- **Canonical:** design.md:86 (one sentence at the artifact spec) + 537-539 (the full discussion, in Design Tensions).
+- **Sites:** README.md:21; design.md:86; 537-539; (agents-md-block.md:13 — agent-facing, stays).
+- **Action:** README.md:21 drops the caveat sentence; the README does not need to pre-defend. 86 keeps one sentence pointing at 537 for the argument.
+
+### R6. Constraints are boundaries, not proof obligations — and the outcome/constraint/AC classification rule
+
+- **Canonical:** §Constraints (design.md:100-104). The classification rule for environment-dependent targets lives there once.
+- **Sites:** README.md:33; design.md:50 (one line in the Falsifiable principle — keep, the principle needs it); 62 (table row — keep, terse); 100-104; 116; 143; 164; 369; 372; 379; 575. The classification rule alone is stated four times: 104, 116, 143, 164.
+- **Action:** The AC section states the redirect once ("statements like these belong in Outcomes or Constraints — see §Constraints") and the Performance subsection keeps only its own contribution: the environment-independence criterion and the good/bad examples. Lines 369, 372, 379 compress to "accounts for constraints as §Constraints defines" or equivalent; 575 goes with the Summary.
+
+### R7. Invariants are not closed by tests; no site inventory
+
+- **Canonical:** §Invariants (design.md:166-182).
+- **Sites:** README.md:35 (short — keep); design.md:166-182; 357; 368; 406; 433/435; 525; 547 (tension-specific — keep).
+- **Action:** 357's sentence "An invariant states a property and its intended reach, never a list of sites or tests…" is §Invariants' content verbatim — delete. 368 and 406 compress to the obligation without the rationale. 525 trims the re-teaching sentence ("The intent states the invariant properties; it does not enumerate…") — the example has already shown it.
+
+### R8. The amendment cluster (biggest single consolidation)
+
+- **Canonical:** one chapter, "Amending the intent" (284-337), which **absorbs the record format currently at 211-225**. The artifact-spec §Amendments becomes three to four lines: what the section is, that absence means the intent held, pointer to the chapter. This also fixes the current forward reference (the format at 211-225 depends on a process not yet explained).
+- **Sites:** README.md:21, 27, 37 (three separate explanations in one README); design.md:86; 211-225; 292-304 (canonical process); 312; 320 (precedence repeated from 300); 321; 325-329; 370; 380 (full re-walk in the review phase); 396; 405; 504-523 (worked example — keep); 575.
+- **Action:**
+  - README carries the amendment concept **once** (in the line-21 paragraph or the line-37 bullet, not both plus line 27).
+  - The precedence list is stated once (300); the copy at 320 becomes "the shared precedence above."
+  - "The current body must remain complete without Amendments" is stated once, in the chapter (currently at 211, 312, 321, 325, and 380).
+  - The review-phase item 3 (380) compresses to: what review checks (eligibility, coherence, precedence applied) with a link to the chapter — the *how* is already there and in review-guidance.md. Roughly ten lines become three.
+  - "What an amendment leaves behind" (323-329) merges into the chapter's format material; most of it duplicates 211-225 once they are co-located.
+
+### R9. Replacement before merge
+
+- **Canonical:** Revision before merge (design.md:341-347).
+- **Sites:** README.md:21, 25; design.md:9; 86; 253; 286; 314; 341-347; 353; 398; 429; 575.
+- **Action:** Every site outside the chapter reduces to one clause — "the author may replace the unmerged intent (see Revision before merge)" — instead of re-explaining supersession, clean-baseline, and reassessment semantics. The current text re-explains those at 314, 345, and 429.
+
+### R10. One current intent; frozen after merge; merged intents don't govern later changes
+
+- **Canonical:** File location and naming (design.md:253), with one sentence at 86.
+- **Sites:** README.md:21; design.md:86; 253; 343; 345; 355; 381.
+- **Action:** 345, 355, and 381 reference rather than restate.
+
+### R11. The would-fail demonstration
+
+- **Canonical at design level:** the implementation-phase bullet (367), stated once in compressed form; the full procedure already lives in implementation-guidance.md.
+- **Sites:** design.md:367; 383; 405-408; 525.
+- **Action:** 383 keeps only what is new there — *why* the requirement exists (the agent writes both code and tests) and that review does not depend on the session demonstrations — and drops the procedural restatement. The sample `/goal` invocation (400-411) moves to implementation-guidance.md (see Decision D1) or shrinks to two lines; its five bullets duplicate 367-370 almost line for line. 525 trims to one sentence. The "one falsification serves multiple criteria only when…" sentence survives in exactly one design.md location.
+
+### R12. Review independence, evidence latitude, and `cannot verify`
+
+- **Canonical:** the review phase (design.md:376-385).
+- **Sites:** README.md:19, 27; design.md:9; 357; 383; 389; 397; 539; 575. The "teams may preserve further evidence" rule alone appears at README.md:19, design.md:9, 357, 383, and notes.md:44-47.
+- **Action:** 357 currently makes the full independence argument that 383 makes again — keep it in the review phase, reduce 357 to the thin-handoff statement. `Cannot verify` semantics are defined once (383); 397 and 539 use the term without re-defining it.
+
+### R13. Roles are logical; teams map them freely; the author needn't be human
+
+- **Canonical:** one place, proposed: the Diligence principle (design.md:48) for the role/latitude rule, and "The intent author doesn't have to be a human" (277-281) for the autonomous trajectory.
+- **Sites:** README.md:3, 15, 27; design.md:7; 48; 278; 353; 391; 577; notes.md:34-40; 42-53.
+- **Action:** This is the most-repeated meta-point in the corpus. README keeps purpose 5 and one sentence in Adoption fit. design.md:353's intro paragraph trims its restatement; 577 goes with the Summary. notes.md:34-40 substantially duplicates design.md:277-281 — keep the design.md copy, reduce the notes passage to its one distinct point (teams orchestrate in unpredictable ways).
+
+### R14. The Summary section (design.md:569-579)
+
+- **Action: delete it, or reduce to a three-sentence close.** Line 571 repeats the Problem section; 573 repeats the artifact spec and naming; 575 repeats the entire Downstream section including the amendment and constraint rules; 577 repeats 277-281; 579 repeats 415-446. Nothing in it is unique. A document whose body is tight does not need an internal summary — the README is the summary.
+
+### R15 (minor). Review-job conflation stated twice
+
+- **Sites:** design.md:31-38 (Problem 5: four jobs) and 265-270 (two cognitive tasks).
+- **Action:** These are related framings, not duplicates, but 265-270 can compress to two lines with a back-reference to Problem 5.
+
+### R16 (minor). README's three amendment/author-ruling mentions
+
+- **Sites:** README.md:21, 27, 37 all state that the author rules on amendments when work returns.
+- **Action:** once.
+
+## Restructuring plan
+
+### The rule that drives everything
+
+**Each concept has exactly one canonical home; every other mention is the defined term, optionally with a link.** The corpus already writes this way about *code* ("the intent states the property, not an inventory") — apply the same discipline to the document itself. When a later section needs a rule, it names it; it does not re-argue it. This is also the guard against the accretion pattern resuming: a future review fix lands at the canonical site, nowhere else.
+
+### README.md (change-intent) — target shape
+
+Entry point, not compressed spec. Keeps: title paragraph (canonical pitch per R1), the five purposes, the purposes-as-bar sentence, one reviewability paragraph, Adoption fit trimmed of its amendment/replacement re-explanations (R8, R9, R16), and a section list at **one line per section, no caveats** — the caveats live in design.md's artifact spec. Roughly 40% shorter. The current line-21 paragraph and lines 29-39 carry most of the cut.
+
+### design.md — target shape
+
+Section-by-section, with what each becomes canonical for:
+
+| Section | Now | Action |
+| --- | --- | --- |
+| Overview (3-11) | Restates README + pre-states Downstream | 1 short paragraph + document map (R1, R2) |
+| The Problem (15-38) | Mostly unique | Keep; light trim only |
+| Design principles (42-80) | Mostly unique | Keep — canonical for: used-beats-better, no-adversary, falsifiability, continuation paths + role table, **approved boundaries** definition, **fork test + tree** (R4) |
+| What an intent file contains (84-225) | Longest section; classification rule ×3; amendment format | Canonical for section semantics (R5, R6, R7). Classification rule stated once. §Amendments shrinks to a pointer; format moves to the amendment chapter (R8) |
+| File location and naming (229-253) | Mostly unique | Keep — canonical for frozen history / one current intent (R10). Merge the overlapping slug points (choices 2 and 3) |
+| Why the initial intent comes first (257-280) | Unique + one restatement | Keep — canonical for exploration boundary and AI-author (R13). Compress 263's fork restatement and 265-270 (R15) |
+| Amending the intent (284-337) | Canonical process, minus format | **Absorbs the record format**; states body-standalone rule and precedence once each (R8) |
+| Revision before merge (341-347) | Canonical | Keep as-is; everything elsewhere links to it (R9) |
+| How It Integrates Downstream (351-411) | Heaviest internal repetition | Biggest cut. Intro (353-357) → thin-handoff + consumers, minus the latitude/invariant/evidence restatements. Implementation phase keeps the four bullets once (R11). Review phase keeps the four assessments with item 3 compressed (R8) and is canonical for independence + `cannot verify` (R12). Sample `/goal` moves to mechanics or shrinks to two lines (D1). Human review + workflow keep |
+| The Authoring Skill (415-446) | Duplicates authoring-skill.md in memo voice | Keep: role split, the critical constraint (419), scaling, stopping condition. Phase walk (421-429) compresses to ~4 lines — the phases are the instrument's content (D1) |
+| Worked Example (450-527) | Keep | Trim only 525-527 where it re-tells process rules (R7, R11) |
+| Design Tensions (531-551) | Mostly unique | Keep — canonical for completeness-not-omniscience (R5) |
+| Where this is heading (555-565) | Unique | Keep |
+| Summary (569-579) | Full duplicate | Delete or 3 sentences (R14) |
+
+Estimated result: design.md from 586 lines to roughly 380-420 — about a third shorter — with no rule lost, because every deletion has a surviving canonical site.
+
+### notes.md
+
+Small file, mostly distinct. Two trims: 34-40 duplicates design.md:277-281 (R13); 42-53's latitude points consolidate once design.md has a single canonical latitude statement. "Nearest alternatives" and "Two voices" stay untouched.
+
+### Ordering fixes (introduce before reference)
+
+1. **Amendment format currently precedes the amendment process.** Fixed by R8's move: the artifact spec names the section's purpose; the chapter defines both process and format.
+2. **Replacement is invoked three times (design.md:9, 86, 253) before being explained (341).** Fixed by R9: early mentions become a clause + link.
+3. **"Approved boundaries" is defined at 54 and re-glossed later** (292, and inline in README:21). Keep the 54 definition; later sites use the term bare.
+4. **The Summary's deletion (R14) removes the last section that re-introduces everything after the reader already has it.**
+
+## Decisions needed before applying
+
+**D1 — the design/mechanics boundary.** mechanics/README.md:5 currently says the design "says everything the idea needs said" and the mechanics only add operational detail. The deepest cuts above (amendment grammar, sample `/goal`, the four-phase walk) move *normative operational detail* so it lives only in the instruments, with design.md carrying the concept plus the worked example. That is a boundary change: design.md stops being a self-contained spec and becomes the argument + artifact definition, with exact procedures owned by the instruments. Recommendation: accept it — a human adopter needs the concept and one concrete example, not the grammar, and the grammar already exists in three files. If accepted, reword mechanics/README.md:5 to match. If declined, the cut shrinks from ~35% to ~25% (the internal repetition still goes; the design keeps its own full copies of formats).
+
+**D2 — where the fork test's canonical prose lives.** Part 2 proposes design.md:68-80 (Design principles). The alternative is the artifact spec (it governs what enters the file). The principles section is earlier, which serves introduce-before-reference; recommended.
+
+**D3 — instrument-internal redundancy.** The agents-md-block restates the fork test, precedence, necessity test, and constraint semantics that each instrument also carries. That redundancy is deliberate (self-contained instruments) but costs agent context on every load. Out of scope for this pass; listed so it is a decision, not an accident, when the instruments are next revised.
+
+## How to run the edit
+
+1. Apply R8 and R14 first (the amendment consolidation and the Summary deletion) — they are the largest, most mechanical wins and change the least prose.
+2. Then the Downstream section (R11, R12) and the Overview (R1, R2).
+3. Then the per-site caveat sweep (R4-R7, R9, R10, R13) — this one is delicate: at each site, confirm the canonical home actually carries the caveat before deleting the local copy.
+4. Then README and notes.
+5. Then run Part 1 (voice) over the surviving text, re-locating entries by quoted phrase.
+6. Final read top to bottom for introduce-before-reference and for any caveat that lost its last home.
