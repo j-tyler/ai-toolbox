@@ -55,6 +55,37 @@ for its environment.
 Urgent changes use the same process because the authoring dialogue scales
 with the change.
 
+## Nearest alternatives
+
+A team evaluating change intent may weigh it against three familiar
+practices. What it does differently:
+
+**A committed plan document.** A plan says what will be done. Once the
+work merges it tells the future nothing: the code shows what happens,
+not why, and not what was intended. An intent states what the change
+must and must not do — a goal that judges when implementation is done,
+a target review checks the finished change against, and, after merge,
+the record of why the change was made: the most valuable context of the
+work, kept with the code it produced. A reviewer who can see what the
+agents were held to can spend their attention where it is most valuable.
+
+**Architecture decision records.** An architecture decision record is a
+standing, project-wide decision: it binds future work until another
+record supersedes it, so before acting, an agent must gather the records
+still in force and reason across them — a burden that grows with the
+project. A merged intent binds nothing later. It governs only its own
+change, so a project using change intent gets clearer as changes
+accumulate, not more complicated: the repository carries the why behind
+every change it contains, and for an AI agent that history is
+incredibly rich.
+
+**Spec-driven development.** A spec tries to be complete about the
+system's behavior and must be maintained as the system changes. An
+intent is deliberately incomplete: the change-defining test lets in only
+the decisions that choose which change is delivered, and everything else
+stays the implementer's call. One intent per change, frozen at merge —
+there is nothing to maintain.
+
 ## Two voices
 
 These files are written for two readers, and each file holds one voice.
