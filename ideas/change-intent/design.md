@@ -402,7 +402,7 @@ This gives the human reviewer a consistent frame for how AI participated in deve
 ```
 /goal The change in change-intent/2026-05-16-add-getplaylist-cache.md is complete:
 - Every acceptance criterion is exercised by a test the agent wrote, and the test passes
-- For every acceptance criterion, a reversible product mutation or, when that is unsafe, a controlled configuration or dependency negative control makes the defining condition false and its proving test fails for the expected, claim-specific reason; one falsification serves multiple criteria only when each test fails on its own claim, and every temporary change is restored before the tests pass again
+- For every acceptance criterion, a reversible product mutation or, when that is unsafe, a controlled configuration or dependency negative control makes the defining condition false and its proving test fails for the expected, claim-specific reason, with any limit on what could be safely demonstrated surfaced with its reason; one falsification serves multiple criteria only when each test fails on its own claim, and every temporary change is restored before the tests pass again
 - Every invariant has useful concrete tests where appropriate, and the agent has reasoned across the affected diff and relevant surrounding paths and surfaced any material uncertainty
 - The implementation accounts for the outcomes, constraints, exclusions, and amendments without claiming proof for constraints the available environment cannot establish
 - Any newly discovered change-defining decision is amended on the record; ordinary technical choices remain implementation latitude
