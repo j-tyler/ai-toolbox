@@ -1,9 +1,10 @@
 # Editing-Pass Findings
 
-This file is the worklist for tightening the adopter-facing corpus. It holds two passes over the same revision:
+This file is the worklist for tightening the adopter-facing corpus. It holds three passes over the same revision:
 
 - **Part 1 — Voice and tone** (immediately below): terms and phrases that read as AI-written or are hard for humans to understand, with per-site rewrites.
-- **Part 2 — Repetition and structure** (second half of this file): the design concepts repeated across the corpus, which repetitions to remove, and how to restructure the major files so each concept is defined once and referenced thereafter.
+- **Part 2 — Repetition and structure**: the design concepts repeated across the corpus, which repetitions to remove, and how to restructure the major files so each concept is defined once and referenced thereafter.
+- **Part 3 — Content recovered from the multi-angle reviews** (end of file): the review files were working records, deleted after this catalog was taken; Part 3 preserves the only-in-review content that arguably belongs in a permanent file.
 
 **Recommended order: apply Part 2 first, then Part 1.** The restructure deletes or moves much of the text Part 1 annotates; polishing sentences that are about to be cut is wasted work. After the restructure, Part 1's line numbers are stale — re-locate each entry by its quoted phrase, not its line number.
 
@@ -601,3 +602,57 @@ Small file, mostly distinct. Two trims: 34-40 duplicates design.md:277-281 (R13)
 4. Then README and notes.
 5. Then run Part 1 (voice) over the surviving text, re-locating entries by quoted phrase.
 6. Final read top to bottom for introduce-before-reference and for any caveat that lost its last home.
+
+---
+
+# Part 3 — Content Recovered from the Multi-Angle Reviews
+
+`multi-angle-review.md` (Round 1, reviewed at `b9c3c71`) and `multi-angle-review-2.md` (Round 2 + addendum, reviewed at `47b0dcf`) were working records, not corpus, and are deleted in this branch. Before deletion, both were read in full and checked against the permanent files at `d2d443e`. This part catalogs everything that existed **only** in the review files and arguably belongs somewhere permanent. Nothing here has been implemented — each item names a proposed home and waits for a decision.
+
+Most of the reviews did not need recovering: the applied fixes are in the corpus (verified — see section D), the rejected machinery was rejected deliberately, and the assessments themselves are ephemeral. What follows is the residue.
+
+## A. Design insights stated only in the reviews
+
+These are arguments, not fixes — content that strengthens the corpus and currently exists nowhere in it.
+
+**A1. The reference-class analogy.** The addendum's clarification of what kind of thing change intent is: a workflow contract in the same sense that "pick up a ticket, say when you're done, ask a teammate to review before merge" is one — real, load-bearing, almost entirely informal, formalized only at the artifact. This is the fastest way to convey the design's weight class to a human reader, and it exists only in the review. Proposed home: design.md Overview or the README's opening paragraph.
+
+**A2. Wording precision is the whole mechanics.** The addendum's observation: in a deliberately lightweight process, the instrument wording is the only mechanics there is — so wording precision is not bureaucracy, it is the entire defect surface. And it matters *more* as seats become autonomous, because agents execute instruments literally; the human shrug that absorbs an ambiguous sentence disappears when the human does. This is the operating premise behind maintaining the instruments carefully. Proposed home: mechanics/README.md (its "Audience and voice" section already discusses instruction-level failures) or notes.md.
+
+**A3. The fork test doubles as an escalation rule for AI authors.** For an AI orchestrator in the author role, "does choosing between these options decide which change is delivered?" is precisely the test for what must be pushed up to the authority boundary versus decided locally. The corpus says an orchestrator can hold the author role (design.md:277-281) but never states that the design's central test is also the escalation discipline that makes that safe. Proposed home: the "intent author doesn't have to be a human" section, one or two sentences. Related, from the same passage: the binding constraint on full autonomy is organizational, not technical — the authoring mechanics are automatable now; what an AI author lacks is an upstream objective and authority envelope.
+
+**A4. Purpose 3 inverts under autonomy instead of disappearing.** When no human reviews each change, the consistent per-change frame becomes the substrate a human *samples* when auditing the autonomous pipeline — the same artifact serving supervision instead of review. This directly strengthens the forward-looking claim (purpose 5) and answers "what is consistency for once nobody is reading each change?" Proposed home: notes.md "Reviewing less," or the README's purpose 5.
+
+**A5. The adoption break-even, stated honestly.** Round 2's economics lens: the differentiated value concentrates at changes carrying at least one genuinely unsettled change-defining decision or a cross-cutting guarantee; below that line, the fixed floor dominates. The corpus's position is "every change; small changes have small intents" — it never states where the value concentrates. These can coexist (the mandate preserves consistency; the break-even says where the payoff is), but the corpus should hold that tension knowingly. Proposed home: notes.md or design.md Design Tensions. Note this pairs with B3 below.
+
+## B. Fixes the addendum vetted as admissible that were never applied
+
+Round 2's addendum re-triaged every finding under the design's constraints (no new phases, gates, artifacts, formats, or tooling) and kept these as legitimate wording-level repairs. The subsequent commits applied most of the majors (section D) but not these. Deleting the reviews deletes the worklist, so it is preserved here. Verified absent from the corpus at `d2d443e`:
+
+**B1. Restoration self-check in the would-fail procedure.** One line in implementation-guidance.md's procedure: surface `git status`/`git diff` in the transcript after restoring temporary mutations, as evidence the worktree is clean. Currently restoration is an outcome with no checkable evidence — a forgotten second temporary edit in a file the re-run tests don't touch is invisible to the transcript-only evaluator. (Round 2 Finding 4.)
+
+**B2. Stated worktree assumption and staging instruction.** One sentence in implementation-guidance.md: the would-fail procedure assumes an exclusive worktree while temporary mutations exist; and the mid-work "commit the amended intent before continuing" requires selective staging while falsifying edits sit in the tree. Matters more under multi-agent operation, not less. (Finding 13.)
+
+**B3. Pilot-scoping latitude.** One sentence of granted latitude — teams may scope adoption to a directory, subteam, or change class during a pilot — somewhere the agents block or README can carry it. As pasted today, the block is repo-global and binding ("Every change"; agents decline intent-less work), which makes the experiment the design invites structurally noisy in a half-adopted repo. (Finding 6; the addendum called this "the same latitude move the corpus makes everywhere else.")
+
+**B4. Artifact hygiene.** Intent files are permanent repository history, and Why sections describe incidents. One sentence instructing agents not to persist secrets, credentials, customer identifiers, or incident-sensitive details into intent files, deferring to repository data-classification rules. Nowhere in the corpus. (Round 1, "persistent-artifact hygiene"; never refuted, never applied.)
+
+**B5. The "review less" claim needs the team's own signal.** One honest sentence in notes.md: review verdicts and post-merge defects are never durably tied to intents, so a team that wants to *act* on reviewing less will need its own measurement, and has latitude to build one. Same scoping move the corpus made with chain of custody. (Finding 9, as re-triaged.)
+
+**B6. Ordinary-review reporting clause.** Extend review-guidance.md:13 by one clause so "report what you established" explicitly covers the ordinary-review half, not only the intent-side judgments; optionally note that teams may run the ordinary pass unanchored. Today a review that skipped ordinary coverage is indistinguishable from one that ran it clean. (Finding 5, as reduced by the addendum.)
+
+**B7. Constraint vs. Out of scope tiebreak.** "Do not introduce distributed cache coordination" is a Constraint in the worked example (design.md:486) while "Distributed cache coordination" is the leading Out of scope exemplar (design.md:197), and no rule says where a prohibition-shaped exclusion goes. One tiebreak sentence in the artifact spec. (Finding 15.)
+
+**B8. Over-asking has no diagnostic.** Amendment count diagnoses missed decisions (design.md:337); nothing names the opposite failure — unnecessary `Needs your attention` items that burn author attention and train authors to skim. The addendum reduced this to "at most one sentence naming it," likely beside the amendment-count diagnostic. (Finding 17.)
+
+**B9. Two minor wording items from the sweep that remain open:** design.md:46's "instead of plan mode" framing prices the process as substitution, but many changes receive no planning today — for those it is new spend (Finding 18); and the Phase 1 brief has no assignment rule between "Rejected in discussion" (dropped from the draft) and "Out of scope" (carried into the intent) for a considered-and-excluded direction (Finding 12 residue).
+
+## C. Minor factual and reference items
+
+- **The `/goal` documentation link.** Both rounds fact-checked design.md's `/goal` description against the official docs (https://code.claude.com/docs/en/goal) and confirmed it accurate, including that the evaluator reads only the conversation. design.md:361-363 states these facts without citation; the link exists only in the reviews. Worth adding to design.md's `/goal` section.
+- **The ship-date caveat.** "May 2026" for `/goal` was corroborated only by third-party coverage, not the official changelog (Round 2 fact-check). Immaterial unless the date is ever load-bearing.
+- **One-intent-per-PR cardinality under stacked branches.** Round 1 noted the rule should be measured relative to the PR's immediate target — a stacked child branch legitimately contains its parent's intent relative to `main`. The corpus states the rule absolutely (agents-md-block.md:15). One clarifying clause, if stacked workflows are in adoption fit; the corpus is currently silent on stacked/cross-repo work either way.
+
+## D. Verified as already covered — deletion loses nothing else
+
+Checked against `d2d443e` before deletion, the reviews' remaining substance is already in the corpus: the five purposes and the purposes-as-bar test (README.md:5-17); the nearest-alternatives positioning (notes.md); chain-of-custody scoped to cooperative continuity (README.md:19, design.md:52); amendment "provisional" semantics and whole-file acceptance (design.md:300, 314); the prototype-in-tree baseline rule (authoring-skill.md:91); commit-on-the-delivering-branch and approval-on-assembled-text (authoring-skill.md:215, 222); the unprovable-AC eligibility prong mirrored in review-guidance.md:23; project instructions folded into the approved boundaries everywhere; one-turn cold start (authoring-skill.md:39); the worked example's A1 annotated as an authoring miss (design.md:504); and the unified stop-condition enumeration. The rejected Round-1 machinery (state machines, evidence envelopes, hash binding, mandatory two-pass review) was retracted by the addendum against the purposes test and is deliberately not preserved.
