@@ -79,9 +79,8 @@ Fails — activity-shaped and omits the exact prior and current items:
 
 Passes — fact-shaped with verbatim item wording:
 - **A1 — 2026-07-08.** All collaborator access checks are delegated to
-  SharingMiddleware, the approved scope excludes replacing or bypassing it,
-  and it caches access grants for 5m with no invalidation or configuration
-  hook.
+  SharingMiddleware, which caches access grants for 5m with no invalidation
+  or configuration hook.
   - Was — Acceptance criteria: - A removed collaborator loses edit access within 1 minute.
   - Now — Acceptance criteria: - A removed collaborator loses edit access within 5 minutes.
 ```
