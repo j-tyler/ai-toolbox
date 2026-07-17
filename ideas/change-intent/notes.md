@@ -79,12 +79,14 @@ accumulate, not more complicated: the repository carries the why behind
 every change it contains, and for an AI agent that history is
 incredibly rich.
 
-**Spec-driven development.** A spec tries to be complete about the
-system's behavior and must be maintained as the system changes. An
-intent is deliberately incomplete: the change-defining test lets in only
-the decisions that choose which change is delivered, and everything else
-stays the implementer's call. One intent per change, frozen at merge —
-there is nothing to maintain.
+**Spec-driven development.** A system spec tries to be complete about
+behavior and must be maintained as the system changes. A per-change
+spec — requirements, design, tasks, written before the work — is the
+closest neighbor, but it still tries to describe the whole change, the
+how included. An intent is deliberately smaller than either: the
+change-defining test lets in only the decisions that choose which
+change is delivered, and everything else stays the implementer's call.
+One intent per change, frozen at merge — there is nothing to maintain.
 
 ## Two voices
 
