@@ -554,7 +554,7 @@ Entry point, not compressed spec. Keeps: title paragraph (canonical pitch per R1
 
 ### design.md — target shape
 
-Section-by-section, with what each becomes canonical for:
+Section-by-section, with what each becomes canonical for. The table lists sections in their **current** order and its cuts apply regardless of order; section order itself is revisited in "Reading order — the second pass" below, which is the recommended sequence for the final document.
 
 | Section | Now | Action |
 | --- | --- | --- |
@@ -579,29 +579,66 @@ Estimated result: design.md from 586 lines to roughly 380-420 — about a third 
 
 Small file, mostly distinct. Two trims: 34-40 duplicates design.md:277-281 (R13); 42-53's latitude points consolidate once design.md has a single canonical latitude statement. "Nearest alternatives" and "Two voices" stay untouched.
 
-### Ordering fixes (introduce before reference)
+### Reading order — the second pass
 
-1. **Amendment format currently precedes the amendment process.** Fixed by R8's move: the artifact spec names the section's purpose; the chapter defines both process and format.
-2. **Replacement is invoked three times (design.md:9, 86, 253) before being explained (341).** Fixed by R9: early mentions become a clause + link.
-3. **"Approved boundaries" is defined at 54 and re-glossed later** (292, and inline in README:21). Keep the 54 definition; later sites use the term bare.
-4. **The Summary's deletion (R14) removes the last section that re-introduces everything after the reader already has it.**
+The first pass optimized for deduplication; this pass asks whether the surviving document reads best top to bottom. Verdict: the cuts stand, but the section order should change with them. design.md tells the story of a change out of chronological order, and both its introduce-before-reference problems and part of its repetition trace to that one fact.
+
+**The ordering diagnosis:**
+
+1. **The lifecycle is told out of order.** A change's life runs author → approve → implement (amend if needed) → review → return or replace → merge and freeze. The document presents: artifact (84) → naming (229) → why-first (257) → amending (284) → replacement (341) → implementation and review (351) → the authoring skill (415). The first step of the lifecycle is explained last; amendment mechanics come before the implementation stage they belong to; replacement comes before the "returned work" that triggers it; the workflow list at 393-398 references the skill 20 lines before its section begins. The review phase's re-walk of amendment rules (380, flagged as R8) is partly a symptom: the chapter that owns those rules is far away in the wrong direction, so the text re-explains instead of referencing. Chronological order makes the reference natural — review checks the amendments the *previous section* just defined.
+2. **The role-path table (56-66) forward-references nearly everything.** Its rows use "amend on the record," `cannot verify`, and constraint-not-proof semantics — all defined later. As a preview it half-works; as a recap after the lifecycle it fully works, because every row then names a known concept.
+3. **The change-defining test is buried.** The design's most novel mechanism (68-80) sits as an appendage to the continuation-path principle. It deserves a marquee position — its own short section — and it should sit immediately before the artifact chapter, which is where "change-defining" starts doing constant work.
+4. **"Why the initial intent comes first" (257-280) is three different things in one section:** the rationale for the authoring stage (261-270), the prototype/exploration boundary (274), and the AI-author trajectory (277-281). The first two belong to the authoring stage; the third belongs with the forward-looking material at the end of the document, where it currently has a twin (577).
+5. **The numbered workflow list (393-398) and the sample `/goal` (400-411) duplicate structure.** Once the middle of the document *is* the workflow in order, the list is a table of contents for the chapter it sits in, and the sample restates the implementation bullets. Both become deletable rather than trimmable (the sample moves to implementation-guidance.md under D1).
+
+**Proposed spine** (the table's cuts still apply within each section):
+
+1. **Overview** — one paragraph plus a document map matching this order. Part 3's A1 (the ticket-contract analogy) fits here.
+2. **The Problem** — as-is, light trim.
+3. **Design principles** — the four value principles, plus a short continuation-path principle that keeps the "approved boundaries" definition. The table moves out (item 6.5).
+4. **The change-defining test** — promoted to its own short section, prose + decision tree, immediately before the artifact it governs.
+5. **The intent file** — intro (complete over / open over), the sections (§Amendments = purpose + pointer forward), and file location / naming / frozen-at-merge as a closing subsection.
+6. **The lifecycle of a change** (rename of "How It Integrates Downstream"), chronological:
+   - **6.1 Authoring** — the why-first rationale (forcing function, direction before start, the two-tasks split), the skill in brief (role split, the critical constraint, compressed phases, stopping condition — the current §Authoring Skill after its D1 cut), and the exploration/prototype boundary.
+   - **6.2 Implementation** — the intent as goal (`/goal` bullets, stated once), then **Amending the intent** as an intact block: necessity test, precedence, the record, who amends, rarity.
+   - **6.3 AI review** — the four assessments, with item 3 now a short reference to the block directly above; independence and `cannot verify` semantics live here (R12).
+   - **6.4 The human reviewer, return, and merge** — the payoff paragraph, **Revision before merge** (the author's mechanism, firing at the stage where it fires), then merge → frozen (pointer back to 5's subsection).
+   - **6.5 The role-path table** as the chapter's closing recap: wherever a role gets stuck, its path — every row now referencing concepts the reader has.
+7. **Worked example** — unchanged in content, and now it mirrors the document order exactly: request → exploration → approved file → amendment → implementation → review.
+8. **Design Tensions.**
+9. **Where this is heading** — absorbs "The intent author doesn't have to be a human" (and Part 3's A3/A4), consolidating the forward-looking material that currently appears at 277, 555, and 577 into one place.
+10. **Related.**
+
+**What the reorder fixes that cuts alone don't:** concepts introduced before use without forward-glosses; the review section referencing the amendment block immediately above it instead of re-walking it; the two intent-change mechanisms each presented at the stage where they fire — agent amends during implementation, author replaces at return — with one contrast sentence linking them; the workflow list and sample `/goal` becoming deletions instead of trims; and the forward-looking material consolidated instead of scattered.
+
+**Copy consequences — moves are not free:**
+
+- Each relocated section's opening sentence must be re-stitched to its new predecessor; a moved section that still says "as described below" or assumes the old neighbor reads as damage.
+- The Overview's document map must match the new order.
+- "How It Integrates Downstream" renames (e.g., "The lifecycle of a change"); "Why the initial intent comes first" dissolves as a heading — its argument becomes 6.1's opening prose.
+- Keep the amendment material intact as one block when it moves. Both review rounds treated its coherence as a strength; the relocation must not scatter it across 6.2.
+- Early mentions of amendment and replacement become forward links (already R8/R9); "approved boundaries" stays defined once in the principles (used by both 6.2 and 6.3).
+
+**Lower-risk alternative:** apply only the cuts and keep today's order. Safe, but it leaves the table's forward references, the skill-explained-last inversion, and the workflow-list redundancy in place, and the R8 review-phase compression has to fight the distance instead of benefiting from adjacency. Recommended: the full reorder — this restructure is already a real change; making it once, in reading order, avoids editing the same sections twice.
+
+**README.md ordering:** sound as-is (what → purposes → payoff → adoption fit → pointers); only the Part 2 trims apply, no reorder.
 
 ## Decisions needed before applying
 
 **D1 — the design/mechanics boundary.** mechanics/README.md:5 currently says the design "says everything the idea needs said" and the mechanics only add operational detail. The deepest cuts above (amendment grammar, sample `/goal`, the four-phase walk) move *normative operational detail* so it lives only in the instruments, with design.md carrying the concept plus the worked example. That is a boundary change: design.md stops being a self-contained spec and becomes the argument + artifact definition, with exact procedures owned by the instruments. Recommendation: accept it — a human adopter needs the concept and one concrete example, not the grammar, and the grammar already exists in three files. If accepted, reword mechanics/README.md:5 to match. If declined, the cut shrinks from ~35% to ~25% (the internal repetition still goes; the design keeps its own full copies of formats).
 
-**D2 — where the fork test's canonical prose lives.** Part 2 proposes design.md:68-80 (Design principles). The alternative is the artifact spec (it governs what enters the file). The principles section is earlier, which serves introduce-before-reference; recommended.
+**D2 — where the fork test's canonical prose lives.** Revised by the reading-order pass: promote it to its own short section immediately before the artifact chapter (spine item 4), rather than leaving it as an appendage inside Design principles. The principles keep the continuation-path principle in short form (with the "approved boundaries" definition), and the role-path table moves to the lifecycle chapter's end as a recap (spine item 6.5). The original recommendation — keep the test at design.md:68-80 — stands only under the lower-risk no-reorder alternative.
 
 **D3 — instrument-internal redundancy.** The agents-md-block restates the fork test, precedence, necessity test, and constraint semantics that each instrument also carries. That redundancy is deliberate (self-contained instruments) but costs agent context on every load. Out of scope for this pass; listed so it is a decision, not an accident, when the instruments are next revised.
 
 ## How to run the edit
 
-1. Apply R8 and R14 first (the amendment consolidation and the Summary deletion) — they are the largest, most mechanical wins and change the least prose.
-2. Then the Downstream section (R11, R12) and the Overview (R1, R2).
-3. Then the per-site caveat sweep (R4-R7, R9, R10, R13) — this one is delicate: at each site, confirm the canonical home actually carries the caveat before deleting the local copy.
-4. Then README and notes.
-5. Then run Part 1 (voice) over the surviving text, re-locating entries by quoted phrase.
-6. Final read top to bottom for introduce-before-reference and for any caveat that lost its last home.
+1. **The restructure commit first:** reorder design.md to the proposed spine, fold the amendment format into its block (R8's move), delete the Summary (R14), and re-stitch every moved section's transitions and the Overview map in the same commit. Moves before cuts — cutting first means defining every cut against an order that is about to change.
+2. **Then the lifecycle-chapter cuts (R11, R12),** which the new adjacency makes natural: the workflow list and sample `/goal` fall out here, and the review section's amendment re-walk collapses to a reference.
+3. **Then the per-site caveat sweep (R4-R7, R9, R10, R13)** — delicate: at each site, confirm the canonical home actually carries the caveat before deleting the local copy.
+4. **Then README and notes.**
+5. **Then Part 1 (voice) over the surviving text,** re-locating entries by quoted phrase — most line numbers are stale by this point.
+6. **Final read top to bottom** as a first-time reader: check each section's opening flows from its new predecessor, no concept is used before its introduction, and no caveat lost its last home.
 
 ---
 
