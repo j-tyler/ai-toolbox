@@ -218,7 +218,7 @@ Each amendment receives a short identifier local to the file. It states the disc
   - Now — <Section>: <verbatim current item>
 ```
 
-For an addition, write `Was: not present`. For a removal, write `Now: removed`. A move or reclassification names the previous section under `Was` and the current section under `Now`. If one discovery changes several items, the same amendment may contain several `Was` and `Now` pairs.
+For an item's first addition, write `Was: not present`. For a removal, write `Now: removed`. A move or reclassification names the previous section under `Was` and the current section under `Now`. If one discovery changes several items, the same amendment may contain several `Was` and `Now` pairs.
 
 The discovered fact must describe the system, not the author's activity: something still true and checkable if the rest of the file were deleted. `Ran into implementation issues` fails; `SharingMiddleware caches access grants for 5m with no invalidation hook` passes.
 
