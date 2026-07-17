@@ -202,6 +202,8 @@ Out-of-scope items are typically multi-sentence — enough to convey what was co
 
 Each item is something the author thought about and explicitly excluded. Note the third example: an out-of-scope item can flag work the author has explicitly deferred. That signals to the reviewer that more work is coming, and gives a later reader the ability to check whether the follow-up actually landed.
 
+A prohibition can sit in either this section or Constraints; the test is what it governs. It is a constraint when it bounds how this change's included work is built ("do not add a third-party runtime dependency"). It is out of scope when it excludes work or an outcome the change could otherwise have delivered ("distributed cache coordination — single-node only for now").
+
 **Why no dedicated Alternatives or Risks sections?** The file records what was decided. An alternative that was not chosen drives nothing downstream — implementation does not build it, review does not check against it, and it is not evidence for why the change was made. A genuinely alternative *intent* is rare: when the author's direction truly changes, the intent is replaced, and only the merged intent is the record. What an Alternatives section actually collects is alternative *implementations* — exactly the detail an intent deliberately leaves open. Alternatives may still appear temporarily while the author makes a decision; the final file keeps only the selected consequence, under Outcomes, Constraints, Acceptance criteria, Invariants, or Out of scope, and rejected alternatives do not move into `Why`.
 
 Risks pull the same direction: most risks are implementation risks, and listing them describes an implementation rather than an intent. A risk belongs in the file only when it changes what the author is approving — and then it is already expressible as an acceptance criterion, an invariant, or a constraint. Those sections bound the change's alternatives and risks exactly as far as they define the intent, which is as far as the file should go. Other risks remain part of ordinary implementation and review rather than becoming an author-provided checklist.
@@ -275,7 +277,7 @@ Not all work results in a change: a toy, a prototype, exploratory testing — wo
 
 ### The intent author doesn't have to be a human
 
-The same workflow can support an AI orchestrator in the author seat instead of a person. The orchestrator brings an upstream objective and operates within an authority boundary supplied by a human, product process, incident signal, policy, or broader program; the authoring skill brings the structure and rigor. The result is the same kind of change intent file ready for implementation. How that objective and authority are supplied can remain part of the team's broader operating model.
+The same workflow can support an AI orchestrator in the author seat instead of a person. The orchestrator brings an upstream objective and operates within an authority boundary supplied by a human, product process, incident signal, policy, or broader program; the authoring skill brings the structure and rigor. The change-defining test is also the orchestrator's escalation rule: a fork that decides which change will be delivered goes up to whatever holds the authority boundary, and everything else is decided locally — the same discipline the test gives a human author's dialogue. The result is the same kind of change intent file ready for implementation. How that objective and authority are supplied can remain part of the team's broader operating model.
 
 This is what lets the discipline carry forward into the autonomous trajectory. As humans gradually exit the loop (the autonomous-vehicle arc described at the top of this document), the same semantic responsibilities and shared decision artifact can support an orchestrator, implementation agents, and review agents even as their orchestration and surrounding tools evolve. The skill that runs the dialogue with a human today can serve an orchestrator later without requiring a different kind of downstream contract.
 
@@ -358,7 +360,7 @@ What travels between the stages is deliberately thin: the intent file and the ch
 
 ### Implementation phase: the intent as the `/goal` condition
 
-Claude Code shipped `/goal` in v2.1.139 (May 2026). It lets a user set a completion condition and have the implementation agent keep working autonomously across turns until that condition is met. After each turn, a separate evaluator model (Haiku by default) reads the conversation transcript and decides whether the condition holds. If yes, the goal clears. If no, the agent continues with the evaluator's reason as guidance for the next turn.
+Claude Code shipped `/goal` in v2.1.139 ([official documentation](https://code.claude.com/docs/en/goal)). It lets a user set a completion condition and have the implementation agent keep working autonomously across turns until that condition is met. After each turn, a separate evaluator model (Haiku by default) reads the conversation transcript and decides whether the condition holds. If yes, the goal clears. If no, the agent continues with the evaluator's reason as guidance for the next turn.
 
 **Key architectural detail:** the evaluator only sees what's surfaced in the conversation. So the condition must be something the implementation agent can prove through its own output — tests passing, builds clean, benchmarks meeting targets, files matching some shape. The evaluator can't run commands itself.
 
@@ -483,7 +485,6 @@ to a playlist must play when they tap it.
   repository test.
 - Use the existing CacheManager, the pattern TrackCatalogService already
   uses, rather than introducing a new caching primitive.
-- Do not introduce distributed cache coordination.
 
 ## Acceptance criteria
 - On a cache hit, `GetPlaylist` returns the cached value without querying the database
@@ -497,6 +498,7 @@ to a playlist must play when they tap it.
 - If the cache backend is unreachable, every code path that reads through the cache falls back to the database without surfacing the failure to callers
 
 ## Out of scope
+- **Distributed cache coordination.** Single-node cache only for now. Cross-node consistency would require a separate design and a measurable need we don't yet have.
 - **Eviction policy customization.** CacheManager defaults (LRU with a 100k entry limit) are sufficient for the access patterns we've measured.
 - **A dedicated API for cache inspection or invalidation.** Not included here. A follow-up PR will add inspection endpoints once production data shows whether on-demand invalidation is needed.
 ```
@@ -541,6 +543,10 @@ When authoring cannot inspect or confidently bound a relevant surface, it expose
 ### Cold start on existing codebases
 
 Existing codebases rarely document every property a change may affect. The author's direction and the AI's bounded surface read may therefore miss a real interaction. The intent still records only the invariants that belong to the approved change; authoring does not compensate by inventorying every property or location in the system. The coverage-limit path above handles known uncertainty, but it cannot expose a dependency that no available evidence reveals.
+
+### Where the per-change value concentrates
+
+The dialogue scales down with the change, but its two author gates do not scale to zero. The payoff a single change gets from its intent concentrates where the change carries a genuinely unsettled change-defining decision or a guarantee that crosses the code it touches. For a trivial change, the intent is carried instead by the purposes every change shares — the consistent frame the reviewer gets and the record the repository keeps. The design accepts that trade; it is stated here so adopters price it knowingly.
 
 ### Cross-cutting invariants
 
