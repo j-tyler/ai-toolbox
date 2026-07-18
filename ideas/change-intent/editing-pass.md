@@ -447,9 +447,9 @@ Format: canonical home (proposed) → all sites → action. Line numbers are `d2
 
 ### R1. The definition paragraph (artifact + contract + team latitude)
 
-- **Canonical:** README.md:3 (the entry point owns the pitch).
+- **Canonical:** design.md's Overview. design.md is fully self-contained and never references the change-intent README; it also absorbs the five purposes and the purposes-as-bar sentence, which currently live only in the README.
 - **Sites:** README.md:3; design.md:7 (near-verbatim duplicate); compressed echoes at design.md:353 and 575.
-- **Action:** design.md's Overview opens with one definitional sentence and links to the README instead of restating the paragraph. The echo in 353 trims to a clause; 575 goes with the Summary (R14).
+- **Action:** design.md's Overview keeps the full definition. The README shrinks to a directory card that summarizes and points in (see the README target shape below). The echo in 353 trims to a clause; 575 goes with the Summary (R14).
 
 ### R2. The Overview pre-states the whole Downstream section
 
@@ -458,7 +458,7 @@ Format: canonical home (proposed) → all sites → action. Line numbers are `d2
 
 ### R3. Reviewability payoff refrain
 
-- **Canonical:** README.md:19 for the pitch; design.md:387-391 for the substantive human-review treatment.
+- **Canonical:** design.md — the Overview for the pitch, 387-391 for the substantive human-review treatment; the README may echo one line as part of its directory card.
 - **Sites:** README.md:19; design.md:5; design.md:387-391; notes.md:8-23 (mechanism discussion — distinct, keep).
 - **Action:** design.md:5 keeps one framing sentence. No other change; listed to prevent the editing pass from cutting the wrong copy.
 
@@ -545,11 +545,11 @@ Format: canonical home (proposed) → all sites → action. Line numbers are `d2
 
 ### The rule that drives everything
 
-**Each concept has exactly one canonical home; every other mention is the defined term, optionally with a link.** The corpus already writes this way about *code* ("the intent states the property, not an inventory") — apply the same discipline to the document itself. When a later section needs a rule, it names it; it does not re-argue it. This is also the guard against the accretion pattern resuming: a future review fix lands at the canonical site, nowhere else.
+**Each concept is argued in one home; every other mention restates just enough to keep the local text readable — a clause, not a re-derivation.** The goal is that each document reads well top to bottom, not deduplication for its own sake; the two align almost everywhere, and where they pull apart, readability wins. The guard against the accretion pattern resuming still holds: a future review fix lands at the concept's home, and other sites keep only their reading-flow restatements.
 
 ### README.md (change-intent) — target shape
 
-Entry point, not compressed spec. Keeps: title paragraph (canonical pitch per R1), the five purposes, the purposes-as-bar sentence, one reviewability paragraph, Adoption fit trimmed of its amendment/replacement re-explanations (R8, R9, R16), and a section list at **one line per section, no caveats** — the caveats live in design.md's artifact spec. Roughly 40% shorter. The current line-21 paragraph and lines 29-39 carry most of the cut.
+A directory card, not a compressed spec. The README says what this folder holds and points into it: a short definition, a line or two on why a team would care, links to design.md and mechanics/. All design information — the five purposes, the purposes-as-bar test, adoption fit, section semantics, amendment and replacement rules — lives in design.md, which is fully self-contained and never references the README. A reader who starts at design.md never needs to go back. (This reverses the earlier framing where the README owned the pitch: design.md owns everything; the README summarizes.)
 
 ### design.md — target shape
 
@@ -592,7 +592,7 @@ The first pass optimized for deduplication; this pass asks whether the surviving
 
 **Proposed spine** (the table's cuts still apply within each section):
 
-1. **Overview** — one paragraph plus a document map matching this order.
+1. **Overview** — self-contained: the definition, the five purposes in compact form, the purposes-as-bar sentence, the reviewability framing, and a document map matching this order. No reference to the change-intent README anywhere in the file.
 2. **The Problem** — as-is, light trim.
 3. **Design principles** — the four value principles, plus a short continuation-path principle that keeps the "approved boundaries" definition. The table moves out (item 6.5).
 4. **The change-defining test** — promoted to its own short section, prose + decision tree, immediately before the artifact it governs.
