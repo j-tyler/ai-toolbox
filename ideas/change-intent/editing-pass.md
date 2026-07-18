@@ -7,6 +7,8 @@ This file is the worklist for tightening the adopter-facing corpus. It holds two
 
 **Recommended order: apply Part 2 first, then Part 1.** The restructure deletes or moves much of the text Part 1 annotates; polishing sentences that are about to be cut is wasted work. After the restructure, Part 1's line numbers are stale — re-locate each entry by its quoted phrase, not its line number.
 
+**Status:** design.md has been replaced by the restructured version — Part 2's spine and cuts, and Part 1's design.md entries, are applied. Still open: the change-intent README (directory card per the target shape below), the notes.md trims (R13 and the latitude overlap), the mechanics/README.md boundary sentence (D1 is now applied in design.md, so the "says everything" claim is stale) and its "harness specifics" voice item, the implementation-guidance preamble voice item, the working-in-public and root-README voice items, and the optional instrument-heading alignment (P1).
+
 **Corpus revision:** `d2d443e`. All line numbers below refer to that revision; later commits on this branch have already shifted some lines, so re-locate each entry by its quoted phrase before editing.
 
 **Scope.** Per the two-voices rule in [notes.md](notes.md), the human-read corpus is: the root `README.md`, `ideas/change-intent/README.md`, `design.md`, `notes.md`, `mechanics/README.md`, `ideas/working-in-public/README.md`, and the preamble before the first horizontal rule in each mechanics instrument. The instrument bodies are agent-facing and deliberately untouched by this pass.
