@@ -10,7 +10,7 @@
 
 Apply this section only when the change has a current intent at `change-intent/YYYY-MM-DD-short-slug.md`. Treat that intent as the decision boundary and completion condition. The change is complete only when every claim is demonstrated, every change-defining decision is honored, and no known conflict with a constraint remains. You own technical choices that the intent and applicable project instructions leave open.
 
-### The intent file, from the implementation seat
+### The intent file, from the implementation role
 
 - **Outcomes** — what the change is meant to make true. They orient your choices; the claims below are what you must prove.
 - **Why** — the problem, event, or need that caused the change. It explains the work; it does not settle implementation choices or establish requirements.

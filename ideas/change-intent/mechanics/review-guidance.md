@@ -12,7 +12,7 @@ This repository uses change intents. Every pull request carries one current inte
 
 Review the implementation and its evidence independently. The implementation agent proved its tests through would-fail demonstrations in its own session, but your review does not depend on receiving that context. Use the evidence and capabilities available in your team's review operation, together with inference, to assess each acceptance criterion's proving test and each invariant across the affected change. Report the limits of what you can establish. If no finding remains, report what you established and how; do not issue a bare approval.
 
-### The intent file, from the review seat
+### The intent file, from the review role
 
 - **Outcomes** — the results the author wanted. Not verified at review; your judgment call is whether the claims below plausibly deliver them.
 - **Why** — the problem, event, or need that caused the change. It explains why the work exists; it is not a checklist, requirement, or source of implementation direction.

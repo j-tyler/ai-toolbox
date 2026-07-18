@@ -152,7 +152,7 @@ Statements in the second category belong in `Outcomes` or `Constraints`; they do
 
 #### Performance acceptance criteria
 
-Most changes don't have performance ACs, and shouldn't. The default position is: the change is accepted under the project's general performance characteristics, and if performance regresses elsewhere, monitoring and load testing will surface it.
+Most changes don't have performance ACs, and shouldn't. The default position is: the change is accepted under the project's general performance characteristics, and if performance regresses elsewhere, monitoring and load testing will catch it.
 
 Include a performance AC only when **both** conditions hold:
 
@@ -264,7 +264,7 @@ Intent size follows the number and scope of change-defining decisions, not diff 
 
 ### Implementation
 
-An approved intent is a completion condition an agent can drive toward. Claude Code's `/goal`, shipped in v2.1.139 ([official documentation](https://code.claude.com/docs/en/goal)), is the reference integration: the user sets a completion condition, and the agent keeps working across turns until a separate evaluator model — which reads only what the agent has surfaced in the conversation and cannot run commands itself — judges the condition met. A change intent slots in naturally: the acceptance criteria and invariants are the proof obligations, and the constraints bound the engineering judgment used to satisfy them.
+An approved intent is a completion condition an agent can drive toward. Claude Code's `/goal`, shipped in v2.1.139 ([official documentation](https://code.claude.com/docs/en/goal)), is the reference integration: the user sets a completion condition, and the agent keeps working across turns until a separate evaluator model — which reads only what the agent has shown in the conversation and cannot run commands itself — judges the condition met. A change intent slots in naturally: the acceptance criteria and invariants are the proof obligations, and the constraints bound the engineering judgment used to satisfy them.
 
 Working against the intent means demonstrating, not just doing:
 
@@ -315,7 +315,7 @@ No amendment marker appears beside current items: a reader reads the body as the
 
 - **Every amendment is a decision made after code has begun shaping everyone's view.** Initial authoring is the moment before implementation starts doing that. Sometimes deciding late is unavoidable — reality falsified the plan, and deciding with better information is the process working — but it is never free. A process where amendments are routine is a process where deciding happens continuously during implementation: the pre-intent world, rebuilt with extra paperwork.
 - **Rarity is what earns each amendment the author's full attention.** When amendments appear only on falsification, an Amendments section on a returned change is worth reading carefully. If amendments appeared for every nice-to-have, the author would learn to skim them — and a skimmed Amendments section tells the author nothing at all.
-- **Amendment count becomes a diagnostic.** Every amendment marks a spot where the author, the authoring dialogue, and the exploration of the affected code all missed something that implementation then exposed. One or two entries is normal — implementation always turns up surprises. Six entries on a small change points at the authoring dialogue or at the code itself, and either way the signal is actionable: an area that accumulates amendments across changes has earned extra scrutiny in review, and a deeper authoring pass the next time a change touches it.
+- **Amendment count becomes a diagnostic.** Every amendment marks a spot where the author, the authoring dialogue, and the exploration of the affected code all missed something that implementation then exposed. One or two entries is normal — implementation always turns up surprises. Six entries on a small change points at the authoring dialogue or at the code itself, and either way the diagnosis is actionable: an area that accumulates amendments across changes has earned extra scrutiny in review, and a deeper authoring pass the next time a change touches it.
 
 ### AI review
 

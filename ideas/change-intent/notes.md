@@ -62,7 +62,7 @@ must and must not do — a goal that judges when implementation is done,
 a target review checks the finished change against, and, after merge,
 the record of why the change was made: the most valuable context of the
 work, kept with the code it produced. A reviewer who can see what the
-agents were held to can spend their attention where it is most valuable.
+agents were held to can focus their attention where it is most valuable.
 
 **Architecture decision records.** An architecture decision record is a
 standing, project-wide decision: it binds future work until another
