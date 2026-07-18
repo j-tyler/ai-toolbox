@@ -2,7 +2,7 @@
 
 **Status: drafted.**
 
-[design.md](../design.md) defines the implementation role, including optional integration with a harness mechanism such as Claude Code's `/goal`. This file contains the agent-facing instructions a team adds to its implementation environment. The block below may be copied and adapted to the project.
+[design.md](../design.md) defines the implementation role, including optional integration with a coding-tool mechanism such as Claude Code's `/goal`. This file contains the agent-facing instructions a team adds to its implementation environment. The block below may be copied and adapted to the project.
 
 ---
 

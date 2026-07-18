@@ -2,7 +2,7 @@
 
 **Status: all four instruments are drafted.**
 
-[design.md](../design.md) states the design in full — the argument, the artifact, the amendment protocol, the downstream integration, the authoring workflow. This folder holds the operational instruments a project actually installs to run it: skill files, prompt blocks, templates, tool bindings. The boundary is readability, not content: the design says everything the idea needs said; the mechanics carry the implementation detail — prompt-level engineering, harness specifics, agent failure-mode countermeasures — that would make the design read like a manual.
+[design.md](../design.md) makes the argument and defines the artifact and its rules — the problem, the principles, the change-defining test, the intent file, and the life of a change from authoring through merge. This folder holds the operational instruments a project actually installs to run it: skill files, prompt blocks, templates, tool bindings. The instruments carry the executable detail — step-by-step procedures, prompt engineering, safeguards against known agent failure modes — that would make the design read like a manual.
 
 The package, in the order a team adopts it:
 
