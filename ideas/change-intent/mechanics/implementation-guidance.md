@@ -10,6 +10,21 @@
 
 Apply this section only when the change has a current intent at `change-intent/YYYY-MM-DD-short-slug.md`. Treat that intent as the decision boundary and completion condition. The change is complete only when every claim is demonstrated, every change-defining decision is honored, and no known conflict with a constraint remains. You own technical choices that the intent and applicable project instructions leave open.
 
+### The intent as a goal condition
+
+When the team's coding tool has a goal mechanism — design.md describes Claude Code's `/goal` — the intent file is the completion condition. A sample invocation:
+
+```
+/goal The change in change-intent/2026-05-16-add-getplaylist-cache.md is complete:
+- Every acceptance criterion is exercised by a test the agent wrote, and the test passes
+- For every acceptance criterion, a reversible product mutation or, when that is unsafe, a controlled configuration or dependency negative control makes the defining condition false and its proving test fails for the expected, claim-specific reason — or, where no safe falsification exists, the limit on what could be demonstrated is surfaced with its reason; one falsification serves multiple criteria only when each test fails on its own claim, and every temporary change is restored before the tests pass again
+- Every invariant has useful concrete tests where appropriate, and the agent has reasoned across the affected diff and relevant surrounding paths and surfaced any material uncertainty
+- The implementation accounts for the outcomes, constraints, exclusions, and amendments without claiming proof for constraints the available environment cannot establish
+- Any newly discovered change-defining decision is amended on the record; ordinary technical choices remain implementation latitude
+```
+
+The sections below define the obligations this condition names.
+
 ### The intent file, from the implementation role
 
 - **Outcomes** — what the change is meant to make true. They orient your choices; the claims below are what you must prove.

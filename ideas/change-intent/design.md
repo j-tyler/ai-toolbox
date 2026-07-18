@@ -24,7 +24,7 @@ The document runs in the order the ideas are used: the problem, the principles, 
 
 ---
 
-## The Problem This Tries to Solve
+## The problem this tries to solve
 
 AI generates code far faster than humans can review it. A competent engineer with a good model produces thousands of lines a day; human review is sequential, attention-limited, and scales roughly linearly. Humans are the bottleneck on shipping changes today, and the bottleneck will only tighten — code generation keeps accelerating while reviewer throughput stays roughly flat. The squeeze is the same on a team of two as on a team of twenty: the question is no longer how much code the team can write, but how much the team can effectively review. This work designs a change process that optimizes for the humans still in the loop today, and gets better as the AI in the loop gets better.
 
@@ -363,7 +363,7 @@ Wherever a role meets an unresolved condition, the process assigns its next acti
 
 ---
 
-## Worked Example
+## Worked example
 
 **The author's request:** "Add caching to PlaylistService.GetPlaylist to reduce database load."
 
@@ -442,7 +442,7 @@ The implementation agent takes this file as the `/goal` condition, producing the
 
 ---
 
-## Design Tensions
+## Design tensions
 
 A few areas where the design is not fully resolved and worth flagging for implementation. Premises and direction that lie outside the design — for example, the mechanism behind "reviewing less" — are recorded in [notes.md](notes.md).
 

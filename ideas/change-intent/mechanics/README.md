@@ -13,7 +13,7 @@ The package, in the order a team adopts it:
 
 ## Audience and voice
 
-The package has two audiences. [README.md](../README.md), [design.md](../design.md), this file, and the preamble before the first horizontal rule in each instrument are written for a team evaluating or adopting the process. They describe purpose, authority, tradeoffs, and integration in the style of an engineering RFC. The content after that boundary is written for an AI agent executing a specific role. Those sections use direct instructions, explicit decision tests, and defined stop conditions.
+The package has two audiences. [design.md](../design.md), this file, and the preamble before the first horizontal rule in each instrument are written for a team evaluating or adopting the process. They describe purpose, authority, tradeoffs, and integration in the style of an engineering RFC. The content after that boundary is written for an AI agent executing a specific role. Those sections use direct instructions, explicit decision tests, and defined stop conditions.
 
 The separation also reflects different failure modes. A design defect concerns the artifact or process and is addressed in [design.md](../design.md). A mechanics defect occurs when an agent executes the intended process incorrectly: the authoring agent asks the author to decide an ordinary implementation detail, the implementation agent resolves a change-defining decision without an amendment, or the review agent treats every observable side effect as missing intent. These are instruction-level failures and are addressed in this directory rather than in the design rationale.
 
