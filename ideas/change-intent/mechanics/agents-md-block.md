@@ -1,0 +1,64 @@
+# Agents-File Block
+
+**Status: drafted. Bracketed names are placeholders until the instruments ship.**
+
+The block below is intended for a project's agents file (`AGENTS.md`, `CLAUDE.md`, or equivalent). It provides the minimum common context required by an agent that has no prior knowledge of change intent. Role-specific procedures remain in the corresponding instruments: [authoring-skill.md](authoring-skill.md), [implementation-guidance.md](implementation-guidance.md), and [review-guidance.md](review-guidance.md).
+
+Before pasting, customize the `[BRACKETED]` skill and instruction names. Everything else is designed to be used verbatim.
+
+---
+
+## Change intent
+
+This project uses change intents, initially approved **before implementation begins** and stored at `change-intent/YYYY-MM-DD-short-slug.md`. An intent is complete over change-defining decisions and open over implementation. Completeness is the quality standard for the artifact and authoring process, not proof that no unknown dependency exists. The intent records outcomes, required and forbidden behavior, constraints, and conscious exclusions. It does not prescribe every technical choice or incidental effect. Treat the current intent as the decision boundary for implementation and review. Do not revise it merely to describe code that was already written.
+
+**Exactly one intent file per pull request.** Do not create one per commit or keep multiple intent candidates in the pull request. The current intent governs implementation and review. Amend it when implementation discovers an eligible repair. If the author replaces it after returned work changes their direction, the replacement supersedes the prior unmerged candidate and becomes the new baseline. Work that requires two independently deliverable intents must be delivered as two pull requests.
+
+### What to do, by task
+
+- **Planning or starting a change** → run the authoring skill (`[/change-intent-author]`). Do not plan ad hoc and do not write an intent file freehand; the skill runs the pre-code dialogue and writes the file.
+- **Implementing a change that has an intent** → treat the intent as the goal and decision boundary. Follow `[implementation guidance]`: provide a passing test and an observed, claim-specific would-fail demonstration for each acceptance criterion; one safe temporary falsification may serve several criteria only when each proving test fails on its own claim. Surface useful tests and reasoning for each invariant, and use implementation latitude outside change-defining decisions.
+- **Reviewing a change** → follow `[your team's review process]`; its instructions carry the change-intent review guidance. Review the implementation and its evidence independently. Use the capabilities available to you and inference to assess each acceptance criterion's proving test and each invariant across the affected change.
+- **Replacing an intent after returned work changes the author's direction** → run the authoring skill against the current file, produce and approve one replacement at the same path, and treat the prior unmerged candidate as superseded. Fold relevant discovered facts into the replacement as ordinary current content and remove the prior candidate's Amendments section. Retain code that satisfies the replacement, but reassess the implementation and redo affected evidence before review runs again.
+- **Anything that is not a change** (questions, debugging, exploration) → no process applies. Intent files are context; read them freely.
+
+If asked to implement a change and no intent exists, say so and offer to run the authoring skill. Never write code first and backfill an intent to match it — a backfilled intent is worse than none. A prototype is not backfilling: exploratory work needs no intent, but shipping its result is a change — the intent is authored when the author decides what to ship, and the implementation that merges is reviewed against it.
+
+### Rules that apply in every role
+
+- **First decide whether a fork belongs in the intent.** A fork is change-defining only when choosing between its branches decides what change will be delivered. Ask whether the author could approve the change once and allow implementation to choose either branch while still receiving the change they approved. If yes, classify the fork as implementation latitude and omit it from intent-process output. If choosing one branch would make the other a different change, the intent must settle it. A technical or observable difference alone does not qualify.
+- **Follow the path for your role.** During authoring, ask the author about an unresolved change-defining fork; when a relevant surface cannot be inspected or bounded confidently, name the blind spot and ask for context, narrower scope, or an explicit decision recorded as an outcome, claim, constraint, or exclusion. If none resolves the blind spot, the intent is not ready for approval. During implementation, choose ordinary implementation details and continue; if a claim cannot be delivered within the approved boundaries or a necessary change-defining fork is missing, apply the necessity test, amend, and continue. Stop only when no amendment can preserve the approved boundaries — the current intent's outcomes, constraints, and exclusions, together with applicable project instructions. During review, report `cannot verify` when evidence is unavailable and raise a finding for a violated or silently changed decision; review does not repair the change.
+- **Treat constraints as engineering boundaries, not automatic proof obligations.** Some constraints are directly checkable; others can only guide judgment before production. Lack of proof is not a violation, amendment trigger, or reason to stop. During implementation, continue unless affirmative evidence shows a conflict. During review, raise a finding for a demonstrated conflict or materially implausible design and state uncertainty when useful; do not require a verdict for every constraint.
+- **Select a necessary missing decision by the shared precedence.** Compare reasonable in-scope resolutions in this order: preserve approved Outcomes; honor Constraints and exclusions; preserve existing external behavior unless the intent changes it; minimize scope; prefer reversibility. Select the first resolution distinguished by that order. If the full precedence leaves resolutions tied, select either one, record that result, and continue. The amendment is a provisional implementation-time decision that the author rules on when the work returns.
+- **If a claim cannot be delivered or a necessary decision is missing, apply the necessity test before amending.** A claim may be relaxed only when no reasonable implementation can satisfy it within the approved boundaries; failure of the selected approach is not enough. A missing decision qualifies only when implementation cannot complete without choosing which change will be delivered and the current intent does not make that choice. These two cases authorize repairing the affected claim or decision; they do not authorize weakening an approved Outcome, relaxing an approved Constraint, or moving an approved exclusion. Record the repair as an identified, dated amendment stating the discovered fact and quoting the exact previous and current wording, and continue; the current intent must read completely without its amendment history, and the author rules on every amendment when the work returns. If no amendment can preserve the approved boundaries, stop and report a failed change. The full recording and checking procedures live in the implementation and review guidance.
+- **New direction from the author replaces the current unmerged intent; it is not an amendment.** Stop using the prior candidate, route the new direction through the replacement task above, and continue only after the replacement is approved. Do not preserve a revision ledger or ask review to reconstruct superseded candidates.
+- **Stay inside scope.** Items under "Out of scope" are excluded outcomes or work, not untouchable files or symbols. Do not deliver or expand into the excluded work. Editing a shared surface is allowed when necessary to deliver the included change without implementing the exclusion. If a surface must remain literally unchanged, record that as an explicit constraint.
+- **Implementation latitude is the default outside change-defining decisions.** Choose architecture, abstractions, algorithms, storage details, retries, caching, logging, metrics, and other technical details as normal engineering work unless the intent, applicable project instructions, or an explicit normative contract constrains them. Code, tests, and other repository contents establish facts about the current system; without such direction, they do not supply forward-looking direction. Incidental effects remain subject to ordinary correctness, security, performance, and quality review; they do not need retroactive intent claims merely because they are observable.
+
+### Reading an intent file
+
+- **Outcomes** — what the change is intended to make true, in a few bullets — not the implementation chosen for it.
+- **Why** — the problem, event, or need that caused the change. It explains the work and never establishes a requirement or implementation direction. Always present.
+- **Constraints** — conditions and non-behavioral boundaries every acceptable implementation must be designed around. They guide implementation and review but are not automatically proof obligations.
+- **Acceptance criteria** — falsifiable scenarios, each closed by a focused proving test written at implementation time.
+- **Invariants** — properties that must remain true across the parts of the system affected by the change. Tests should cover concrete cases where useful, but no passing test closes an invariant by itself. Implementation and review must also reason across the affected diff and relevant surrounding paths. The intent states the property, not every location or test.
+- **Out of scope** — what was considered and deliberately excluded.
+- **Amendments** — a short history of eligible implementation repairs. Each entry states the discovered fact and quotes the affected item's `Was` and `Now` wording; the current intent remains complete without it. Absent means the current intent held as written.
+
+### Durable rules
+
+Everything the author says in the dialogue is direction for this change only, unless the author says otherwise — with words like "always," "from now on," or "our policy"; any wording that says the rule outlives this change counts. When it does, the durable statement of that rule is part of the work this change delivers, recorded and reviewed like any other requirement. Choose its home by what the rule must do:
+
+- **A project instruction** — when the rule must bind the agents of every later change. Standing policy goes here.
+- **A test** — when the rule is behavior the suite must enforce. A later change cannot break it without a failing test.
+- **A doc comment on the governing code** — when the rule must reach whoever next edits that surface.
+
+A decision recorded only in the intent file expires when the change merges: merged intents are records, not requirements.
+
+### Frozen history
+
+Merged intents are never edited. They record their own merged changes; they do not constrain or govern the current change. Use the current intent, code, tests, and project instructions for the work in front of you. Do not search prior intent files for requirements this change must preserve or explain; a rule meant to last was recorded in one of the durable homes above.
+
+### When an intent is required
+
+Every change. There is no change without an outcome and a why, so there is no change without an intent. Small changes have small intents.
