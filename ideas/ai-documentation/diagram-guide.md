@@ -873,6 +873,7 @@ Content:
 - Does every state transition carry a full-identifier trigger, so the file it lives in follows from the name, and is every meaningful absence stated as a comment inside the diagram?
 - Is the scope stated, including anything known to connect to the diagram but left outside it?
 - Where a guideline did not fit cleanly and you did the closest accurate thing instead, is that explained in a comment?
+- When several artifacts describe the same operation, do they agree on the relevant participants, conditions, ordering, and effects? Check sequence steps against lifecycle triggers and guards, and check hidden connections against the edge table and file notes. Compare only overlapping scenarios and scope; a scenario can legitimately omit an unrelated path. Investigate unexplained differences against the code, and record any unresolved uncertainty in a file note and comments on the affected diagrams rather than forcing agreement.
 
 Syntax, checked by eye since the diagram cannot be rendered here:
 
