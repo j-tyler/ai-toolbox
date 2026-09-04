@@ -2,39 +2,39 @@
 
 ## What this document is
 
-This document defines the diagram and table types that may be used to describe code. For each type it says what the type shows, when it is the right choice, when it is the wrong choice, and exactly how to write it.
+This document defines the allowed diagram and table types for describing code: what each shows, when to use or avoid it, and exactly how to write it.
 
 Use only the types described here. If something does not fit any of them, record it as a file note (described below) rather than inventing a new format.
 
-Two kinds of rule appear in this document. The rules under "Mermaid that parses," the syntax half of the checklist, the fixed meanings of arrows and shapes, and the identifier format are absolute: breaking them loses the diagram or makes it silently wrong. Everything else describes the normal case. Where one of those rules does not fit the code in front of you cleanly, do the closest thing that keeps the diagram accurate and complete, and say in a `%%` comment what you did and why. Accuracy and completeness always win over a size guideline or an ordering preference.
+The rules under "Mermaid that parses," the syntax checklist, fixed arrow and shape meanings, and identifier format are absolute: breaking them loses the diagram or makes it silently wrong. Other rules describe the normal case. When they do not fit the code, do the closest thing that keeps the diagram accurate and complete, and explain what you did and why in a `%%` comment. Accuracy and completeness override size guidelines and ordering preferences.
 
 ## What you are given and what you produce
 
 You are given a read scope: the files or directories to read, chosen by whoever runs you. When the run is prompted by a change to the code, the scope is normally the area the change touched together with the directories its hidden edges lead into. You may search outside the scope to find the far end of an edge, to count a file's callers, or to confirm that a consumer exists, and you say in a comment when a fact came from outside it. Completeness lines name the read scope, not places searched outside it.
 
-You produce one Markdown document. It contains, in this order: the state diagrams, the sequence diagrams, the edge table, the dependency flowcharts if any were drawn, the entity-relationship diagrams, the class diagrams, the packet diagrams, the glossary table, and the file notes. Each diagram sits in its own `mermaid` fenced block. That document is the input to the Placement Guide, which decides what is written into the repository; nothing you produce is written into the repository directly.
+Produce one Markdown document containing, in order: the state diagrams, the sequence diagrams, the edge table, the dependency flowcharts if any were drawn, the entity-relationship diagrams, the class diagrams, the packet diagrams, the glossary table, and the file notes. Each diagram sits in its own `mermaid` fenced block. The output document goes to the Placement Guide, which decides what enters the repository; nothing you produce is written there directly.
 
 ## When a diagram is worth drawing
 
-A diagram is worth drawing when it shows something that cannot be seen by reading one file. Which states an order can be in, when the transitions are scattered across twelve handlers. Who consumes an event, when the emitter and the consumers live in different modules. What happens after a request leaves this process, when the next step runs in a queue worker somewhere else.
+Draw a diagram when it reveals something one file cannot: an order's states when transitions span twelve handlers; an event's consumers in other modules; or a request's continuation in a queue worker outside this process.
 
-A diagram is not worth drawing when it redraws what is already on the screen. The branches inside a single function, the imports at the top of a file, the fields of a class: these are already visible, and drawing them adds nothing. Before drawing anything, ask whether a reader with the file open would learn something from the diagram that they could not learn from the file. If not, do not draw it. The stored-lifecycle diagrams requested under "State diagram" are an explicit exception: draw those even when all transitions are implemented in one place, unless a state machine library already declares the machine.
+Do not redraw what one file already shows: a function's branches, a file's imports, or a class's fields. Before drawing, ask whether a reader with the file open would learn anything new. If not, do not draw it. The stored-lifecycle diagrams requested under "State diagram" are an explicit exception: draw those even when all transitions are implemented in one place, unless a state machine library already declares the machine.
 
 ## Written for an AI reader
 
-Every diagram and table in this document is written for an AI to read, not for a person to look at. The reader reads the source text, top to bottom, the same way it reads code. It never sees the rendered picture. These are structured text records that happen to render; write for the reader of the text, never for the picture.
+Write diagrams and tables for an AI reading source text top to bottom, as code. It never sees the rendered picture. These are structured text records that happen to render; write for the text reader, never for the picture.
 
 That changes what matters:
 
 - Layout, spacing, color, and arrow styling carry nothing. Only the text carries meaning.
-- `%%` comment lines are as visible as any edge. They are the right place for anything that would otherwise be a caption, a caveat, or a note in the margin.
+- `%%` comment lines are as visible as edges. Use them for captions, caveats, and margin notes.
 - Names are links. A name that matches the code exactly connects the diagram to the code. A name that does not is a dead end.
-- Line order is layout. The order of lines in the source is the order in which the reader builds its picture.
+- Line order is layout: the reader builds its picture in source order.
 - Nothing is self-evident. What a person would see at a glance, that a node is central or that a transition is missing, must be written down.
 
 Do:
 
-1. Draw only what you read. Every edge, transition, participant, and table row corresponds to something you saw in the code. If you believe something exists but did not see it, a consumer an event surely has, a transition that must live somewhere, write it as a comment beginning `%% suspected:` with the reason, or put it in a file note. Never write it as a line in a diagram or a row in a table. A diagram with a gap is useful; a diagram with an invented edge is worse than none.
+1. Draw only what you read. Every edge, transition, participant, and table row corresponds to something you saw in the code. If you suspect something you did not see, such as an event consumer or a transition elsewhere, record it with the reason in a `%% suspected:` comment or a file note. Never write it as a line in a diagram or a row in a table. A diagram with a gap is useful; a diagram with an invented edge is worse than none.
 2. Use comments for meaning, normally placed on the line before the thing they describe: why an edge exists, which file it comes from, when it applies, what is left out.
 3. Write down meaningful absences: a transition not found, a consumer that does not listen, a path that is explicitly blocked. Distinguish what was not found within the inspected scope from what the implementation prevents. Name the searched files for a search result, or the enforcing function or constraint for a prohibition. Describe an absence as intentional, and give its reason, only when a comment or other inspected documentation establishes that intent; cite that source. Record the absences a reader would otherwise assume are present, not every possible gap.
 4. Declare what the diagram is complete over. Completeness is always relative to the read scope. The second comment line is `%% complete within:` followed by the read scope's files or directories, meaning everything of this diagram's kind found in them is drawn, or `%% partial within:` followed by the same, then `; left out:` and what was deliberately omitted. Neither form says anything about files not listed. Every diagram in one artifacts document names the same read scope; a diagram never narrows the line to the directories it happened to draw from, because the whole scope was searched for things of its kind.
@@ -66,7 +66,7 @@ Avoid:
 
 ## Rules that apply to every artifact
 
-1. **Use real identifiers, in this format.** Names in diagrams and tables are the actual names from the code, written one way, and used directly as the node, participant, state, or entity name:
+1. **Use real identifiers, in this format.** Use actual code names consistently and directly as node, participant, state, or entity names in diagrams and tables:
 
    | Thing | Format | Example |
    |---|---|---|
@@ -84,10 +84,10 @@ Avoid:
    | directory | repository path with trailing slash | `orders/` |
    | file | repository path | `orders/service.py` |
 
-   Module paths use dots in every language. `orders/service.py` becomes `orders.service`. `src/orders/service.ts` becomes `orders.service`: drop `src`, drop the extension. Write nested scopes with dots whatever the language's own separator is: `Order::cancel` and `Order#cancel` both become `Order.cancel`. A package index file, `__init__.py`, `index.ts`, `mod.rs`, or `lib.rs`, collapses to its directory: a function in `pricing/__init__.py` is `pricing.calculate_total`. In a language whose unit is the directory rather than the file, Go among them, the module is the package path relative to the repository root, so `orders/service/` is `orders.service`, a function in it is `orders.service.CreateOrder`, and a method is `orders.service.Order.Cancel`; the file in parentheses after the name says which file in the package holds it. When a name exists in both a source file and a file generated from it, a templ component and its `_templ.go` twin, a protobuf message and its stub, the file in parentheses is always the source file a person edits; the generated file is on the never-diagram list and is never cited. If the language has no modules, use the file's path without its extension as the module. In a repository with several packages, keep the package name in front so that two `orders.service` modules cannot collide: `api.orders.service` and `worker.orders.service`. A real name that contains an `@`, a `;`, or a space becomes a diagram id with an underscore in that position, with the real name kept in a label or alias as "Mermaid that parses" describes; in tables and file notes the real name is written as it is. Never write a display name like "Create Order". Someone searching the repository for `create_order` should find every diagram that mentions it.
+   Module paths use dots in every language. `orders/service.py` becomes `orders.service`. `src/orders/service.ts` becomes `orders.service`: drop `src`, drop the extension. Nested scopes also use dots: `Order::cancel` and `Order#cancel` become `Order.cancel`. Package index files (`__init__.py`, `index.ts`, `mod.rs`, `lib.rs`) collapse to their directory: a function in `pricing/__init__.py` is `pricing.calculate_total`. For directory-based units such as Go packages, use the package path relative to the repository root as the module: `orders/service/` becomes `orders.service`, with function `orders.service.CreateOrder` or method `orders.service.Order.Cancel`; the file in parentheses after the name identifies the file within the package. When a name exists in source and generated code (a templ component and its `_templ.go` twin, a protobuf message and its stub), the file in parentheses is always the source file a person edits; the generated file is on the never-diagram list and is never cited. For languages without modules, use the file path without its extension as the module. In multi-package repositories, retain the package prefix to prevent collisions: `api.orders.service`, `worker.orders.service`. Replace `@`, `;`, or spaces in diagram ids with underscores, retaining the real name in a label or alias as "Mermaid that parses" describes; use the unmodified name in tables and file notes. Never substitute a display name like "Create Order": searching for `create_order` should find every diagram mentioning it.
 2. **No styling.** Do not use `classDef`, `style`, colors, link styles, or icons. Do not use node shapes other than the ones this document assigns a meaning to.
 3. **Two comment lines after the diagram type, always.** The first says what the diagram shows: `dependency flowchart` for a flowchart, the scenario for a sequence, the entity and field for a state diagram. The second says what it is complete over: `%% complete within:` followed by the read scope's files or directories, or `%% partial within:` followed by them, then `; left out:` and what was deliberately omitted. A reader must be able to tell what the diagram is and how far to trust it without guessing.
-4. **Prefer small diagrams.** Around twenty edges, twelve messages, or fifteen states is a comfortable size, and beyond that a diagram gets harder to read. These are guidelines, not limits. Split only where there is a natural seam: a sequence into two scenarios, a dependency flowchart by directory or by file. A unit that has to be larger to be complete, such as a state machine with thirty transitions, stays whole, because a complete large diagram is worth more than two partial small ones.
+4. **Prefer small diagrams.** Around twenty edges, twelve messages, or fifteen states is a comfortable size. These are guidelines, not limits. Split only where there is a natural seam: a sequence into two scenarios, a dependency flowchart by directory or by file. A unit that has to be larger to be complete, such as a state machine with thirty transitions, stays whole, because a complete large diagram is worth more than two partial small ones.
 5. **One diagram per unit.** One edge table per read scope. One dependency flowchart per read scope when one is drawn, split by directory only when it exceeds the size guideline. One sequence diagram per scenario. One state diagram per entity and field. One entity-relationship diagram per area. One class diagram per base class or interface. One packet diagram per format. Do not merge units into one large diagram, and do not split a unit to meet the size guideline.
 6. **State the scope.** The completeness line names the read scope, and the diagram is only claimed complete over it. If something is known to connect to the diagram but lies outside that set, a caller in a directory that was not read, a consumer in another service, say so in a further comment rather than leaving it out silently. A gap that is labeled is useful. A gap that looks like completeness is misleading.
 7. **Produce the edge table, always.** The edge table is the primary record of hidden dependencies and is produced once per artifacts document, whether or not a flowchart was drawn. It holds one row for every hidden dependency found in the read scope: every event, hook, injection, flag, callback, external call, table access, soft reference, and emitted event with no consumer found. When the scope has none, the single line `edge table: none` stands in its place, so that a searched-and-empty table can be told from a missing one. The table can be checked row by row. The state diagram has no table; it is the one form for a lifecycle, and its transition labels carry everything a table would.
@@ -95,17 +95,17 @@ Avoid:
 
 ## Mermaid that parses
 
-These rules apply to every Mermaid diagram in this document. Most "wrong" forms fail to render, which means the whole diagram is lost. A few do not fail: they render without an error and are silently wrong, a node or an edge dropped or a name split in two, and nothing signals the loss. Each rule says which of the two happens. The "right" form is the only form to use. The snippets show only the lines needed to illustrate each rule; a real diagram also carries the two comment lines from the general rules.
+These rules apply to every Mermaid diagram. Most "wrong" forms fail to render, losing the whole diagram; others silently drop nodes or edges or split names. Each rule identifies the failure. Use only the "right" form. Snippets show only the relevant lines; real diagrams also need the two required header comments.
 
-**Ids may carry the code's own punctuation, but never a space, a semicolon, or an at sign.** In a flowchart a space or an at sign fails. In a state or entity-relationship diagram a space does not fail but splits the name into several, in a class diagram it is silently removed, and only a sequence participant accepts one. A semicolon does not fail: Mermaid reads it as the end of one statement and the start of the next, so `a;b --> c` renders as a lone node `a` and an edge from `b` to `c`, with no error. Letters, digits, dots, underscores, and hyphens are always safe. `!`, `?`, `$`, and `#` are safe inside an id in flowcharts, sequence diagrams, and state diagrams, so a Ruby `save!` or a JavaScript `$store` keeps its real name there; entity-relationship and class diagrams reject all four, so there the id takes an underscore in that position, with the real name in a label for a class and in a `%%` comment on the line before for an entity. Hyphens are fine everywhere except state names, covered below. A directory id ends in a slash.
+**Ids may carry code punctuation, but never spaces, semicolons, or at signs.** Flowcharts reject spaces and at signs. Spaces silently split state and entity names, disappear from class names, and are accepted only in sequence participants. Semicolons silently split statements: `a;b --> c` becomes lone node `a` and edge `b --> c`. Letters, digits, dots, and underscores are safe; hyphens are safe except in state names (see below). Flowcharts, sequence diagrams, and state diagrams accept `!`, `?`, `$`, and `#` inside ids, preserving names such as Ruby `save!` and JavaScript `$store`. Entity-relationship and class diagrams reject these four: replace them with underscores and retain the real name in a class label or, for an entity, a `%%` comment on the preceding line. Directory ids end in a slash.
 
-**A reserved word breaks a diagram as a whole id and, in most types, as the first dotted segment of an id.** Each diagram type reserves different words and needs a different escape. The lists below were checked against Mermaid 11.17; when in doubt, treat a word as reserved, because the escape is always safe.
+**A reserved word breaks a diagram as a whole id and, in most types, as the first dotted segment of an id.** Reserved words and escapes differ by diagram type. These lists were checked against Mermaid 11.17; when in doubt, treat a word as reserved: escaping is always safe.
 
-- Flowchart: `end`, `class`, `graph`, `style`, `subgraph`, `flowchart`, `linkStyle`, and `classDef` fail as a whole id and as a first dotted segment written exactly as listed, case included, so `end.handlers.run` and `class.models.Foo` fail while `orders.end` and `End.handlers` parse. `default` fails as a subgraph id. `click` as a whole id at the start of a line does not fail but is silently dropped: the line is read as a click command, so the node and any edge on that line vanish and the diagram renders without them; as the target of an edge it fails instead. `end` as a subgraph id does not fail either: the subgraph is renamed and the lines after it are swallowed into its title until the closing `end`. Escape: append an underscore to the offending segment and keep the real name in a label, quoted if it contains parentheses or brackets, `end_.handlers.run["end.handlers.run"]`; for a directory, `subgraph default_/`, with a `%%` comment on the line before naming the real path.
+- Flowchart: `end`, `class`, `graph`, `style`, `subgraph`, `flowchart`, `linkStyle`, and `classDef` fail as whole ids or first dotted segments, with exactly this case: `end.handlers.run` and `class.models.Foo` fail; `orders.end` and `End.handlers` parse. `default` fails as a subgraph id. Whole id `click` at line start silently drops the node and any edge on that line as a click command; as an edge target it fails. Subgraph id `end` silently renames the subgraph and absorbs following lines into its title until the closing `end`. Escape by appending an underscore to the offending segment and labeling it with the real name, quoted if it contains parentheses or brackets: `end_.handlers.run["end.handlers.run"]`. For a directory, use `subgraph default_/` with a preceding `%%` comment naming the real path.
 - Sequence diagram: `end`, `loop`, `alt`, `opt`, `par`, `rect`, `box`, `break`, `critical`, `note`, `link`, `links`, `properties`, `details`, `create`, `destroy`, `actor`, `else`, `and`, `activate`, `deactivate`, `autonumber`, `option`, `participant`, `off`, and `over` fail as a participant name in any letter case and as the first dotted segment of one. The `participant` line itself parses; the first message that uses the name fails. So an external system named `Box` or a module named `note.service` cannot be a participant as written. Escape: declare the participant with an underscore id and the real name as an unquoted alias, `participant box_ as Box`, `participant note_.service as note.service`, and use the id in every message; the alias after `as` is display text and may be any words.
 - State diagram: `default`, `note`, `class`, `style`, `classDef`, and `state` fail as a state id in any letter case, so an enum member `DEFAULT` cannot be a state as written. `state` is the worst of them: as the source of a transition it does not fail but is read as a declaration, and the whole diagram renders empty. Escape: declare it once with the alias form already used for hyphens, `state "DEFAULT" as DEFAULT_`, and use the id everywhere else.
 - Entity-relationship diagram: `class`, `end`, and `style` fail as an entity name in any letter case. Escape: write the name in double quotes in every relationship line, `"class" ||--o{ students : attends`, which renders the bare name.
-- Class diagram: `class`, `style`, `classDef`, `note`, `link`, `callback`, `click`, `cssClass`, `href`, and `namespace` fail as any lowercase dotted segment of a class name, first, middle, or last, on a relationship line, so `a.Base <|-- notifications.callback.Handler` fails while `a.Base <|-- orders.models.Note` parses. On a bare `class` declaration line, `class`, `style`, `classDef`, and `namespace` happen to parse; the other six fail there too. That does not help, because every class in this document's form appears in a relationship line, and a declaration that parses followed by a relationship that fails still loses the diagram. Treat all ten as reserved everywhere. Escape: declare the class with an underscore id and the real name in a quoted label, `class callback_["notifications.callback.Handler"]`, and use the id in every relationship line. The id loses the module path, but the label keeps the full identifier.
+- Class diagram: `class`, `style`, `classDef`, `note`, `link`, `callback`, `click`, `cssClass`, `href`, and `namespace` fail as any lowercase dotted segment (first, middle, or last) on relationship lines: `a.Base <|-- notifications.callback.Handler` fails; `a.Base <|-- orders.models.Note` parses. Bare `class` declarations accept `class`, `style`, `classDef`, and `namespace`, but reject the other six. Treat all ten as reserved everywhere: every class in this document's form appears in a relationship line, so a valid declaration cannot prevent the failure. Escape with an underscore id and a quoted full-name label: `class callback_["notifications.callback.Handler"]`; use that id in every relationship. The label preserves the full identifier lost from the id.
 
 Wrong:
 
@@ -139,7 +139,7 @@ flowchart LR
   orders.models.Order -.->|"post_save(Order)"| audit.signals.on_order_saved
 ```
 
-**Comments go on their own line.** A `%%` comment at the end of a node or edge line fails in a flowchart and in an entity-relationship diagram. In a sequence, state, class, or packet diagram it does not fail: it is absorbed into the message, label, or name it follows, or silently ignored, so the diagram renders with the comment text inside it. At the end of a `subgraph` line it does not fail either: the comment text is absorbed into the subgraph's title, `api/ %% dir`, and the subgraph's id is replaced by a generated one, so the directory path is silently lost.
+**Comments go on their own line.** Trailing `%%` comments fail on flowchart and entity-relationship node or edge lines. In sequence, state, class, and packet diagrams they are absorbed into the preceding message, label, or name, or silently ignored. On a `subgraph` line, the comment enters the title (`api/ %% dir`) and silently replaces the directory id with a generated id.
 
 Wrong:
 
@@ -172,7 +172,7 @@ stateDiagram-v2
   in_progress --> done
 ```
 
-A hyphen fails. A space does not fail: `in progress --> done` renders as three states, `in`, `progress`, and `done`, with a transition from `progress` to `done` and no error, so a state name with a space is lost just as surely. When the value in the code itself contains a hyphen or a space, declare the state once with the exact code value as its display name and an underscore form as its id, then use the id everywhere else.
+A hyphen fails. A space silently splits states: `in progress --> done` creates `in`, `progress`, and `done`, with only `progress --> done`. If the stored code value contains a hyphen or space, declare it once with that exact display name and an underscore id, then use the id everywhere else.
 
 ```mermaid
 stateDiagram-v2
@@ -197,7 +197,7 @@ sequenceDiagram
   orders.service->>payments.gateway: charge
 ```
 
-**Every name in a sequence message must exactly match a declared participant.** Any name that does not match, even by one character, silently creates a new participant. The diagram renders and is wrong, with no error.
+**Every name in a sequence message must exactly match a declared participant.** A mismatch of even one character silently creates a new participant without a render error.
 
 Wrong:
 
@@ -217,7 +217,7 @@ sequenceDiagram
   orders.service->>payments.gateway: charge
 ```
 
-**Entity-relationship lines always have a label, quoted if it has more than one word.** A line with no label fails. An unquoted multi-word label usually does not fail: the first word becomes the label and each later word becomes a phantom entity, so `has lines` renders an entity named `lines` with no error. A few words, `many` among them, are cardinality keywords and fail outright, which is why the example below errors.
+**Entity-relationship lines always have a label, quoted if it has more than one word.** Missing labels fail. Unquoted multi-word labels usually make the first word the label and each later word a phantom entity, without an error: `has lines` becomes label `has` and entity `lines`. Cardinality keywords such as `many` instead fail outright, as below.
 
 Wrong:
 
@@ -295,7 +295,7 @@ Do not use any other Mermaid diagram type or any other structured format.
 
 ### What it shows
 
-The hidden dependencies: the ones that do not go through a normal call or import. It is the primary record of them: one table for the read scope, holding every hidden dependency found there, whether or not a flowchart or entity-relationship diagram was drawn. A flowchart's dotted edges, cylinders, and hexagons and an entity-relationship diagram's soft references are all rows in it.
+The primary record of hidden dependencies, which do not go through a normal call or import. One table holds every hidden dependency found in the read scope, with or without diagrams: flowchart dotted edges, cylinders, and hexagons, and entity-relationship soft references all have rows.
 
 ### When to use it
 
@@ -348,7 +348,7 @@ Signals that look like the above but are not:
 | billing.reports.build | customers (billing database) | table | read | billing/reports.py |
 | orders | promotions | soft-ref | promotion_code, validated in orders.service.validate_promotion | orders/models.py, promotions/models.py, orders/service.py |
 
-The example shows rows of every kind in one table, which is how the artifacts document carries them.
+Keep all kinds together in one table, as shown.
 
 Kind is one of: `event`, `hook`, `di`, `flag`, `callback`, `external`, `table`, `soft-ref`. If a hidden dependency fits none of these, for example a shared file on disk, a cache key, or an environment variable read at runtime, use `other`. Its Name column then starts with one mechanism word, `env`, `file`, `cache`, `channel`, `trigger`, `registry`, `signal`, or `mechanism` when none of those fits, followed by the name the code uses: `channel toastQueue`, `env ORDERS_SPOOL_DIR`.
 
@@ -372,11 +372,11 @@ Unless the kind's rule above says otherwise, Defined in lists the file at each e
 
 ### What it shows
 
-Which pieces of code depend on which other pieces, across file boundaries, and what kind of dependency each one is. It separates ordinary calls and imports from the hidden kinds of dependency: events, hooks, dependency injection, feature flags, callbacks. It also shows which database tables and external systems a piece of code touches.
+Dependencies across files, distinguishing ordinary calls and imports from hidden dependencies: events, hooks, dependency injection, feature flags, and callbacks. Also shows the database tables and external systems the code touches.
 
 ### When to use it
 
-Draw the flowchart only when the picture adds something the edge table's rows cannot show. Those cases are:
+Draw a flowchart only when it adds something the edge table cannot show:
 
 - Files at an architectural boundary where the direction of dependency is a rule: the API layer may call the domain layer, the domain layer may call infrastructure, never the reverse. Draw these to show whether the rule holds.
 - Files involved in an import cycle.
@@ -392,7 +392,7 @@ Otherwise the table alone is enough. The hidden dependencies themselves are foun
 
 ### How to write it
 
-Use `flowchart LR`. The two comment lines are `%% dependency flowchart` and the completeness line. Node names are the full identifiers from the identifier format, used directly as ids; a label is needed only when the id had to differ from the real name, because the name contains a space or is a reserved word, and the label is quoted if it contains parentheses or brackets, though quoting one that did not need it does no harm. Directories are subgraphs whose id is the directory path with its trailing slash. Declare each code node once, inside its directory's subgraph. Where the code has a clear flow, put the subgraphs in the order the flow passes through them and list edges starting from the entry point; where it does not, for example a file with many unrelated callers, start from that file and group edges by the node they touch. Tables and external systems appear in the edge where they are first used.
+Use `flowchart LR`. The two comment lines are `%% dependency flowchart` and the completeness line. Use full identifiers from the identifier format directly as node ids. When an id must differ from the real name, such as for a space or reserved word, give it a label with the real name; otherwise no label is needed. Quote labels containing parentheses or brackets; extra quoting is safe. Directories are subgraphs whose ids are their directory paths with trailing slashes. Declare each code node once in its directory subgraph. With a clear flow, order subgraphs along it and edges from the entry point. Without one, such as a file with unrelated callers, start from that file and group edges by the node they touch. Introduce tables and external systems on their first edge.
 
 Edge and shape meanings are fixed:
 
@@ -438,7 +438,7 @@ Every dotted edge, cylinder, hexagon, and no-consumer comment in the flowchart c
 
 ### What it shows
 
-For one specific scenario, what happens in what order, across which components, and which steps are asynchronous. It is the right tool for flows that leave the current process or module and continue somewhere else.
+One scenario's ordered steps across components, identifying asynchronous steps. Use it for flows that leave the current process or module and continue elsewhere.
 
 ### When to use it
 
@@ -497,7 +497,7 @@ Before choosing an arrow, inspect what the caller waits for. An event whose hand
 
 Add a `Note over` line at each point where a reader would lose the trail: an asynchronous hand-off, a transaction boundary, a step that can fail without undoing earlier steps. One Note per asynchronous hand-off, placed at the send; the delivery arrow from a queue to its consumer is the same hand-off and needs no second Note. Use `alt` blocks only when the branches route to different participants. Do not use `alt` for an internal if/else. Use `par` for steps that run at the same time. When a condition changes ordering, committed effects, acknowledgment, or retry behavior without changing participants, keep that fact in a message label or note even though it does not warrant a separate routing scenario. For example, state whether a worker acknowledges a message before or after persisting its result, and whether repeated processing is guarded against duplicate effects, when the inspected code establishes those facts. Name the enforcing function or relevant configuration key; do not transcribe unrelated local branches.
 
-Retries and repeats come in two shapes, and they are drawn differently. A retry that happens in place, the same call attempted again by the same caller, is a `loop` block around the repeated message, with the bound in the loop label: `loop up to 3 attempts`. A retry that re-enters through a queue or a scheduler, a worker that re-enqueues its own job or a cron that picks the record up again next run, is drawn once as the message back to the queue or scheduler participant, using the arrow for the waiting behavior actually observed, followed by a `Note over` stating the retry limit and the function that enforces it. Do not unroll repeats into copies of the same messages, and do not draw a second pass through the flow. If the limit is not enforced anywhere, say that in the note; an unbounded retry is exactly the kind of fact a reader needs. Around twelve messages is a comfortable length; if a scenario needs many more and has a natural seam, split it into two scenarios, and if it has no seam, keep it whole.
+Draw retries in two forms. For an in-place retry (the same caller repeats the same call), put the repeated message in a `loop` with its bound in the loop label: `loop up to 3 attempts`. For re-entry through a queue or scheduler (a worker re-enqueues its job, or cron picks up the record next run), draw one message back to that participant, using the arrow for the waiting behavior actually observed, followed by a `Note over` stating the retry limit and the function that enforces it. Do not unroll repeats into copies of the same messages, and do not draw a second pass through the flow. If no limit is enforced, say so in the note; an unbounded retry is a fact the reader needs. Around twelve messages is comfortable; if a scenario needs many more and has a natural seam, split it into two scenarios. Otherwise keep it whole.
 
 Example:
 
@@ -546,7 +546,7 @@ Signals to search for:
 
 Typical places these live: order, payment, subscription, and invoice lifecycles; job, task, and workflow runners; approval and review flows; provisioning and deployment pipelines; connection, session, and authentication handshakes; multi-step operations with compensation; content publishing; protocol handlers with modes.
 
-Also build one when the state field exists and all of its transitions are in one place. The diagram will be simple in that case, but it is still complete and still useful.
+Also build one when the state field's transitions are all in one place: a simple diagram is still complete and useful.
 
 Signals that look like the above but are not:
 
@@ -596,7 +596,7 @@ What breaks in this type: a hyphen in a state id; a reserved word as a state id.
 
 ### What it shows
 
-Which database tables exist in an area of the code and how they relate to each other: one-to-one, one-to-many, many-to-many. At the level used here, it shows relationships only, not columns. Its main value is finding the relationships the database does not enforce.
+An area's database tables and their one-to-one, one-to-many, and many-to-many relationships. At this level it shows relationships only, not columns. Its main value is finding relationships the database does not enforce.
 
 ### When to use it
 
@@ -629,7 +629,7 @@ Signals that look like the above but are not:
 
 ### How to write it
 
-Use `erDiagram`. The two comment lines are `%% data model:` with the area, and the completeness line. Entity names match table names exactly. Show relationships and cardinality only. Include a column only when it is needed to explain a relationship. Every line has a label. Label every relationship the database does not enforce with `soft-ref` followed by the column, quoted, so it can be told apart from an enforced foreign key. When the referenced table lives in another database, schema, or service, keep the bare table name as the entity, since an entity name cannot carry spaces, and put the system in the label: `orders }o--|| customers : "soft-ref customer_id (billing database)"`. The edge table's Target then carries `customers (billing database)`.
+Use `erDiagram`. The two comment lines are `%% data model:` with the area, and the completeness line. Entity names match table names exactly. Show relationships and cardinality only; include a column only when needed to explain a relationship. Label every line. For every relationship the database does not enforce, use a quoted label containing `soft-ref` followed by the column, distinguishing it from an enforced foreign key. For a target in another database, schema, or service, keep its bare table name as the entity (no spaces) and name the system in the label: `orders }o--|| customers : "soft-ref customer_id (billing database)"`. The edge table Target is then `customers (billing database)`.
 
 The cardinality marks, reading the symbol nearest each table: `||` exactly one, `|o` zero or one, `}|` one or more, `}o` zero or more. On the right-hand side of a line the same marks are mirrored: `||`, `o|`, `|{`, `o{`. So `customers ||--o{ orders` reads "one customer, zero or more orders."
 
@@ -655,7 +655,7 @@ Add every `soft-ref` relationship to the edge table with kind `soft-ref`.
 
 ### What it shows
 
-Which classes inherit from or implement which others, across files. This is a narrow use. The one thing it captures that is hard to see otherwise is the inbound side of a hierarchy: given a base class or interface, who are all of its subclasses or implementers? That question cannot be answered from the base's own file.
+Inheritance and interface implementation across files. Its narrow purpose is the inbound hierarchy: given a base class or interface, who are all its subclasses or implementers? The base's file cannot answer that.
 
 ### When to use it
 
@@ -730,7 +730,7 @@ Signals that look like the above but are not:
 ### When not to use it
 
 - For anything that is not a binary layout. This diagram has no other use.
-- When the format is declared in a schema: protobuf, flatbuffers, Cap'n Proto, ASN.1. The schema is the diagram. Do not redraw it.
+- When a schema already declares the format: protobuf, flatbuffers, Cap'n Proto, ASN.1. Do not redraw the schema.
 
 ### How to write it
 
@@ -756,7 +756,7 @@ What breaks in this type: a gap or overlap between ranges; a first range that do
 
 ### What it shows
 
-The words the code uses for the things it is about, what each word means here, and the identifier that represents it. Its purpose is to make sure the same word is used for the same concept everywhere, and to record when a word means something narrower or different from its everyday meaning.
+Domain words, their meanings here, and their code identifiers. Use the same word for the same concept everywhere, and record meanings narrower than or different from everyday usage.
 
 ### When to use it
 
@@ -790,7 +790,7 @@ One row per concept. Meaning is a sentence or two in plain language, longer only
 
 ### What they are
 
-For each file, a few plain sentences, usually one to three and more for a file that does a lot: what the file is responsible for, and anything a reader would not expect. A hook that fires on save. A function that is only ever called from a scheduled job. A value that must stay in sync with a value in another file. A workaround for a bug in an external system.
+A few plain sentences per file, usually one to three, more for a file that does a lot. State its responsibility and surprises: a hook that fires on save, a function called only by a scheduled job, a value that must stay in sync with one in another file, or a workaround for a bug in an external system.
 
 File notes are also the place for anything that does not fit a diagram type, and for saying what was looked for and not found.
 
@@ -804,7 +804,7 @@ After the `Owns` sentence, do not restate what the file obviously is from its na
 
 ### How to write them
 
-One block per file, starting with the file path and then a first sentence that states what the file is responsible for, written as `Owns` followed by a noun phrase, as in the example; the Placement Guide copies that phrase into the file's `owns:` line. The sentences after it hold everything else:
+One block per file: start with its path, then a first sentence of `Owns` followed by a noun phrase stating its responsibility, as shown. The Placement Guide copies that phrase into the file's `owns:` line. Put everything else in later sentences:
 
 ```text
 orders/service.py: Owns creation and cancellation of orders. Emits OrderCreated on create; see edge table. orders.service.cancel_order is also called from the nightly expiry job, jobs.expire_orders.run (jobs/expire_orders.py), not only from the API.
@@ -814,7 +814,7 @@ orders/service.py: Owns creation and cancellation of orders. Emits OrderCreated 
 
 ## Telling look-alike types apart
 
-Each pair below is a common confusion. Apply the test and pick the type it names.
+For each common confusion, apply the test to choose the type.
 
 **State diagram or sequence diagram?** Is this a property of an object that still exists between requests, or a position in an execution that is happening right now? A stored `status` column is a state. "First it validates, then it charges" is a sequence. Names such as `validating` or `sending_email` can denote either. Inspect whether the value is stored as a state of the object; do not choose the diagram from the name alone.
 
@@ -832,7 +832,7 @@ Each pair below is a common confusion. Apply the test and pick the type it names
 
 ## Things never to diagram
 
-Regardless of type, do not build diagrams of the following, and do not write file notes for them. Several of them are still worth reading as a source of facts: a migration tells you the tables, a generated client tells you the endpoints, a test tells you which transitions are exercised. Read them for what they reveal about the code you are describing; do not make them the subject of a diagram.
+Do not diagram or write file notes for the following, regardless of type. They may still supply facts: migrations reveal tables, generated clients reveal endpoints, and tests reveal exercised transitions. Read them as evidence about the described code, not as diagram subjects.
 
 - Tests. Read them for the transitions and paths they exercise; do not draw them or describe them.
 - Generated code.
@@ -846,7 +846,7 @@ Regardless of type, do not build diagrams of the following, and do not write fil
 
 ## Priority among types
 
-When more than one type applies to the same code, this is their order of value, highest first.
+When multiple types apply to the same code, prioritize them in this order:
 
 1. Stored state fields: the state diagram.
 2. Boundary crossings, meaning network calls, queues, jobs, webhooks: sequence diagrams for the scenarios that cross them.
@@ -877,7 +877,7 @@ Content:
 
 Syntax, checked by eye since the diagram cannot be rendered here:
 
-- No id, and no dotted segment of an id in the positions the reserved-word list names for this diagram's type, is a reserved word, per the reserved-word list under "Mermaid that parses", and every escape uses the form given there.
+- No id or dotted segment may be a reserved word in the positions specified for this diagram type under "Mermaid that parses"; use only the specified escapes.
 - Every label containing parentheses or brackets is in double quotes, including edge labels.
 - Every `%%` comment is on its own line.
 - Every `subgraph`, `alt`, `par`, and `loop` has a matching `end`.
