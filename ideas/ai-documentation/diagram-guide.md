@@ -312,7 +312,7 @@ Record one row for each of these, wherever it is found:
 - Code that reads from or writes to more than one database table.
 - Dynamic dispatch, where the function called is chosen from a string or a lookup at runtime.
 
-Signals to search for, grouped by mechanism. Any one of these in a file is a hidden dependency to record in the edge table, and a reason to include the file in a dependency flowchart when one is drawn.
+Signals to search for, grouped by mechanism. These are candidates to investigate, not proof of a hidden dependency. Find the pattern, inspect how it works, then record the relationship only if the code establishes it. Apply the same test to every signal list in this guide: names and framework conventions help locate code but do not determine its meaning. A confirmed hidden dependency is a reason to include the file in a dependency flowchart when one is drawn.
 
 - Events, generic: `emit`, `publish`, `dispatch`, `signal`, `subscribe`, `on_`, `addEventListener`, `EventEmitter`, `@receiver`, `@listener`, `@EventListener`, `@OnEvent`, `ApplicationEventPublisher`, `Event::listen`, `ActiveSupport::Notifications`.
 - ORM and model hooks: Django `post_save`, `pre_save`, `post_delete`, `signals.`; Rails `after_commit`, `after_save`, `before_validation`, `after_create`, `dependent:`, observers; SQLAlchemy `@event.listens_for`; Mongoose `schema.pre`, `schema.post`; Prisma `$use`; TypeORM `@BeforeInsert`, `@AfterUpdate`; Hibernate and JPA `@PrePersist`, `@PostLoad`, `@EntityListeners`.
@@ -329,8 +329,8 @@ Signals that look like the above but are not:
 - The `event` parameter of a click or keyboard handler. That is a browser event object, not a domain event.
 - `signal.SIGTERM`, `signal.signal(` in Python. Those are operating-system signals.
 - `emit` inside a Vue or Angular component. That is a parent-child component event, local to the UI tree.
-- `subscribe` on an RxJS observable or a Redux store. That is in-process and usually not a cross-module dependency.
-- `dispatch` in a Redux reducer. Same.
+- `subscribe` on an RxJS observable or a Redux store when the connection stays within one module. Inspect the producer and subscriber before excluding it; an in-process subscription can still connect modules.
+- `dispatch` in a Redux reducer when its effects stay within that module. Trace registered handlers or middleware before deciding it is local.
 - A single table accessed by a file that does nothing else is not a reason to draw a flowchart. Its writes still go in the edge table, so that `writes:` names every writer.
 
 ### How to write it
@@ -472,7 +472,7 @@ Signals that look like the above but are not:
 - `await` on a function in the same module. That is a call, not a boundary.
 - `setTimeout` used once for a UI delay. Not a scheduled job.
 - `Promise.all` over functions that all live in one file. Fan-out inside a file is the code redrawn.
-- `subscribe` on an RxJS observable. In-process.
+- `subscribe` on an RxJS observable when all relevant behavior stays within one module. An in-process subscription that crosses modules still qualifies when ordering or side effects meet the criteria above.
 - A `try`/`except` with a single retry loop around a local function. Not a resilience boundary unless the retried call is a network call.
 
 ### When not to use it
@@ -561,7 +561,7 @@ Signals that look like the above but are not:
 - For a boolean flag on its own.
 - For an enum that is a category rather than a lifecycle.
 - For state that exists only in memory during one request and is never stored.
-- For steps in a process. This is the most common mistake. If you find yourself writing states like "validating", "charging", "sending email", stop. Those are steps in an execution, not states of an object. That flow belongs in a sequence diagram or a dependency flowchart.
+- For steps in a process that are not stored states of an object. Names such as "validating", "charging", and "sending email" are clues to inspect the field and its lifetime, not grounds for exclusion: if the code stores such a value as an entity state, it belongs in the lifecycle. Otherwise describe the execution with a sequence diagram when its criteria are met.
 - When a state machine library is already in use: xstate, python-transitions, aasm, statesman, Stateless, Spring StateMachine, or similar. The machine is already declared in code. Do not redraw it. Instead, read the declaration and record, as a file note, any place that sets the state directly and bypasses the machine.
 
 The test that resolves most doubt: is this a property of an object that still exists between requests, or a position in an execution that is happening right now? Only the first is a state.
@@ -816,7 +816,7 @@ orders/service.py: Owns creation and cancellation of orders. Emits OrderCreated 
 
 Each pair below is a common confusion. Apply the test and pick the type it names.
 
-**State diagram or sequence diagram?** Is this a property of an object that still exists between requests, or a position in an execution that is happening right now? A stored `status` column is a state. "First it validates, then it charges" is a sequence. If the candidate state names are verbs or verb phrases, `validating`, `sending_email`, it is a sequence.
+**State diagram or sequence diagram?** Is this a property of an object that still exists between requests, or a position in an execution that is happening right now? A stored `status` column is a state. "First it validates, then it charges" is a sequence. Names such as `validating` or `sending_email` can denote either. Inspect whether the value is stored as a state of the object; do not choose the diagram from the name alone.
 
 **Sequence diagram or dependency flowchart?** Does the description need the words "then", "after", "before", or "waits for"? If yes, it is a sequence: the order matters. If the description is "A calls B" or "A depends on B" with no ordering, it is a dependency flowchart. A dependency flowchart shows what can happen; a sequence diagram shows what does happen, in order, for one case.
 
