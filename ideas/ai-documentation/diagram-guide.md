@@ -18,7 +18,7 @@ You produce one Markdown document. It contains, in this order: the state diagram
 
 A diagram is worth drawing when it shows something that cannot be seen by reading one file. Which states an order can be in, when the transitions are scattered across twelve handlers. Who consumes an event, when the emitter and the consumers live in different modules. What happens after a request leaves this process, when the next step runs in a queue worker somewhere else.
 
-A diagram is not worth drawing when it redraws what is already on the screen. The branches inside a single function, the imports at the top of a file, the fields of a class: these are already visible, and drawing them adds nothing. Before drawing anything, ask whether a reader with the file open would learn something from the diagram that they could not learn from the file. If not, do not draw it.
+A diagram is not worth drawing when it redraws what is already on the screen. The branches inside a single function, the imports at the top of a file, the fields of a class: these are already visible, and drawing them adds nothing. Before drawing anything, ask whether a reader with the file open would learn something from the diagram that they could not learn from the file. If not, do not draw it. The stored-lifecycle diagrams requested under "State diagram" are an explicit exception: draw those even when all transitions are implemented in one place, unless a state machine library already declares the machine.
 
 ## Written for an AI reader
 
@@ -866,7 +866,7 @@ Content:
 - Does every edge, transition, participant, and row correspond to something you read in the code, with anything suspected but not seen written as `%% suspected:` or in a file note instead?
 - Does every name in it follow the identifier format from the general rules, with its last segment present in the code it points at? Search for one or two to confirm.
 - Are the two comment lines present: what the diagram shows, and `%% complete within:` or `%% partial within:` naming the read scope, with `; left out:` on the partial form?
-- Is there anything in it a reader could have learned by opening one file? If so, remove it.
+- Does it merely redraw what one file already makes clear? If so, remove it, except for the stored-lifecycle diagrams explicitly requested under "State diagram." Keep the exception limited to those diagrams.
 - Are meaningful absences stated in comments, distinguishing what was not found in the inspected scope from what is explicitly prevented, with any claim about intent supported by a cited source?
 - Are there any placeholder or aggregate nodes, abbreviations, or sentences used as names? If so, replace them.
 - Is every dotted edge, soft reference, and hidden dependency also in the edge table, and does every dotted edge in a flowchart carry a comment naming its files?
