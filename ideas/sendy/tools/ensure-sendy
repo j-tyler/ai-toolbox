@@ -1,0 +1,49 @@
+#!/bin/sh
+# Run from the consuming project root. SENDY_SOURCE optionally selects a source checkout.
+set -eu
+fail() { printf 'sendy setup: %s\n' "$*" >&2; exit 1; }
+command -v flock >/dev/null 2>&1 || fail 'flock is required for safe concurrent setup'
+command -v sha256sum >/dev/null 2>&1 || fail 'sha256sum is required for installation verification'
+[ -f tools/sendy.version ] || fail 'missing tools/sendy.version; run from the project root'
+pin=$(cat tools/sendy.version)
+printf '%s\n' "$pin" | LC_ALL=C grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$' || fail 'tools/sendy.version must pin an exact version (for example v0.1.0)'
+mkdir -p .tools/bin
+exec 9>.tools/sendy-setup.lock
+flock -x 9
+binary=.tools/bin/sendy
+check() {
+ [ -f "$binary" ] && [ ! -L "$binary" ] && [ -x "$binary" ] || fail 'damaged installation; separate maintenance is required'
+ [ -f .tools/sendy.sha256 ] || fail 'missing installation checksum; separate maintenance is required'
+ sha256sum -c .tools/sendy.sha256 >/dev/null 2>&1 || fail 'damaged installation checksum; separate maintenance is required'
+ actual=$("$binary" --version) || fail 'unusable executable; separate maintenance is required'
+ [ "$actual" = "sendy $pin" ] || fail "installed version differs from $pin; separate maintenance is required"
+}
+if [ -e "$binary" ] || [ -L "$binary" ]; then
+ check
+else
+ [ ! -e .tools/sendy.sha256 ] || fail 'missing executable from existing installation; separate maintenance is required'
+ command -v go >/dev/null 2>&1 || fail 'Go 1.23 or newer is required for source installation'
+ stage=$(mktemp -d .tools/sendy-build.XXXXXX)
+ trap 'rm -rf "$stage"' EXIT HUP INT TERM
+ stage=$(cd "$stage" && pwd)
+ source=${SENDY_SOURCE:-}
+ # The helper included in the Sendy checkout can build that checkout directly.
+ if [ -z "$source" ] && [ -f go.mod ] && [ -f main.go ] && [ -f tools/sendy.version ] && [ "$(sed -n '1p' go.mod)" = 'module github.com/j-tyler/ai-toolbox/ideas/sendy' ]; then source=$(pwd); fi
+ if [ -n "$source" ]; then
+  [ -f "$source/tools/sendy.version" ] || fail 'SENDY_SOURCE must name the Sendy source directory'
+  [ "$(cat "$source/tools/sendy.version")" = "$pin" ] || fail 'source version differs from project pin'
+  (cd "$source" && go build -trimpath -ldflags "-X main.version=$pin" -o "$stage/sendy" .)
+ else
+  # Published releases embed their exact version in main.go.
+  GOBIN="$stage" go install "github.com/j-tyler/ai-toolbox/ideas/sendy@$pin"
+ fi
+ [ "$("$stage/sendy" --version)" = "sendy $pin" ] || fail 'built executable does not match pinned version'
+ chmod 755 "$stage/sendy"
+ hash=$(sha256sum "$stage/sendy"); hash=${hash%% *}
+ printf '%s  .tools/bin/sendy\n' "$hash" > "$stage/sendy.sha256"
+ # Publish only a completed executable; the lock serializes all setup readers.
+ mv "$stage/sendy.sha256" .tools/sendy.sha256
+ mv "$stage/sendy" "$binary"
+fi
+mkdir -p .sendy/templates
+"$binary" template validate

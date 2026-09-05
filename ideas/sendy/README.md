@@ -1,6 +1,6 @@
 # Sendy
 
-**Status: proposed tool and user interface. Implementation is a separate change.**
+**Status: implemented; source distribution available in this directory.**
 
 ## What Sendy is
 
@@ -57,6 +57,7 @@ Examples use the project-local executable from the project root after
 .tools/bin/sendy wait ID [ID ...] --timeout MINUTES
 .tools/bin/sendy close ID [ID ...]
 .tools/bin/sendy template render NAME [--set KEY=VALUE ...]
+.tools/bin/sendy template fields NAME
 .tools/bin/sendy template validate
 ```
 
@@ -68,6 +69,7 @@ Examples use the project-local executable from the project root after
 | `wait` | Every listed conversation has a result or is closed, or the timeout expires. |
 | `close` | The listed conversations have been closed. It does not wait for children to exit. |
 | `template render` | The completed template has been printed. It sends no message. |
+| `template fields` | The template's required field names have been printed as a JSON array. |
 | `template validate` | All project templates have been checked. It sends no message. |
 
 Each identifier names one parent/child conversation. It is used for every round
@@ -294,8 +296,9 @@ root. Sendy looks only in `.sendy/templates/` under the current working director
 It does not search parent directories or fall back to a global template registry.
 The shared conversation store remains independent of working directory.
 
-Each direct child file named `NAME.txt` defines template `NAME`. Names contain
-lowercase ASCII letters, digits, hyphens, or underscores and start with a letter
+Each direct child regular file named `NAME.txt` defines template `NAME` (symlinks
+to regular files are allowed). Special files such as FIFOs produce an error.
+Names contain lowercase ASCII letters, digits, hyphens, or underscores and start with a letter
 or digit. Template names are case-sensitive. Other files and subdirectories are
 not templates. There is no separate `template add` or registration command:
 checking a file into this directory makes it available to the project.
@@ -316,9 +319,17 @@ match `[A-Za-z_][A-Za-z0-9_]*` and are case-sensitive. Loops, conditionals, nest
 fields, functions, includes, and other template actions are rejected. This keeps
 the required fields explicit without a second schema or a new template language.
 
-All fields are required. A field used several times needs only one value. Values
-are strings, inserted literally without recursive template evaluation, shell
-execution, or automatic JSON escaping. Use stdin with an already serialized file
+Templates may also contain only fixed text, with no placeholders or arguments.
+For example, the supplied `staged-review` template can be used without `--set`:
+
+```bash
+.tools/bin/sendy template render staged-review
+.tools/bin/sendy reply k07 --template staged-review
+```
+
+When a template has fields, all are required. A field used several times needs
+only one value. Values are strings, inserted literally without recursive template
+evaluation, shell execution, or automatic JSON escaping. Use stdin with an already serialized file
 for arbitrary JSON messages; text templates do not make arbitrary inserted values
 JSON-safe.
 
@@ -366,8 +377,8 @@ No message was sent.
 ```
 
 Print diagnostics on stderr, leave stdout empty, exit `1`, and leave conversation
-state unchanged. The agent can fix its arguments and retry. For `template render`,
-the final line instead says `No output was produced.`
+state unchanged. The agent can fix its arguments and retry. For `template render`
+or `template fields`, the final line instead says `No output was produced.`
 
 An unknown template error names the requested template, the searched directory,
 and the available template names. An invalid template error names the file and
@@ -390,6 +401,24 @@ file or can pass its contents programmatically. If the model must copy the file
 back into a launch tool argument, that copying still generates output tokens.
 Sendy itself does not launch children.
 
+### `.tools/bin/sendy template fields NAME`
+
+Find the values a template requires before rendering or sending it:
+
+```bash
+.tools/bin/sendy template fields review
+```
+
+Print the unique field names in alphabetical order as a JSON array followed by a
+newline, and exit `0`. For the `review` example, the output is
+`["filename","name"]`. A fixed-text template such as `staged-review` returns `[]`.
+Field names keep their original case; uppercase letters sort before lowercase letters.
+
+This command takes no options, reads no stdin, and does not create or change a
+conversation. Run it from the project root, like other template commands. A
+missing or invalid template produces the same template diagnostics on stderr as
+`template render`, leaves stdout empty, and exits `1`.
+
 ### `.tools/bin/sendy template validate`
 
 Check project templates for valid names and syntax and nonempty UTF-8 text.
@@ -403,8 +432,15 @@ Normal project setup creates this directory when it is missing.
 
 ## Including Sendy in your project
 
-Sendy is not implemented yet. The following is the planned project setup; the
-setup helper and releases will be supplied with the implementation.
+The source distribution includes a setup helper, a version pin, example templates,
+and a Makefile. From this directory, run `make sendy` to build the project-local
+executable and validate the supplied templates, including the argument-free
+`staged-review` prompt.
+
+This initial version is `v0.1.0-dev`; no published release or prebuilt binary is
+provided yet. Setup requires Go 1.23 or newer, `make`, `flock`, and `sha256sum`
+(the helper currently targets Linux). Dependency downloads require network access
+when they are not cached.
 
 The project owns the Sendy version and templates. Engineers do not need a global
 Sendy installation. Add these files to the consuming project:
@@ -413,13 +449,24 @@ Sendy installation. Add these files to the consuming project:
 | --- | --- |
 | `Makefile` | Provides the `sendy` setup target below. |
 | `tools/ensure-sendy` | Setup helper supplied with Sendy. |
-| `tools/sendy.version` | Pins an exact released Sendy version. |
+| `tools/sendy.version` | Pins the exact Sendy source version. |
 | `.sendy/templates/*.txt` | Version-controlled prompts, available by filename. |
 | `.tools/bin/sendy` | Generated local executable; exclude it from Git. |
 
-Use a released version, not `latest`. Source installation requires Go and access
-to download dependencies when they are not cached; a prebuilt-binary installation
-option is planned for teams without Go.
+To set up another project with this source distribution, copy `tools/ensure-sendy`
+and `tools/sendy.version` into its `tools/` directory and add the Makefile target
+below. Copy or author the project's `.sendy/templates/*.txt` files, then run from
+that project's root:
+
+```bash
+SENDY_SOURCE=/absolute/path/to/ai-toolbox/ideas/sendy make sendy
+```
+
+`SENDY_SOURCE` selects the source checkout only for the first build. Its version
+must match the project pin. Subsequent setup calls reuse the verified installation
+without needing that checkout or Go. Keep `.tools/` out of version control.
+For a future published release, pin its exact version, never `latest`; the helper
+can install the matching Go module when `SENDY_SOURCE` is omitted.
 
 Recipe indentation in this Makefile uses tabs:
 
@@ -427,8 +474,6 @@ Recipe indentation in this Makefile uses tabs:
 .PHONY: sendy
 sendy:
 	./tools/ensure-sendy
-	mkdir -p .sendy/templates
-	./.tools/bin/sendy template validate
 ```
 
 `make sendy` ensures Sendy is available and checks templates. It reuses an existing
@@ -440,9 +485,9 @@ A version mismatch or damaged installation produces an error requiring separate
 maintenance; ordinary skill runs do not upgrade or repair an existing executable.
 Changing the Makefile or templates does not trigger a binary rebuild.
 
-The `mkdir -p` step supports projects with no templates, including fresh checkouts
-where an empty directory would otherwise be missing. Existing templates are left
-untouched. Template files are the registration: setup validates them, and skills
+The helper creates `.sendy/templates/` when missing, supporting projects with no
+templates and fresh checkouts where an empty directory would otherwise be missing.
+Existing templates are left untouched. Template files are the registration: setup validates them, and skills
 can immediately use their names. There is no per-run registration or global
 registry to synchronize. Pulling a project or switching branches selects its
 current templates.
