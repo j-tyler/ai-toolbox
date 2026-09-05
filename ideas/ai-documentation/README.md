@@ -8,14 +8,14 @@ like and where it should go.
 
 Two beliefs sit underneath everything here.
 
-**Information should be as local as possible.** The most useful place for a fact
-about a line of code is directly above that line. The most useful place for a fact
-about a class or a method is directly above its definition. Agents read the top of
-a file first, so a block of file-level documentation at the top is a cheap way to
-put real context in front of them — what the file owns, what depends on it in ways
-the imports don't show, what it will break if changed. Whenever an agent opens that
-file, whether to implement something or to review a change, that context lands in
-its window at exactly the moment it's needed.
+**Information should be as local as possible.** Put a useful fact about a line
+above that line, and a file-wide fact or navigation pointer in its header map.
+Keep a coherent explanation together when its relationships, ordering, or
+conditions would lose meaning if split into comments. Such explanations belong
+beside their definition or in owner-local documentation, with specific routes from
+the relevant source files. Agents may reach a function directly through search,
+so a locally important constraint or hazard still belongs at the operation where
+it matters.
 
 **Diagrams are worth writing for the AI reader, not the picture.** A model reads the
 diagram's source text, never the rendered image. Because models already understand
@@ -35,12 +35,12 @@ meaning carried by layout or color, and an explicit statement of what the diagra
 is complete over.
 
 **2. [Placement guide](placement-guide.md)** — how to get those facts into the code.
-Diagrams sitting in a documents folder are nice; the value comes from putting each
-fact next to the code it describes. This guide takes a set of diagrams and decides
-what gets written into the repository, in what form, and where — a structured
-block at the top of a source file, a comment above a specific line, a directory
-README, an index in the root agent file, or a glossary row. Hand it to an agent
-along with your diagrams and it does the placement.
+The guide decides whether to retain a coherent diagram, extract independently
+useful facts, or omit redundant or unsupported material. It places the result in
+source maps, comments beside code, owner-local explanations, root indexes, or the
+glossary. Full explanations keep the context that makes their relationships useful;
+source pointers make them discoverable without copying them into every file.
+Hand it to an agent with the diagrams and current code for placement.
 
 **3. [Example agents file](agents-file-example.md)** — not something to copy as-is.
 It shows what a repository's root instructions file needs to say once the placement
