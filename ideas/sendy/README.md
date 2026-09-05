@@ -2,15 +2,23 @@
 
 **Status: interface specification. Implementation is a separate change.**
 
-Sendy is a local command-line utility for agents that need to take turns. A child
-submits its result and stays inside that tool call until its parent gives it more
-work. A parent can collect results from several children, reply to each without
-blocking, and then wait for their next results.
+Sendy is an idea for keeping parent-child AI workflows disciplined through a small
+local message-passing utility. Agents, especially smaller models, can be
+rambunctious: they struggle with complex skills and workflows, make unnecessary
+tool calls, and explore beyond their assigned work when they should simply wait.
 
-The purpose of blocking is to prevent an agent from continuing to act while it
-should be waiting. Instructions alone are often insufficient, especially for
-smaller models. Sendy uses ordinary command arguments, stdin, stdout, and exit
-codes so those models have very little protocol to learn.
+Sendy establishes clear bounds on how parents and children communicate. A parent
+can progressively disclose work, giving each child just its next unit of work.
+The child completes it, submits its result, and stays blocked inside that tool
+call until the parent provides the next instruction. The parent can collect
+results from several children, reply to each without blocking, and then wait for
+their next results. Blocking makes waiting part of the mechanism, reducing the
+opportunity for unnecessary activity between assignments.
+
+The interface deliberately uses ordinary command arguments, stdin, stdout, and
+exit codes. There is very little protocol to learn, so even smaller models can
+follow the same simple cycle: do the assigned work, submit it, and wait for what
+comes next.
 
 All Sendy design and implementation work belongs in this folder. The planned
 implementation is Go with embedded SQLite through `modernc.org/sqlite`. There is
