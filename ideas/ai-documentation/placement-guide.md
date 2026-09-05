@@ -4,11 +4,11 @@
 
 You receive three things: a change to the code, the repository as it stands after that change, and a set of artifacts describing the area the change touched. The artifacts are diagrams, tables, and file notes written according to the Code Diagram Guide: an edge table, dependency flowcharts, sequence diagrams, state diagrams, entity-relationship diagrams, class diagrams, packet diagrams, a glossary table, and file notes.
 
-You have one job: decide which facts in those artifacts get written into the repository, where each one goes, what already in the repository needs updating or removing as a result, and what gets left out. Then write it, and report what you did.
+You have one job: decide which facts in those artifacts get written into the repository, where each one goes, what already in the repository needs updating or removing as a result, and what gets left out. Then make the qualifying changes.
 
-This document tells you how to make each of those decisions. It is deliberately opinionated. Your judgment is needed to determine which file owns something, whether a fact is already visible in the code, whether an existing statement is contradicted, and which line an inline comment belongs to. The inclusion rules below decide which kinds of documentation qualify and where they belong. If a proposed addition does not clearly meet them, leave it out and report why.
+This document tells you how to make each of those decisions. It is deliberately opinionated. Your judgment is needed to determine which file owns something, whether a fact is already visible in the code, whether an existing statement is contradicted, and which line an inline comment belongs to. The inclusion rules below decide which kinds of documentation qualify and where they belong. If a proposed addition does not clearly meet them, leave it out.
 
-Two kinds of rule appear below. The rules under "What qualifies," "What is never written," and "Constraints," the map block format, and in the key reference each key's template, the file it goes on, and the key it pairs with, are absolute. Each key's "write it when" and "do not write it when" conditions define what qualifies, and applying them to the code in front of you is exactly where your judgment goes. Everything else describes the normal case. Where a rule does not fit the code in front of you cleanly, do the closest thing that keeps the written material accurate and traceable to the code, and say what you did in the report.
+Two kinds of rule appear below. The rules under "What qualifies," "What is never written," and "Constraints," the map block format, and in the key reference each key's template, the file it goes on, and the key it pairs with, are absolute. Each key's "write it when" and "do not write it when" conditions define what qualifies, and applying them to the code in front of you is exactly where your judgment goes. Everything else describes the normal case. Where a rule does not fit the code in front of you cleanly, do the closest thing that keeps the written material accurate and traceable to the code.
 
 ## What qualifies
 
@@ -18,7 +18,7 @@ Add a fact only when all three conditions hold. Existing material follows the re
 2. **It serves a specific reading task.** It exposes a hidden connection, brings scattered behavior together, explains a constraint or hazard, or supplies one of the navigation indexes explicitly allowed below. Identify what the reader can find or what mistake they can avoid when deciding whether to include it; do not add a separate usefulness explanation to the entry. General usefulness is not enough.
 3. **It can be read correctly on its own.** Identify what the fact applies to, preserve conditions that affect its meaning, and avoid claims of completeness, exclusivity, or intent that the evidence does not establish. An unfamiliar reader should not need to know how the artifacts were produced.
 
-Then apply the key's inclusion rules. If support or value remains uncertain, omit the proposed addition and report the uncertainty. Do not turn a search result into a claim about the whole system: a caller behind a flag does not establish that all callers require it, and a missing transition does not establish a prohibition.
+Then apply the key's inclusion rules. If support or value remains uncertain, omit the proposed addition. Do not turn a search result into a claim about the whole system: a caller behind a flag does not establish that all callers require it, and a missing transition does not establish a prohibition.
 
 Put information near the code it describes, in a fixed searchable form. Keep hidden connections at both ends and full diagrams in one place with local pointers. A fact that merely repeats nearby code is omitted, except for the explicitly allowed responsibility, writer, and external-system indexes. Those indexes help readers choose a file or find documented endpoints across files. The ability to derive a fact with tools is not by itself a reason to omit it.
 
@@ -60,7 +60,7 @@ The table below names the allowed homes for qualifying facts; some relationships
 | the meaning of the map block keys | root agent file | `## Map blocks` legend |
 | a domain term, its canonical identifier, and its aliases | `GLOSSARY.md` | one row |
 
-The dependency flowchart and the class diagram are never written as diagrams, and the entity-relationship diagram only in the no-schema case; what they carry arrives through the rows above. Anything that fits no row is not written and is listed in the report.
+The dependency flowchart and the class diagram are never written as diagrams, and the entity-relationship diagram only in the no-schema case; what they carry arrives through the rows above. Anything that fits no row is not written.
 
 ## The map block
 
@@ -107,8 +107,8 @@ Not keys but delimiters: a comment line whose content after the marker is exactl
 Means: what this file is responsible for.
 Template: `owns: <noun phrase describing the responsibility>`
 Example: `owns: creation and cancellation of orders`
-Write it when: the file notes give a purpose statement for this file, which they do for every file they describe. It is the first line of the block and the source for directory navigation. If a module docstring already states the same purpose, reuse its wording for `owns:` rather than composing a competing description. Leave the docstring alone. If the two descriptions disagree, resolve the discrepancy against the code before adding `owns:`; report an unresolved discrepancy instead.
-Do not add it when: the artifacts give no purpose statement for the file. That happens when the file is the far end of a two-ended fact, an `event in:` or `soft-ref in:` for example, and was not itself described. An unresolved conflict with an existing purpose statement also prevents adding or replacing `owns:` and is reported with both versions. In either case, an existing `owns:` follows reconciliation; if none survives, write the block without it and report the missing purpose statement. A file the artifacts say nothing about at all gets no new block.
+Write it when: the file notes give a purpose statement for this file, which they do for every file they describe. It is the first line of the block and the source for directory navigation. If a module docstring already states the same purpose, reuse its wording for `owns:` rather than composing a competing description. Leave the docstring alone. If the two descriptions disagree, resolve the discrepancy against the code before adding `owns:`. If the discrepancy remains unresolved, do not add or replace the purpose statement.
+Do not add it when: the artifacts give no purpose statement for the file. That happens when the file is the far end of a two-ended fact, an `event in:` or `soft-ref in:` for example, and was not itself described. An unresolved conflict with an existing purpose statement also prevents adding or replacing `owns:`. In either case, an existing `owns:` follows reconciliation; if none survives, write the block without it. A file the artifacts say nothing about at all gets no new block.
 On: the file itself. Pairs with: nothing.
 
 **`entry point of:`**
@@ -139,7 +139,7 @@ On: the callee's file. Pairs with: nothing; the caller's side is visible in the 
 Means: this file emits the named event, and these are verified consumers documented here; the list need not include every consumer.
 Template: `event out: <EventName> -> <consumer identifier> (<file>), <consumer identifier> (<file>)`. One line per event name and shared local subject and condition. A consumer outside this repository is written as `<service name> (outside repository)` and gets no `event in:` line anywhere.
 Example: `event out: OrderCreated -> analytics.consumers.on_order_created (analytics/consumers.py), notifications.handlers.on_order_created (notifications/handlers.py)`
-Write it when: the edge table has a row of kind `event` whose Source is in this file. A row whose Target is `no consumer found` is a search result, not a verified connection: do not turn it into an `event out:` entry. Report it under Not kept and Flagged. A concrete behavior such as an event deliberately discarded qualifies only under the separate absence rules.
+Write it when: the edge table has a row of kind `event` whose Source is in this file. A row whose Target is `no consumer found` is a search result, not a verified connection: do not turn it into an `event out:` entry. A concrete behavior such as an event deliberately discarded qualifies only under the separate absence rules.
 Do not write it when: the "event" is a direct function call, which is visible in the code; when it is a component-local UI event; when a consumer is only suspected.
 On: the emitter's file. Pairs with: `event in:` on each consumer's file.
 
@@ -270,7 +270,7 @@ On: the calling file. Pairs with: nothing; the external system has no file here.
 Means: the named column refers to another table without a foreign key constraint. A named validator establishes one check, not the only check or a guarantee that all writes use it.
 Template: `soft-ref out: <source table>.<column> -> <target table> (no FK; validated in <identifier> (<file>))`. When validation has not been established, use `soft-ref out: <source table>.<column> -> <target table> (no FK)`; absence of a validator in this line makes no claim about validation.
 Example: `soft-ref out: orders.promotion_code -> promotions (no FK; validated in orders.service.validate_promotion (orders/service.py))`
-Write it when: a verified `soft-ref` relationship has its referencing column in a model defined in this file. A `validated in` artifact clause supplies the check after it is confirmed. If the artifact says `validation unknown` or `validation not found within <paths>`, keep the verified relationship without a validation clause and report the unresolved validation under Flagged. If inspected write paths accept the reference without validation, describe those particular paths in a qualifying inline comment or hazard; do not write an unqualified `not validated` claim. For a reference into another database or service, name the system after the target table: `soft-ref out: orders.customer_id -> customers (billing database) (no FK)`.
+Write it when: a verified `soft-ref` relationship has its referencing column in a model defined in this file. A `validated in` artifact clause supplies the check after it is confirmed. If the artifact says `validation unknown` or `validation not found within <paths>`, keep the verified relationship without a validation clause. If inspected write paths accept the reference without validation, describe those particular paths in a qualifying inline comment or hazard; do not write an unqualified `not validated` claim. For a reference into another database or service, name the system after the target table: `soft-ref out: orders.customer_id -> customers (billing database) (no FK)`.
 Do not write it when: the column has a foreign key constraint or an ORM declaration that creates one.
 On: the file defining the referencing model. Pairs with: `soft-ref in:`, except for references into other systems, which have no second end here.
 
@@ -286,7 +286,7 @@ On: the file defining the referenced table. Pairs with: `soft-ref out:`.
 Means: this file defines a stored state or contains code that changes it; the line points to the one kept diagram of its lifecycle.
 Template: `transitions: <entity identifier>.<field>, diagram above <identifier of the definition>`. For a lifecycle encoded in several booleans or timestamps: `transitions: <entity identifier> (<field>, <field>), diagram above <identifier of the class>`. For a field whose values are bare string or number literals with no enum: `transitions: <entity identifier>.<field>, diagram above <identifier of the class>`. When the diagram had to be placed at the top of the file because no definition exists in a source file: `transitions: <entity identifier>.<field>, diagram below this block`.
 Example on the owner: `transitions: orders.models.Order.status, diagram above orders.models.OrderStatus`. Example on a writer: `transitions: orders.models.Order.status, diagram in orders/models.py above orders.models.OrderStatus`. For a diagram below the owner's map block, a writer uses `transitions: <entity identifier>.<field>, diagram in <owner file> below map block`. The same external-location suffix applies to the multi-field form.
-Write it when: a state diagram qualifies under the state-diagram rules and this is the owner file or a file defining a verified transition shown in it. The owner is the file where the state's values are defined: the enum, the union type, the choices list, or, when the state is a combination of booleans or timestamps or when its values are bare string or number literals with no enum, the class or type that declares the field. Only when the values are defined only in generated code or a migration and no source type declares the field is the owner the file that assigns the field in the most places; list that case under Flagged as `rule did not fit`, saying so. The diagram itself is placed as described under "State diagram" in the placement rules; this line only points at it.
+Write it when: a state diagram qualifies under the state-diagram rules and this is the owner file or a file defining a verified transition shown in it. The owner is the file where the state's values are defined: the enum, the union type, the choices list, or, when the state is a combination of booleans or timestamps or when its values are bare string or number literals with no enum, the class or type that declares the field. Only when the values are defined only in generated code or a migration and no source type declares the field is the owner the file that assigns the field in the most places. The diagram itself is placed as described under "State diagram" in the placement rules; this line only points at it.
 Do not write it when: a state machine library declares the machine; then nothing from the diagram is written, and only a bypass gets an inline comment.
 On: the owner file and other eligible files that perform a shown transition. The owner points to the local diagram; writers point to that same diagram and do not copy it. The transition labels provide the links from the diagram back to the writers.
 
@@ -318,7 +318,7 @@ Write it when: a sequence note or file note states a danger that belongs to the 
 Do not write it when: the danger belongs to one identifiable line, which gets an inline comment instead; when it is a general truth about all code, such as "network calls can fail."
 On: the file. Pairs with: nothing.
 
-No other keys exist in the map block. A fact that fits none of them goes in `hazard:` if it qualifies; or is about a line and becomes an inline comment if a rule in this document sends it there; or is not written, and is listed in the report.
+No other keys exist in the map block. A fact that fits none of them goes in `hazard:` if it qualifies; or is about a line and becomes an inline comment if a rule in this document sends it there; or is not written.
 
 ## Comments above the code
 
@@ -355,13 +355,13 @@ A README created by you contains only these sections. Do not write prose.
 
 You touch four sections and nothing else. Three are indexes: each is added if absent and each of its list lines is added, updated, or removed to match the current state, one line per item, sorted alphabetically, in a fixed form. A list line in square brackets under an index heading is a placeholder left by the template and is removed. Descriptive text directly under an index heading, before the first list item, is left exactly as it is. The fourth section is the legend.
 
-`## Map`: one line per top-level directory that contains a map block or a README, in the form `orders/ — creation, cancellation, and lifecycle of orders`, derived from that directory's README `## Owns` section. This is the one place you compose a sentence rather than copy one: one sentence, naming responsibilities and nothing else. A bare wrapper directory that holds all of the code, `src/` for example, is skipped and its children are listed as top-level, the same way the identifier format drops `src`. Directories with nothing written in them are not listed. A directory whose blocks all lack an `owns:` line is listed with the fixed phrase `promotions/ — referenced by other directories; not yet described`, so that a reader can reach it; the report's Flagged section still names those files.
+`## Map`: one line per top-level directory that contains a map block or a README, in the form `orders/ — creation, cancellation, and lifecycle of orders`, derived from that directory's README `## Owns` section. This is the one place you compose a sentence rather than copy one: one sentence, naming responsibilities and nothing else. A bare wrapper directory that holds all of the code, `src/` for example, is skipped and its children are listed as top-level, the same way the identifier format drops `src`. Directories with nothing written in them are not listed. A directory whose blocks all lack an `owns:` line is listed with the fixed phrase `promotions/ — referenced by other directories; not yet described`, so that a reader can reach it.
 
 `## Flows`: one line per named flow in any README, in the form `order placement — entry api.orders — api/README.md`, where the entry is the first participant to send a message, as declared in the diagram, whether or not it is in this repository, so that a flow which begins in a queue or an external system says so in the index.
 
 `## Glossary`: the single line `See GLOSSARY.md.`
 
-`## Map blocks`: the legend that tells any reader what the keys in a map block mean. Written verbatim from the appendix at the end of this document if the section is absent. If it is present and differs from the appendix, the whole section is replaced with the appendix text and the replacement is listed under Flagged as `legend replaced`. If it matches, it is not touched.
+`## Map blocks`: the legend that tells any reader what the keys in a map block mean. Written verbatim from the appendix at the end of this document if the section is absent. If it is present and differs from the appendix, the whole section is replaced with the appendix text. If it matches, it is not touched.
 
 If the file has other sections, commands, conventions, anything hand-written, they are not yours. Do not edit, reorder, or reformat them.
 
@@ -371,8 +371,8 @@ If the file has other sections, commands, conventions, anything hand-written, th
 
 - A term not yet present is added as its artifact row.
 - A term present with the same canonical identifier and a meaning that agrees keeps its existing row; any aliases the artifact found that the row lacks are appended to Known aliases.
-- A term present with a different canonical identifier or a meaning that disagrees is a conflict. Read the code at both `Defined in` locations. If the code agrees with the artifact and the existing row is out of date, replace the row. If both are real, two things share a word, and that is a vocabulary problem in the code, not something you resolve here: keep both as separate rows, distinguished by canonical identifier, put `conflict: same term, two meanings` in both Notes columns, and report it.
-- A row is never deleted by you. A term that has disappeared from the code is listed under Flagged as `glossary term gone`, not removed.
+- A term present with a different canonical identifier or a meaning that disagrees is a conflict. Read the code at both `Defined in` locations. If the code agrees with the artifact and the existing row is out of date, replace the row. If both are real, two things share a word, and that is a vocabulary problem in the code, not something you resolve here: keep both as separate rows, distinguished by canonical identifier, put `conflict: same term, two meanings` in both Notes columns.
+- A row is never deleted by you, including when its term has disappeared from the code.
 
 ## Placement rules by artifact type
 
@@ -382,12 +382,12 @@ Each section says, for the facts an artifact type carries, where each kind of fa
 
 Incoming artifacts retain their Code Diagram Guide scope lines. Persisted diagrams contain selected, verified information rather than a record of the inspection. Make only these transformations before comparing or writing a kept diagram:
 
-- Remove `%% suspected:` lines and report them under Flagged.
+- Remove `%% suspected:` lines.
 - Replace `%% complete within: <paths>` with `%% selected view; omissions do not establish absence`.
 - Replace `%% partial within: <paths>; left out: <items>` with `%% selected view; omits: <items>; omissions do not establish absence`.
-- Remove comments that only describe searches or files read. If removing one would leave a transition, terminal marker, or other claim misleading, do not keep that diagram; report the limitation instead. Preserve comments describing verified behavior, conditions, and explicit prohibitions, including the source of a documented reason.
+- Remove comments that only describe searches or files read. If removing one would leave a transition, terminal marker, or other claim misleading, do not keep that diagram. Preserve comments describing verified behavior, conditions, and explicit prohibitions, including the source of a documented reason.
 
-Retain the diagram type, identity line, labels, edges, notes, and their order. Do not silently narrow conditions or rewrite unsupported claims to make a diagram fit: flag it. Before replacing an existing diagram, apply the whole-diagram reconciliation rules below to its behavioral facts, not just its absence comments. Compare existing diagrams with this transformed version, not with the raw artifact. These transformations also apply to diagrams copied into source comments and packet continuations. Any other use of “copy” below means this transformed copy, with only the bounded repairs allowed by reconciliation.
+Retain the diagram type, identity line, labels, edges, notes, and their order. Do not narrow conditions or rewrite unsupported claims to make a diagram fit. Omit an unsupported candidate diagram; reconcile any existing diagram under the rules below. Before replacing an existing diagram, apply the whole-diagram reconciliation rules below to its behavioral facts, not just its absence comments. Compare existing diagrams with this transformed version, not with the raw artifact. These transformations also apply to diagrams copied into source comments and packet continuations. Any other use of “copy” below means this transformed copy, with only the bounded repairs allowed by reconciliation.
 
 ### Dependency flowchart and edge table
 
@@ -416,9 +416,9 @@ If the entry point is in a file that would never get a map block, a generated ro
 
 ### State diagram
 
-Keep a state diagram when it brings together transitions or guards scattered across functions or files; skip one that simply redraws a single nearby function or a declared machine. Write it under the copying rules as a comment block placed directly above the definition of the state's values in the owner file: above the enum, the union type, or the choices list that defines them. In a language where a comment directly above a declaration becomes its documentation, Go, Java, and anything using JSDoc among them, leave one blank line between the block and the definition, as with `end map`; otherwise the diagram becomes the type's generated documentation. If the state is a combination of booleans or timestamps, or its values are bare literals with no enum, the block goes directly above the class or type that declares the field. If no such definition exists in a source file, because the values are defined only in generated code or a migration and no source type declares the field, the block goes at the top of the file that assigns the field in the most places, immediately after its map block, and the file is listed under Flagged as `rule did not fit`. The aim is always the same: the lifecycle sits where anyone changing the values will see it.
+Keep a state diagram when it brings together transitions or guards scattered across functions or files; skip one that simply redraws a single nearby function or a declared machine. Write it under the copying rules as a comment block placed directly above the definition of the state's values in the owner file: above the enum, the union type, or the choices list that defines them. In a language where a comment directly above a declaration becomes its documentation, Go, Java, and anything using JSDoc among them, leave one blank line between the block and the definition, as with `end map`; otherwise the diagram becomes the type's generated documentation. If the state is a combination of booleans or timestamps, or its values are bare literals with no enum, the block goes directly above the class or type that declares the field. If no such definition exists in a source file, because the values are defined only in generated code or a migration and no source type declares the field, the block goes at the top of the file that assigns the field in the most places, immediately after its map block. The aim is always the same: the lifecycle sits where anyone changing the values will see it.
 
-Each diagram line is prefixed with the language's line-comment marker. Keep observed transitions distinct from prohibited ones: a missing edge does not establish a prohibition, and an intentional restriction requires its explicit source. Report claims contradicted by code under `artifact disagrees with code`. Apply whole-diagram reconciliation before replacing any diagram; it protects existing supported transitions, guards, and notes as well as absence statements. The owner file's map block gets one `transitions:` line pointing at the diagram actually retained.
+Each diagram line is prefixed with the language's line-comment marker. Keep observed transitions distinct from prohibited ones: a missing edge does not establish a prohibition, and an intentional restriction requires its explicit source. Do not copy claims contradicted by code. Apply whole-diagram reconciliation before replacing any diagram; it protects existing supported transitions, guards, and notes as well as absence statements. The owner file's map block gets one `transitions:` line pointing at the diagram actually retained.
 
 ```text
 # stateDiagram-v2
@@ -440,19 +440,17 @@ Each other eligible file that defines a verified transition shown in the kept di
 
 When the artifact says a state machine library declares the machine, confirm that declaration in the code. Nothing from the diagram is written, because the code already declares it; remove any superseded lifecycle diagram and its pointers. The one thing that is written is any bypass the artifact found, a place that assigns the state directly instead of going through the machine: that gets an inline comment on the line above the assignment saying so, for example `Sets status directly instead of going through orders.machine.OrderMachine; the machine's guards do not run here.`
 
-When transitions to one field are assigned in more than two files and no state machine library is in use, add a line to the report under Flagged recommending conversion to a declared machine, naming the files. You do not perform the conversion.
-
 ### Entity-relationship diagram
 
 Enforced relationships, foreign keys and ORM declarations that create them, are never written. They are in the schema.
 
 Every relationship labeled `soft-ref` is written at both ends. The file holding the referencing column gets `soft-ref out:` naming the column, the referenced table, `no FK`, and where the reference is validated in code if anywhere. The file defining the referenced table gets `soft-ref in:` naming the referencing table and column and its file. A reference to a table in another database, schema, or service is a `soft-ref out:` on the referencing side only, with the other system named.
 
-The diagram itself is not written. If the repository has no schema source of truth at all, no migrations, no model declarations, only raw SQL scattered through the code, write the relationship-level diagram under the copying rules into the README of the directory that owns the data access, under a `## Data model` heading, and list it under Flagged as `rule did not fit`, saying why. This is the one case where the diagram is kept.
+The diagram itself is not written. If the repository has no schema source of truth at all, no migrations, no model declarations, only raw SQL scattered through the code, write the relationship-level diagram under the copying rules into the README of the directory that owns the data access, under a `## Data model` heading. This is the one case where the diagram is kept.
 
 ### Class diagram
 
-Nothing from the class diagram is written. Its facts, which classes implement or extend which base, are listed in the report under Not kept with the reason `no key fits`.
+Nothing from the class diagram is written.
 
 ### Packet diagram
 
@@ -460,11 +458,11 @@ The artifact's Mermaid block is written into the map block of the codec's file u
 
 ### Glossary table
 
-Every qualifying row merges into `GLOSSARY.md` by the rules above; list other rows under Not kept as `meaning already clear`. Nothing from the glossary is written into source files or READMEs. A term's canonical identifier is already the name in the code; that is the link.
+Every qualifying row merges into `GLOSSARY.md` by the rules above; omit other rows. Nothing from the glossary is written into source files or READMEs. A term's canonical identifier is already the name in the code; that is the link.
 
 ### File notes
 
-The purpose statement, what the file owns, becomes `owns:`. A note's references to the artifacts themselves, such as "see edge table," are dropped; the map block has its own lines for those facts. A caller meeting the execution-context or hidden-connection conditions becomes `called from:`. A fact about a specific line, a workaround, a deliberate delay, a value that must match a value elsewhere, becomes an inline comment above that line, in the note's own words. A fact about the file's behavior that a reader must know before editing becomes `hazard:` in the map block. `hazard:` values are the note's clause reshaped into a sentence; inline comments preserve the note's supported meaning as a sentence. Narrow an overbroad note to the verified behavior; report any unsupported claim instead of copying it.
+The purpose statement, what the file owns, becomes `owns:`. A note's references to the artifacts themselves, such as "see edge table," are dropped; the map block has its own lines for those facts. A caller meeting the execution-context or hidden-connection conditions becomes `called from:`. A fact about a specific line, a workaround, a deliberate delay, a value that must match a value elsewhere, becomes an inline comment above that line, in the note's own words. A fact about the file's behavior that a reader must know before editing becomes `hazard:` in the map block. `hazard:` values are the note's clause reshaped into a sentence; inline comments preserve the note's supported meaning as a sentence. Narrow an overbroad note to the verified behavior; omit any unsupported claim.
 
 A note that restates what the file's name already says is not written. A note that says what was looked for and not found is not written, since it is about the making of the artifacts rather than the code, unless it is a meaningful absence about the file's behavior, "no retry around the Stripe call, by design," in which case it is a `hazard:` line.
 
@@ -472,9 +470,9 @@ A note that restates what the file's name already says is not written. A note th
 
 Keep an absence only when it describes behavior a reader might otherwise rely on, and the current implementation establishes it: a path explicitly rejected, an operation that drops a failed send without retry, or a documented prohibition enforced by the code. Name the enforcing location or condition where needed. Call it intentional, or supply its reason, only when an explicit source supports that claim.
 
-A search that found no consumer, validator, or transition does not establish a system-wide absence. Report such search results; do not turn them into map entries or behavioral comments. For a kept diagram, apply the copying rules rather than stripping a qualification that its remaining content needs. An absence that qualifies goes beside the relevant code, in a `hazard:` line if it applies to the file, or stays in the canonical diagram.
+A search that found no consumer, validator, or transition does not establish a system-wide absence. Do not turn such search results into map entries or behavioral comments. For a kept diagram, apply the copying rules rather than stripping a qualification that its remaining content needs. An absence that qualifies goes beside the relevant code, in a `hazard:` line if it applies to the file, or stays in the canonical diagram.
 
-Comments beginning `%% suspected:` are never written anywhere in the repository. They were not verified against the code. Each one goes in the report under Flagged, verbatim, so that it can be checked by someone else.
+Comments beginning `%% suspected:` are never written anywhere in the repository. They were not verified against the code.
 
 ## What is never written
 
@@ -500,20 +498,20 @@ For every file you would write into, read what is there first. Then:
 
 - A fact in the artifacts that is absent from the existing material is added only if it passes the inclusion and placement rules.
 - A fact in the existing material that the artifacts confirm is left as it is, even if you would have worded it differently.
-- A fact in the existing material that the artifacts contradict is checked against the post-change code before anything is overwritten. Read the code at the location the artifact cites. If the code agrees with the artifact, update the existing material. If the code agrees with the existing material, the artifact is wrong: do not write it, and report the disagreement with both versions and the location you checked.
+- A fact in the existing material that the artifacts contradict is checked against the post-change code before anything is overwritten. Read the code at the location the artifact cites. If the code agrees with the artifact, update the existing material. If the code agrees with the existing material, the artifact is wrong: do not write it.
 - A fact in the existing material that describes something the change removed, an event no longer emitted, a transition no longer possible, a file no longer calling a system, is deleted from every end it was written at.
-- A fact in the existing material that the artifacts do not mention at all, in a file the artifacts do cover, is checked against the code the same way. If the code still supports it, keep it. If the code no longer does, delete it. If you cannot tell, keep it and list it under Flagged as `existing fact unverified`.
-- A recorded absence in the existing material that the artifacts now contradict or omit is handled like any existing behavioral fact. Absences include a `%%` line in a state diagram saying a transition does not exist, an inline comment about a path deliberately not taken, and a `hazard:` line stating that something deliberately does not exist. Read the code at the place the absence is about. If the absence no longer holds, delete it and list it under Removed as `removed by change`. If it still holds, preserve it and report the disagreement with both versions; do not write a contradictory artifact claim. For a diagram, apply whole-diagram reconciliation below. An absence is never dropped silently by a whole-block or whole-diagram replacement.
+- A fact in the existing material that the artifacts do not mention at all, in a file the artifacts do cover, is checked against the code the same way. If the code still supports it, keep it. If the code no longer does, delete it. If you cannot tell, keep the existing fact without broadening its claim.
+- A recorded absence in the existing material that the artifacts now contradict or omit is handled like any existing behavioral fact. Absences include a `%%` line in a state diagram saying a transition does not exist, an inline comment about a path deliberately not taken, and a `hazard:` line stating that something deliberately does not exist. Read the code at the place the absence is about. If the absence no longer holds, delete it. If it still holds, preserve it; do not write a contradictory artifact claim. For a diagram, apply whole-diagram reconciliation below. A supported absence is never dropped by a whole-block or whole-diagram replacement.
 - Existing lines inside a map block that merely restate the code and do not qualify as an allowed navigation index are deleted, in a file you are already writing into. This applies only to lines in the map block vocabulary. Inline comments, docstrings, and README prose are never deleted for restating the code; an inline comment is deleted only when the change made it false, the same test as for any other statement.
 
-When rewriting a map block, remove legacy `complete within:` or `partial within:` lines and report `inspection metadata removed`. Do not use their removal to delete supported relationships or broaden their meaning. Preserve any limitation needed by a surviving entry as a verified subject or condition; if its meaning cannot be established, leave the block unchanged and flag the ambiguity. Convert legacy relationship lines to the current forms only after confirming their subjects and conditions. A legacy `no consumer found` line is a search result and is removed as `inspection metadata removed`; this is distinct from deleting a supported behavioral absence.
+When rewriting a map block, remove legacy `complete within:` or `partial within:` lines. Do not use their removal to delete supported relationships or broaden their meaning. Preserve any limitation needed by a surviving entry as a verified subject or condition; if its meaning cannot be established, leave the block unchanged. Convert legacy relationship lines to the current forms only after confirming their subjects and conditions. A legacy `no consumer found` line is a search result and is removed; this is distinct from deleting a supported behavioral absence.
 
 **Whole-diagram reconciliation.** Whole replacement is a writing operation, not permission to discard existing facts. Apply the rules above to every existing edge, guard, terminal marker, layout field, and behavioral note. Also preserve qualifications needed by surviving claims. Removing inspection-only metadata does not count as losing a behavioral fact.
 
 - If the transformed artifact retains all existing facts that reconciliation says to keep, use it after verifying its additions and changes.
-- If it omits such facts and the existing diagram has no known-false claim, retain the existing diagram with only the safe metadata transformations above; preserve qualifications its claims still need. Report the omitted facts and any deferred additions as `diagram replacement deferred`, and any unresolved existing facts as `existing fact unverified`. A partial artifact is not a reason to erase a still-valid edge.
-- If the existing diagram contains a known-false claim, do not retain it just to preserve another fact. Prepare a bounded repair: remove or replace the contradicted facts using verified artifact content, retaining the other existing facts and their qualifications. Preserve existing wording and order where still accurate. Do not invent transitions, sequencing, guards, or layout to connect the two versions. Write the repaired diagram whole only if its resulting meaning is clear and all changed claims are verified; list retained unverified facts under `existing fact unverified`.
-- If no such repair can be made without inventing relationships or retaining a known-false claim, remove the misleading diagram and its pointers, and report `diagram needs reconstruction`. List every displaced supported fact and its old location in the report so the loss is explicit and recoverable. This is a last resort, not permission to replace a valid diagram with a smaller one.
+- If it omits such facts and the existing diagram has no known-false claim, retain the existing diagram with only the safe metadata transformations above; preserve qualifications its claims still need. Omit the candidate replacement. A partial artifact is not a reason to erase a still-valid edge.
+- If the existing diagram contains a known-false claim, do not retain it just to preserve another fact. Prepare a bounded repair: remove or replace the contradicted facts using verified artifact content, retaining the other existing facts and their qualifications. Preserve existing wording and order where still accurate. Do not invent transitions, sequencing, guards, or layout to connect the two versions. Write the repaired diagram whole only if its resulting meaning is clear and all changed claims are verified. Leave unresolved existing facts unchanged without broadening their claims.
+- If no such repair can be made without inventing relationships or retaining a known-false claim, remove the misleading diagram and its pointers. Independently useful supported facts may remain in another allowed home only if they meet that home's placement rules. This is a last resort, not permission to replace a valid diagram with a smaller one.
 
 Rebuild map blocks and README sections from the reconciled material, including retained facts and diagrams; do not rebuild them from incoming artifacts alone. Pointers and indexes describe the diagrams actually retained, not a rejected or deferred replacement.
 
@@ -533,63 +531,45 @@ Specific effects of a change to look for:
 
 Work in this order.
 
-1. Read the change. List every file it touched, created, deleted, or renamed, and every identifier it renamed or moved.
-2. Read every artifact. For each, note its type, its completeness line, and the files it covers.
-3. Build the placement list: for every fact in every artifact, apply the inclusion gate and the rules for its type to produce one or more entries of the form (home, file or path, key or section, content). Both-ends facts produce two entries. Facts that fall under "What is never written" produce a "not kept" entry with the reason instead.
-4. For every file and path in the placement list, read what is already there.
+1. Read the change. Identify the files it touched, created, deleted, or renamed, and the identifiers it renamed or moved.
+2. Read every artifact. Determine its type, its completeness limits, and the files it covers.
+3. For each candidate fact, apply the inclusion gate and the rules for its type. Determine the home, file or path, key or section, and content for each qualifying placement, including both ends of a connection. Omit facts that do not qualify.
+4. Read the existing content at every proposed destination.
 5. Reconcile, using the rules above, producing the final set of additions, updates, and deletions. Verify against the code before any overwrite of existing material. Before replacing, moving, or removing a lifecycle diagram, search for its existing pointers and reconcile them with the result.
-6. Search the repository for every identifier you are about to write, to confirm it exists in the post-change code: the file in parentheses after it must exist and must define or contain the name's last segment. An end written as `(outside repository)` is exempt from this check and is confirmed by reading the code at the in-repository end. Verify the meaning of every proposed addition against the current code, not just the existence of its identifiers. Check explicit sources for reasons or requirements. Then, for every hidden-edge fact you are writing for the first time, an `event`, `hook`, `flag`, `di`, `callback`, `other`, or `soft-ref` row, open the file at each end and confirm the mechanism is there: the emit and the subscription, the hook registration, the flag check and the gated path, the binding, the column and the referenced table's definition. An identifier or fact that fails either check is not written and is reported under Flagged.
+6. Search the repository for every identifier you are about to write, to confirm it exists in the post-change code: the file in parentheses after it must exist and must define or contain the name's last segment. An end written as `(outside repository)` is exempt from this check and is confirmed by reading the code at the in-repository end. Verify the meaning of every proposed addition against the current code, not just the existence of its identifiers. Check explicit sources for reasons or requirements. Then, for every hidden-edge fact you are writing for the first time, an `event`, `hook`, `flag`, `di`, `callback`, `other`, or `soft-ref` row, open the file at each end and confirm the mechanism is there: the emit and the subscription, the hook registration, the flag check and the gated path, the binding, the column and the referenced table's definition. An identifier or fact that fails either check is not written.
 7. Compare the final reconciled content with what is present; leave identical content untouched. Write changes: map blocks are replaced whole, in key order. State diagrams above definitions are replaced whole. README sections are replaced whole. Root index sections are updated line by line. The glossary is merged row by row.
 8. Re-read every file you wrote to confirm the comment syntax is valid for that language and that no code line changed.
-9. Write the report.
 
 ## Constraints
 
 These are absolute.
 
-- You change comments and Markdown only. No code token changes, no whitespace changes to code lines, no reordering of imports, no formatting. If a placement cannot be made without touching code, it is not made, and it is reported.
+- You change comments and Markdown only. No code token changes, no whitespace changes to code lines, no reordering of imports, no formatting. If a placement cannot be made without touching code, it is not made.
 - Every identifier you write exists in the post-change code: the file in parentheses after it exists, and that file defines or contains the name's last segment. You searched for it. The one exception is an end written as `(outside repository)`, which names a system rather than a file. Every hidden-edge fact you write for the first time was confirmed at both ends in the code, not only in the artifacts.
-- New or rewritten map blocks contain no inspection-scope or completeness line. If a legacy block cannot be converted without changing the meaning of an unresolved claim, leave it untouched and flag it under reconciliation. Diagram copies preserve their explicit omission warnings under the copying rules; neither maps nor diagrams claim to be exhaustive.
+- New or rewritten map blocks contain no inspection-scope or completeness line. If a legacy block cannot be converted without changing the meaning of an unresolved claim, leave it untouched under reconciliation. Diagram copies preserve their explicit omission warnings under the copying rules; neither maps nor diagrams claim to be exhaustive.
 - A second run on unchanged inputs makes no edits: every fact it would write is already present, existing wording is kept, and nothing is appended to an existing block. Map blocks and README sections are replaced whole from the fixed vocabulary. Compare a diagram or packet block with the final transformed and reconciled version, ignoring comment markers and leading whitespace; if they match line for line, leave it untouched.
 - Both ends, always, for every connection whose two ends are both source files in the repository; when one end is an excluded file or outside the repository, the other end names it.
 - You write an inline comment only where a rule in this document sends a specific fact from the artifacts to a specific line. You do not add comments to code because it seemed to want one.
 - Nothing marked `suspected` is written.
-- Every key you write is backed by a verified fact from this run's artifacts for that file or by an existing fact retained under reconciliation. Unresolved existing facts are reported as `existing fact unverified`. You never write a key to signal that nothing was found.
+- Every key you write is backed by a verified fact from this run's artifacts for that file or by an existing fact retained under reconciliation. You never write a key to signal that nothing was found.
 - You do not add a map block to a file the artifacts say nothing about, and you do not write into files outside the artifacts' scope, except: the other end of a connection; an owner or writer needing a lifecycle pointer added, updated, or removed because its canonical diagram is retained, changed, moved, or removed; any file holding a mention of an identifier or file the change renamed, moved, or deleted; the root agent file; the glossary; and a README for a directory containing a file you wrote into. The lifecycle exception permits only the affected pointer edits, not unrelated documentation changes.
 - You do not write into files on the never-diagram list.
 - You do not edit sections of the root agent file or READMEs that are not the ones named here, and you replace the `## Map blocks` legend only when it differs from the appendix.
 - You preserve existing hand-written material outside the map-block vocabulary, prose, inline comments, docstrings, and README text, that the code still supports, wording and all. Lines inside a map block follow the map-block rules whoever wrote them.
 
-## The report
+## Checklist
 
-The report is the last thing you produce and has six sections, each a list, each line in the form shown. Empty sections are written with the word `none`. A fact may appear under both Not kept and Flagged: Not kept records that it was not written, Flagged that someone must look at it. A README section or a root index section counts as one Placed line listing its items.
-
-**Placed**: `<path> — <key, section, or home> — <content in one line>`, one per fact written for the first time.
-
-**Updated**: `<path> — <key or section> — was: <old> — now: <new>`, one per existing fact changed.
-
-**Removed**: `<path> — <key or section> — <what> — <why>`, one per existing fact deleted, where `<why>` is a short fixed phrase reused whenever the same reason recurs. The reasons the rules in this document produce are `removed by change`, `made explicit by change`, `contradicted by code`, `restated the code`, and `inspection metadata removed`; a reason not foreseen here is written in the same style, a phrase rather than a sentence.
-
-**Not kept**: `<artifact> — <fact> — <reason>`, where `<reason>` is a short fixed phrase reused whenever the same reason recurs. The reasons the rules in this document produce include `derivable`, `visible in file`, `suspected`, `about the artifacts, not the code`, `excluded file`, `identifier not found`, `fact not confirmed`, `flow crosses no boundary`, `count`, `no key fits`, `general truth`, `duplicate of a placed fact`, `blocked by code change`, `local read`, `meaning already clear`, `no clear reading benefit`, and `unsupported claim`. The set cannot be closed, because not every reason can be foreseen; a new reason is a phrase in the same style, not a sentence, and is reused once coined. One line per artifact fact that was not written. Facts that were not written because they were already present and unchanged are counted under Unchanged instead.
-
-**Flagged**: `<path or artifact> — <kind> — <detail>`, one line per item a human should look at or decide, where `<kind>` is a short fixed phrase reused whenever the same kind recurs. The kinds the rules in this document name are `no owns` (a file that received a map block without an `owns:` line because the artifacts gave it no purpose statement or an existing statement conflicts with it), `state machine candidate` (transitions to one field assigned in more than two files), `glossary conflict`, `artifact disagrees with code` (with both versions and the location checked in the detail), `suspected` (the item verbatim), `identifier not found`, `fact not confirmed`, `outside scope` (a dependent the artifacts named as outside their scope, or a file written into as the other end of a connection), `glossary term gone` (a glossary term whose canonical identifier no longer exists in the code), `existing fact unverified` (an existing fact the artifacts do not mention and the code neither confirms nor refutes), `legend replaced`, and `rule did not fit` (any place where a rule did not fit and you did the closest thing, saying what). As with the other sections, a kind not foreseen here is written as a phrase in the same style and reused once coined.
-
-**Unchanged**: one line, `<count> facts already present and unchanged`, so that every fact in every artifact is accounted for.
-
-## Checklist before the report
-
-- Does every new or rewritten map block open with `map`, close with `end map`, use only the fixed keys in the fixed order, and contain no inspection-scope or completeness line? Were legacy blocks left unchanged because of unresolved qualifications flagged? Does every block without an `owns:` line appear in the report?
+- Does every new or rewritten map block open with `map`, close with `end map`, use only the fixed keys in the fixed order, and contain no inspection-scope or completeness line? Were legacy blocks preserved when their qualifications could not be safely converted?
 - Is every connection written at both ends, with each end naming the other's file (for `soft-ref out:` the table name stands for the file; for `di out:`, the binding file; for `entry point of:` and `participates in:`, the README)?
 - Is every state diagram placed where its `transitions:` line says, directly above the definition of its values or, when no definition exists in a source file, directly below the map block, copied and reconciled under the diagram rules, with owner and writer pointers leading to the same canonical diagram? Were stale pointers found and removed when a diagram or shown writer was removed?
 - Does every identifier written exist in the post-change code, with its file confirmed to exist and to contain the name's last segment, and was every first-time hidden-edge fact confirmed at both ends in the code?
-- Is every `suspected` item in the report and nowhere in the repository?
+- Were all `suspected` items excluded from the repository changes?
 - Does each addition meet the inclusion gate and a specific placement rule? Does it add a relationship, constraint, useful combined view, or explicitly allowed navigation entry rather than merely redraw nearby code?
-- Is every key in every block backed by a verified artifact fact or an existing fact retained under reconciliation, with unresolved existing facts reported and no key written to signal absence?
-- Did every fact the change removed, renamed, or moved get its existing mentions deleted, updated, or moved, at every end? Did whole-diagram replacement reconcile existing edges, guards, terminal markers, and notes as well as absences, without silently losing supported facts or retaining known-false claims?
+- Is every key in every block backed by a verified artifact fact or an existing fact retained under reconciliation, with no key written to signal absence?
+- Did every fact the change removed, renamed, or moved get its existing mentions deleted, updated, or moved, at every end? Did whole-diagram replacement reconcile existing edges, guards, terminal markers, and notes as well as absences, without dropping facts that reconciliation requires keeping or retaining known-false claims?
 - Was every addition and changed claim verified against the current code? Are local subjects and material conditions clear, with each line's qualifiers applying to every endpoint and paired entries preserving the same condition? Do flags with different branch conditions use the split form consistently? Are intent, exclusivity, and prohibition claims explicitly supported?
 - Did any code line change? Diff to confirm none did.
 - Is the root agent file still index lines only in its three index sections, apart from the descriptive text allowed under each heading, is the `## Map blocks` legend present, and is everything else in it untouched?
-- Does the report account for every fact in every artifact, as placed, updated, not kept, flagged, or counted as unchanged?
 
 ## Appendix: a worked run
 
@@ -770,58 +750,6 @@ The root `AGENTS.md` gains five index lines, four under `## Map` and one under `
 
 - order placement — entry api.orders — api/README.md
 ```
-
-### The report
-
-```text
-Placed:
-api/orders.py — owns — the HTTP handlers for orders
-api/orders.py — entry point of — order placement (api/README.md)
-orders/service.py — owns — creation, confirmation, and cancellation of orders, and promotion-code validation
-orders/service.py — participates in — order placement (api/README.md)
-orders/service.py — event out — OrderCreated -> notifications.handlers.on_order_created (notifications/handlers.py); in orders.service.create_order
-orders/service.py — writes — orders
-orders/service.py — calls — Stripe (charge)
-orders/service.py — transitions — orders.models.Order.status, diagram in orders/models.py above orders.models.OrderStatus
-orders/service.py — inline comment — the charge is committed before OrderCreated is emitted, so a crash between them loses the event
-orders/models.py — owns — the Order model and its status values
-orders/models.py — soft-ref out — orders.promotion_code -> promotions (no FK; validated in orders.service.validate_promotion (orders/service.py))
-orders/models.py — transitions — orders.models.Order.status, diagram above orders.models.OrderStatus
-orders/models.py — state diagram — above orders.models.OrderStatus
-notifications/handlers.py — owns — the OrderCreated consumer that sends the confirmation email
-notifications/handlers.py — participates in — order placement (api/README.md)
-notifications/handlers.py — event in — OrderCreated <- orders.service.create_order (orders/service.py)
-notifications/handlers.py — hazard — a failed send is logged and dropped; the failed send is not retried
-promotions/models.py — soft-ref in — promotions <- orders.promotion_code (orders/models.py)
-api/README.md — ## Owns — api/orders.py
-api/README.md — ## Flows — order placement
-orders/README.md — ## Owns — orders/models.py, orders/service.py
-notifications/README.md — ## Owns — notifications/handlers.py
-AGENTS.md — ## Map — api/, notifications/, orders/, promotions/
-AGENTS.md — ## Flows — order placement
-GLOSSARY.md — row — order
-
-Updated:
-none
-
-Removed:
-none
-
-Not kept:
-dependency flowchart — api.orders.post_order --> orders.service.create_order — derivable
-entity-relationship diagram — promotions is defined in promotions/models.py, outside the files read — about the artifacts, not the code
-file note — orders/service.py emits OrderCreated only after the Stripe charge is committed — duplicate of a placed fact
-file note — orders/models.py: promotion_code has no foreign key and orders.service.validate_promotion checks the reference — duplicate of a placed fact
-
-Flagged:
-promotions/models.py — no owns — the artifacts describe the file only as the far end of a soft reference
-promotions/models.py — outside scope — written into as the other end of a connection; promotions/ has no README because its only block lacks owns:, and its ## Map line carries the not-yet-described phrase
-
-Unchanged:
-0 facts already present and unchanged
-```
-
-The two file-note lines under Not kept duplicate facts placed from other artifacts: the sequence note became the inline comment, and the soft-reference sentence became the `soft-ref out:` line.
 
 ## Appendix: legend text for the root agent file
 
