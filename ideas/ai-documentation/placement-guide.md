@@ -2,13 +2,13 @@
 
 ## What this document is
 
-You receive three things: a change to the code, the repository as it stands after that change, and a set of artifacts describing the area the change touched. The artifacts are diagrams, tables, and file notes written according to the Code Diagram Guide: an edge table, dependency flowcharts, sequence diagrams, state diagrams, entity-relationship diagrams, class diagrams, packet diagrams, a glossary table, and file notes.
+You receive a code change, the post-change repository, and artifacts describing the touched area, written according to the Code Diagram Guide: an edge table, dependency flowcharts, sequence diagrams, state diagrams, entity-relationship diagrams, class diagrams, packet diagrams, a glossary table, and file notes.
 
-You have one job: decide which facts in those artifacts get written into the repository, where each one goes, what already in the repository needs updating or removing as a result, and what gets left out. Then make the qualifying changes.
+Decide which artifact facts to write into the repository, where each goes, which existing material consequently needs updating or removing, and what to omit. Then make the qualifying changes.
 
-This document tells you how to make each of those decisions. It is deliberately opinionated. Your judgment is needed to determine which file owns something, whether a fact is already visible in the code, whether an existing statement is contradicted, and which line an inline comment belongs to. The inclusion rules below decide which kinds of documentation qualify and where they belong. If a proposed addition does not clearly meet them, leave it out.
+Use judgment to identify ownership, facts already visible in code, contradicted statements, and the line an inline comment belongs to. The inclusion rules determine what qualifies and where it belongs; omit proposed additions that do not clearly meet them.
 
-Two kinds of rule appear below. The rules under "What qualifies," "What is never written," and "Constraints," the map block format, and in the key reference each key's template, the file it goes on, and the key it pairs with, are absolute. Each key's "write it when" and "do not write it when" conditions define what qualifies, and applying them to the code in front of you is exactly where your judgment goes. Everything else describes the normal case. Where a rule does not fit the code in front of you cleanly, do the closest thing that keeps the written material accurate and traceable to the code.
+The rules under "What qualifies," "What is never written," and "Constraints," the map block format, and each key's template, destination file, and paired key are absolute. Each key's "write it when" and "do not write it when" conditions define what qualifies; use judgment to apply them to the code. Everything else describes the normal case. Where a normal-case rule does not fit cleanly, use the closest approach that keeps the written material accurate and traceable to the code.
 
 ## What qualifies
 
@@ -28,17 +28,17 @@ Use the Code Diagram Guide's identifier format and writing rules. Preserve names
 
 Everything you write goes into exactly one of these. Nothing goes anywhere else.
 
-**1. The map block** at the top of a source file. A delimited comment block with a fixed set of keys, holding selected relationships and navigation information: what it owns, its hidden dependencies at both ends, the tables it writes, the external systems it calls, where the lifecycle it owns is documented, the byte layout it encodes or decodes, the flows it takes part in. This is the most important home. Most of what you write goes here.
+**1. The map block** at the top of a source file. A delimited comment block with fixed keys for selected relationships and navigation: ownership, hidden dependencies at both ends, tables written, external systems called, the owned lifecycle's location, byte layouts encoded or decoded, and participating flows. This is the primary home; most additions go here.
 
-**2. A comment directly above the code it describes.** Two forms, and no others. An inline comment: a plain sentence or two on its own line directly above a specific line of code, for the few facts that belong to a line rather than to a file and that the code cannot make clear on its own: why a line is the way it is, a hazard at exactly this point, a value that must match a value elsewhere. And the state diagram: the artifact's diagram copied under the diagram-copying rules as a comment block directly above the definition of a stored state's values, or directly below the map block when no such definition exists in a source file, the one comment with a fixed form, pointed to by a `transitions:` line in the owner's map block and in other files whose code performs its transitions.
+**2. A comment directly above the code it describes.** Only two forms qualify. An inline comment is a plain sentence or two on its own line directly above a specific code line, explaining what that line cannot make clear: why it is written that way, a hazard there, or a value that must match one elsewhere. A state diagram follows the diagram-copying rules as a fixed-form comment block directly above the definition of a stored state's values, or directly below the map block when no such definition exists in a source file. The owner and other files performing its transitions point to it with `transitions:` lines in their map blocks.
 
-**3. A directory README** (`README.md` in the directory). For facts that belong to a directory rather than a file: what the directory owns, the kept flows, those that cross a boundary or span more than one top-level directory, whose entry point lives here (as sequence diagrams), and a dependency-direction rule when one exists and no tool enforces it.
+**3. A directory README** (`README.md`). It records directory responsibilities, kept flows whose entry point is here (as sequence diagrams), and documented dependency-direction rules that no tool enforces. Kept flows cross a boundary or span more than one top-level directory.
 
-**4. The root agent file**: the repository's root instructions file for AI readers, whatever it is already called (`AGENTS.md`, `CLAUDE.md`, or similar). If more than one exists, use the one the repository's agents are configured to load where that is stated, and otherwise `AGENTS.md`. If none exists, create `AGENTS.md`. You write index lines into it, into fixed sections: one line per top-level directory, one line per named flow, one line pointing at the glossary; and the map block legend from the appendix, so that every reader knows what the blocks mean. Never diagrams, never tables, never prose beyond a line outside the legend. Every AI reader reads this file at the start of every session, so its length is a cost paid on every task.
+**4. The root agent file**: the repository's existing root instructions file for AI readers (`AGENTS.md`, `CLAUDE.md`, or similar). If several exist, use the one agents are configured to load where stated, otherwise `AGENTS.md`; if none exists, create `AGENTS.md`. Add fixed index sections with one line per top-level directory, one per named flow, and one pointing to the glossary, plus the appendix's map block legend. Never add diagrams or tables, or prose beyond a line outside the legend. AI readers load this file at each session's start, so its length costs every task.
 
 **5. The root glossary**: `GLOSSARY.md` at the repository root, with the same columns as the artifact glossary table. Qualifying glossary rows from the artifacts are merged here and nowhere else.
 
-The table below names the allowed homes for qualifying facts; some relationships require entries in more than one file. This table is the summary; the sections that follow give the conditions and the exact forms.
+This table summarizes allowed homes; some relationships need entries in multiple files. The following sections give conditions and exact forms.
 
 | Fact | Home | Form |
 |---|---|---|
@@ -66,7 +66,7 @@ The dependency flowchart and the class diagram are never written as diagrams, an
 
 ### Format
 
-The block is made of the language's line-comment marker followed by a fixed key, a colon, and the fact. It opens with a line whose content after the comment marker is exactly `map` and closes with one whose content after the marker is exactly `end map`, so that tooling can find and replace the whole block. In Python:
+Each map entry uses the language's line-comment marker, a fixed key, a colon, and the fact. The opening and closing lines contain exactly `map` and `end map` after the marker, so tooling can replace the whole block. In Python:
 
 ```text
 # map
@@ -85,12 +85,12 @@ The block goes after any shebang, encoding, license, magic comment, or compiler 
 
 ### Key reference
 
-The block is terse by design, so every key is defined here in full. Each entry has the same parts. **Means** is the fact the line states, in the words a reader should take from it. **Template** is the exact shape of the value; placeholders are in angle brackets and everything outside them is literal. **Example** is one real line. **Write it when** and **Do not write it when** are your conditions; if neither matches, the key is not written. **On** is the file that gets the line. **Pairs with** is the key written at the other end of the same fact, when the fact has two ends. The appendix supplies a self-contained reader legend for the root agent file. An entry must still name its subject and material conditions clearly. Keys appear in the block in the order given here. A key is written only when the artifacts supply a fact for it in this file, or when an existing fact under it survived reconciliation. A key with nothing to say is omitted: never written empty, never written with `none` as its whole value, never added because other files have it or because the block would look more complete with it. Omission carries no meaning to a reader, by rule, so there is nothing to signal by writing a key without a fact.
+Each key has the same reference parts: **Means**, the fact readers should understand; **Template**, the exact value shape, with angle-bracket placeholders and everything else literal; **Example**, one real line; **Write it when** and **Do not write it when**, the eligibility conditions (if neither matches, omit the key); **On**, the destination file; and **Pairs with**, the other-end key for a two-ended fact. The appendix provides a self-contained reader legend. Entries must clearly name their subjects and material conditions. Write keys in reference order, only for artifact facts supplied for this file or existing facts retained under reconciliation. Omit keys with nothing to say: never empty, never with `none` as the whole value, and never for resemblance to other blocks or apparent completeness. Omission carries no meaning beyond nothing being recorded.
 
 Conventions that apply to every value:
 
 - `<identifier>` is a name in the Code Diagram Guide's identifier format: `orders.service.create_order`, `orders.models.Order`, a bare table name, a bare product name.
-- A repository path in parentheses, `(<file>)`, after an identifier is the file that defines that identifier; a reader can open it directly. Parentheses are used for nothing else except the operations after an external system name in `calls:`, the system after a table name in `reads remote:`, `writes remote:`, and `soft-ref out:`, the field list in `transitions:`, the `(no FK; ...)` note in `soft-ref out:`, the README path after a flow name in `entry point of:` and `participates in:`, and the source file after `<table>.<column>` in `soft-ref in:`. These source and README paths let a reader open the relevant code or diagram directly.
+- A repository path in parentheses after an identifier, `(<file>)`, names its defining file for direct navigation. The only other uses of parentheses are: operations after a system in `calls:`; the system after a table in `reads remote:`, `writes remote:`, and `soft-ref out:`; the field list in `transitions:`; the `(no FK; ...)` note in `soft-ref out:`; the README path after a flow in `entry point of:` and `participates in:`; and the source file after `<table>.<column>` in `soft-ref in:`.
 - `->` reads "to" and `<-` reads "from." The arrow points the way control or data moves. An `out` key describes something leaving this file; an `in` key describes something arriving in it.
 - Several items of the same kind in one value are separated by commas. Several independent statements in one value are separated by semicolons.
 - The file in parentheses is always a source file a person edits. When the name also exists in a file generated from that source, the generated file is never cited.
@@ -101,22 +101,22 @@ Conventions that apply to every value:
 - A key that says "one line per X" is repeated for each X, with further lines when local subjects or conditions differ. Sort by X, then local identifier, condition, and endpoint identifiers. Split flag branches follow the ordering in `flag out:` below. A file that owns several state fields has one `transitions:` line per field, in field-name order.
 
 **`map` and `end map`**
-Not keys but delimiters: a comment line whose content after the marker is exactly `map` opens the block and one whose content is exactly `end map` closes it. Everything between them follows this reference. Tooling finds the block by these lines, so they are written exactly, with no colon and nothing else after the marker.
+Delimiters, not keys: comment lines containing exactly `map` and `end map` after the marker open and close the block. Add no colon or other text. Tooling finds the block by these lines; everything between them follows this reference.
 
 **`owns:`**
 Means: what this file is responsible for.
 Template: `owns: <noun phrase describing the responsibility>`
 Example: `owns: creation and cancellation of orders`
-Write it when: the file notes give a purpose statement for this file, which they do for every file they describe. It is the first line of the block and the source for directory navigation. If a module docstring already states the same purpose, reuse its wording for `owns:` rather than composing a competing description. Leave the docstring alone. If the two descriptions disagree, resolve the discrepancy against the code before adding `owns:`. If the discrepancy remains unresolved, do not add or replace the purpose statement.
-Do not add it when: the artifacts give no purpose statement for the file. That happens when the file is the far end of a two-ended fact, an `event in:` or `soft-ref in:` for example, and was not itself described. An unresolved conflict with an existing purpose statement also prevents adding or replacing `owns:`. In either case, an existing `owns:` follows reconciliation; if none survives, write the block without it. A file the artifacts say nothing about at all gets no new block.
+Write it when: the file notes supply its purpose, as they do for every described file. This is the block's first line and the source for directory navigation. If a module docstring states the same purpose, reuse its wording and leave the docstring alone. Resolve disagreements against the code before adding `owns:`; an unresolved discrepancy prevents adding or replacing the purpose statement.
+Do not add it when: the artifacts give no purpose statement for the file, as when an undescribed endpoint receives an `event in:` or `soft-ref in:` entry. An unresolved conflict also prevents adding or replacing `owns:`. Existing `owns:` entries follow reconciliation; if none survives, write the block without it. A file the artifacts say nothing about gets no new block.
 On: the file itself. Pairs with: nothing.
 
 **`entry point of:`**
-Means: a kept flow, one that crosses a process, service, queue, scheduler, or thread boundary or spans more than one top-level directory, takes its first step inside this repository in this file, and its sequence diagram is in the named README. The diagram shows what, if anything, comes before this file: a queue, an external system, or code outside the repository. Its arrows show whether the flow also crosses a process, service, or queue boundary.
+Means: this file is the first step inside this repository of a kept flow crossing a process, service, queue, scheduler, or thread boundary or spanning multiple top-level directories. Its sequence diagram is in the named README and shows any preceding queue, external system, or code outside the repository. Its arrows show whether the flow also crosses a process, service, or queue boundary.
 Template: `entry point of: <flow name> (<README path>), <flow name> (<README path>)`
 Example: `entry point of: order placement (api/README.md)`
 Write it when: a sequence diagram was written into a README and this file defines the first participant in this repository to send a message, where a message is a call or an asynchronous send, not a return.
-Do not write it when: the flow was not kept. When the first sender is a queue, an external system, or code outside the repository, the line goes on the file of the first participant in this repository that sends a message; when that file would never get a map block, such as a generated router, it goes on the next participant in the repository that does get one. In both cases the diagram, not this line, says where the flow truly begins.
+Do not write it when: the flow was not kept. If the first sender is a queue, external system, or code outside the repository, use the first in-repository participant that sends a message. If its file cannot get a map block, such as a generated router, use the next eligible in-repository participant. The diagram says where the flow truly begins.
 On: the entry file. Pairs with: `participates in:` on every other participating file.
 
 **`participates in:`**
@@ -237,7 +237,7 @@ On: both ends. Pairs with: each other.
 **`writes:`**
 Means: executing code in this file can change rows in these tables.
 Template: `writes: <table>, <table>`
-Example: `writes: orders, order_lines`
+Example: `writes: order_lines, orders`
 Write it when: the edge table has a row of kind `table` whose Source is in this file with a write operation: insert, update, delete, save, create, or a bulk equivalent.
 Do not write it when: the file only reads the table; the file only defines the model and contains no write logic; the write is in a migration.
 On: each writing file. Pairs with: nothing. This is a deliberate navigation index, even for a locally visible write: searching the key and table name finds documented writers, not necessarily all writers. The line describes the union of writes in this file, not every function in it.
@@ -318,13 +318,13 @@ Write it when: a sequence note or file note states a danger that belongs to the 
 Do not write it when: the danger belongs to one identifiable line, which gets an inline comment instead; when it is a general truth about all code, such as "network calls can fail."
 On: the file. Pairs with: nothing.
 
-No other keys exist in the map block. A fact that fits none of them goes in `hazard:` if it qualifies; or is about a line and becomes an inline comment if a rule in this document sends it there; or is not written.
+No other map keys exist. A fact fitting none may become `hazard:` if it qualifies, or an inline comment if a rule here assigns it to a specific line; otherwise omit it.
 
 ## Comments above the code
 
-Two things are written as comments directly above code: inline comments, described here, and the state diagram, a fixed-form comment block whose placement is described under "State diagram" in the placement rules by artifact type. Nothing else is written as a comment above code.
+Only inline comments and state diagrams are written as comments directly above code. Inline comments are described here; fixed-form state diagram placement is under "State diagram" in the artifact rules.
 
-Code should explain itself. An inline comment is written only when the code cannot, and something important would otherwise be unclear: why a line exists, why it is unusual, what it works around, what elsewhere depends on it. It goes directly above the code it refers to. It never describes what the code does, since that is visible by reading it. It is a plain sentence or two, in no fixed form and with no prefix.
+Write an inline comment only to explain something important the code cannot: why a line exists or is unusual, what it works around, or what elsewhere depends on it. Place a plain sentence or two directly above the relevant code, with no fixed form or prefix. Never describe what the code visibly does.
 
 You write an inline comment only where a rule in this document says a fact from the artifacts belongs on a specific line: a file note or sequence note that explains one line, a sequence note that names a hazard at one line, an assignment that bypasses a state machine library, a value that must match a value elsewhere. Examples of the sentences you would write:
 
@@ -335,7 +335,7 @@ You write an inline comment only where a rule in this document says a fact from 
 # Must match BATCH_SIZE in jobs/import.py; the two are read by the same retry logic.
 ```
 
-Mechanics, which are about not breaking the code rather than about style: the comment is on its own line immediately above the line it describes, using the language's line-comment marker. Never a trailing comment on the code line itself, since some linters reflow those and some languages treat them differently. Never inside a string, a docstring, or a multi-line expression; if the only safe position is above a multi-line statement, use the line above its first line. If a comment already sits directly above the target line, reconcile with it: keep it if it says the same thing, replace it if the change made it false, and never add a second comment above the same line.
+Use the language's line-comment marker on a separate line immediately above the target. Never use a trailing comment, which linters may reflow and languages may treat differently. Never place it inside a string, docstring, or multi-line expression; if the only safe position is above a multi-line statement, use the line above its first line. Reconcile any comment already directly above the target: keep it if it says the same thing, replace it if the change made it false, and never add a second comment there.
 
 ## Directory README
 
@@ -353,7 +353,7 @@ A README created by you contains only these sections. Do not write prose.
 
 ## The root agent file
 
-You touch four sections and nothing else. Three are indexes: each is added if absent and each of its list lines is added, updated, or removed to match the current state, one line per item, sorted alphabetically, in a fixed form. A list line in square brackets under an index heading is a placeholder left by the template and is removed. Descriptive text directly under an index heading, before the first list item, is left exactly as it is. The fourth section is the legend.
+Touch only four sections. Three are indexes: add absent sections and add, update, or remove list lines to match the current state, one item per line in the fixed form, sorted alphabetically. Remove square-bracketed template placeholder list lines. Preserve descriptive text between each index heading and its first list item exactly. The fourth section is the legend.
 
 `## Map`: one line per top-level directory that contains a map block or a README, in the form `orders/ — creation, cancellation, and lifecycle of orders`, derived from that directory's README `## Owns` section. This is the one place you compose a sentence rather than copy one: one sentence, naming responsibilities and nothing else. A bare wrapper directory that holds all of the code, `src/` for example, is skipped and its children are listed as top-level, the same way the identifier format drops `src`. Directories with nothing written in them are not listed. A directory whose blocks all lack an `owns:` line is listed with the fixed phrase `promotions/ — referenced by other directories; not yet described`, so that a reader can reach it.
 
@@ -361,7 +361,7 @@ You touch four sections and nothing else. Three are indexes: each is added if ab
 
 `## Glossary`: the single line `See GLOSSARY.md.`
 
-`## Map blocks`: the legend that tells any reader what the keys in a map block mean. Written verbatim from the appendix at the end of this document if the section is absent. If it is present and differs from the appendix, the whole section is replaced with the appendix text. If it matches, it is not touched.
+`## Map blocks`: the reader legend for map keys. Add it verbatim from the appendix if absent; replace the whole section if it differs; leave it untouched if it matches.
 
 If the file has other sections, commands, conventions, anything hand-written, they are not yours. Do not edit, reorder, or reformat them.
 
@@ -371,12 +371,12 @@ If the file has other sections, commands, conventions, anything hand-written, th
 
 - A term not yet present is added as its artifact row.
 - A term present with the same canonical identifier and a meaning that agrees keeps its existing row; any aliases the artifact found that the row lacks are appended to Known aliases.
-- A term present with a different canonical identifier or a meaning that disagrees is a conflict. Read the code at both `Defined in` locations. If the code agrees with the artifact and the existing row is out of date, replace the row. If both are real, two things share a word, and that is a vocabulary problem in the code, not something you resolve here: keep both as separate rows, distinguished by canonical identifier, put `conflict: same term, two meanings` in both Notes columns.
+- A term with a different canonical identifier or conflicting meaning requires checking the code at both `Defined in` locations. Replace an outdated row if the code confirms the artifact. If both entries describe real uses of the term, keep separate rows distinguished by canonical identifier and put `conflict: same term, two meanings` in both Notes columns; resolving the code's vocabulary is outside this task.
 - A row is never deleted by you, including when its term has disappeared from the code.
 
 ## Placement rules by artifact type
 
-Each section says, for the facts an artifact type carries, where each kind of fact goes and what is dropped. "Both ends" means the fact is written at the file on each side of a connection, so that a reader arriving at either side sees it. When one side is a file on the Code Diagram Guide's never-diagram list or lies outside the repository, the fact is written on the other side only, naming the excluded end.
+For each artifact type, the rules below specify placement and omission. "Both ends" means writing the fact in each connected file so readers can find it from either side. If one end is on the Code Diagram Guide's never-diagram list or outside the repository, write only at the other end, naming the excluded end.
 
 ### Copying a kept diagram
 
@@ -402,13 +402,13 @@ The flowchart itself is never written anywhere. The edge table is what you place
 - `external`: `calls:` on the calling file, with the operations. The external system has no file of its own, so there is no second end.
 - `soft-ref`: covered under the entity-relationship diagram.
 
-Direct calls and imports are not inventoried as edges. They are visible at the call site. There are two exceptions. The first is a caller meeting the concrete `called from:` conditions; that goes in `called from:` on the callee's file. The second is a directory-level dependency-direction rule, which goes in the README `## Dependency direction` section under the conditions stated there.
+Do not inventory direct calls and imports as edges; they are visible at the call site. Exceptions are callers meeting the `called from:` conditions, written as `called from:` on the callee's file, and directory-level dependency-direction rules written in the README's `## Dependency direction` section under its conditions.
 
 ### Sequence diagram
 
 A sequence diagram is kept when it brings together ordering, a handoff, a condition, or failure behavior that cannot be understood from one nearby code section, and it crosses a process, service, queue, scheduler, or thread boundary or spans more than one top-level directory. A boundary alone does not justify redrawing an obvious call. Establish the boundary from the code; an asynchronous arrow alone does not prove a process or service boundary. Write it under the copying rules into `## Flows` in the entry point's directory. The entry point is the first participant defined in this repository to send a message, where a message is a call or an asynchronous send, not a return. The entry point's file gets `entry point of:` naming the flow and the README. Every other participant that is a source file in this repository, and not on the never-diagram list, gets `participates in:` naming the flow and the README. Participants that are queues, external systems, code outside the repository, or files on the never-diagram list get nothing.
 
-The `Note over` lines in the diagram are the most valuable lines it has, and they are placed twice. They stay in the diagram in the README, and each one that describes a hazard at an identifiable line of code also becomes an inline comment above that line, in the note's own words. A note about ordering across a boundary, "the charge is committed before the event is published," attaches to the line that publishes. A note about a retry limit attaches to the line that enforces the limit, or, if nothing enforces it, becomes a `hazard:` line in the map block of the file that retries, stating that the retry is unbounded.
+Keep `Note over` lines in the README diagram. A note describing a hazard at an identifiable code line also becomes an inline comment above it, in the note's own words. An ordering note such as "the charge is committed before the event is published" attaches to the publishing line. A retry-limit note attaches to the enforcing line; if there is none, it becomes a `hazard:` in the retrying file's map block, stating that the retry is unbounded.
 
 A sequence diagram that crosses no such boundary and whose participants are all in one top-level directory is not written. The file notes for those files carry anything worth keeping from it.
 
@@ -454,11 +454,11 @@ Nothing from the class diagram is written.
 
 ### Packet diagram
 
-The artifact's Mermaid block is written into the map block of the codec's file under `format:`, one continuation line per line of the block, under the copying rules. This is the one artifact whose diagram form is the compact form, and it has no table equivalent. If the format is declared in a schema file, nothing is written; the schema is the source.
+Write the packet diagram under `format:` in the codec's map block, one continuation line per diagram line, following the copying rules. If a schema file declares the format, write nothing; the schema is the source.
 
 ### Glossary table
 
-Every qualifying row merges into `GLOSSARY.md` by the rules above; omit other rows. Nothing from the glossary is written into source files or READMEs. A term's canonical identifier is already the name in the code; that is the link.
+Merge qualifying rows into `GLOSSARY.md` under the glossary rules; omit other rows. Write nothing from the glossary into source files or READMEs.
 
 ### File notes
 
@@ -492,7 +492,7 @@ These are absolute.
 
 ## Reconciling with what is already there
 
-The repository already has documentation: map blocks from earlier work, READMEs, inline comments, a glossary, and hand-written material. The change you were given may have altered what any of it describes. Reconciliation is half the job.
+Existing map blocks, READMEs, inline comments, glossary rows, and hand-written material may describe behavior the change altered. Reconcile them before writing.
 
 For every file you would write into, read what is there first. Then:
 
@@ -573,7 +573,7 @@ These are absolute.
 
 ## Appendix: a worked run
 
-This is one complete run, shortened to what the example needs. The change is commit `3f9c2d1`. It adds `notifications/handlers.py`, which consumes `OrderCreated` and sends the confirmation email, and adds a `promotion_code` column to `orders.models.Order`, validated in `orders.service.validate_promotion`. The analyst was given the read scope `api/`, `orders/`, `notifications/`. For this example, the current code confirms the shown transitions, terminal states, cancellation guard, and failed-send behavior. The repository has no documentation yet apart from a hand-installed root `AGENTS.md`, which already carries the `## Map blocks` legend exactly as it appears in the appendix, empty index sections, and the `## Glossary` line, so the legend is left untouched.
+This example adds `notifications/handlers.py`, which consumes `OrderCreated` and sends confirmation email, and an `orders.models.Order.promotion_code` column validated by `orders.service.validate_promotion`. The read scope is `api/`, `orders/`, `notifications/`. Current code confirms the shown transitions, terminal states, cancellation guard, and failed-send behavior. The only existing documentation is root `AGENTS.md`, with the exact appendix legend, empty index sections, and the `## Glossary` line; the legend stays untouched.
 
 ### The artifacts
 
@@ -717,7 +717,7 @@ class OrderStatus(Enum):
 # end map
 ```
 
-`promotions/models.py`, outside the read scope, opened only to confirm the soft reference and written into only as its other end, and so without `owns:`. The map records only that verified connection; it makes no scope claim:
+`promotions/models.py` is outside the read scope, opened only to verify the soft reference and written only as its other end. Its block has no `owns:` and makes no scope claim:
 
 ```text
 # map
@@ -753,13 +753,13 @@ The root `AGENTS.md` gains five index lines, four under `## Map` and one under `
 
 ## Appendix: legend text for the root agent file
 
-The text below is written into the root agent file as a section headed `## Map blocks`, verbatim, if that section is absent, and replaced whole when the section differs from the text below. It exists so that any reader opening any file already knows what the block at the top means, without having read this document.
+Copy the following `## Map blocks` section verbatim into the root agent file if absent; replace it whole if it differs. It is self-contained for readers who have not read this guide.
 
 ---
 
 ## Map blocks
 
-A source file may begin with a comment block between a comment line reading `map` and a comment line reading `end map`. It records selected relationships and navigation information: what it owns, dependencies that do not go through a visible call or import, tables it writes, external systems it calls, the lifecycle it owns, flows it takes part in. Read it before reading the code. A file with no block has no map information recorded; that says nothing about whether it has been inspected or has hidden connections. The same holds inside a block: a key is written only when there was something to record under it, so a block with no `event in:` line, for example, means nothing was recorded there, not that the file consumes no events. Never take the absence of a block, or of a key within one, as evidence that the thing it would describe does not exist. Entries are selected facts checked when written, not a guarantee of current completeness. Verify relevant behavior before changing it.
+A source file may begin with a comment block delimited by `map` and `end map` comment lines. It records selected relationships and navigation: ownership, dependencies without visible calls or imports, tables written, external systems called, the owned lifecycle, and participating flows. Read it before the code. A missing block or key means only that nothing was recorded there; it does not show whether the file was inspected or whether what the block or key would describe exists. For example, no `event in:` line does not mean the file consumes no events. These selected facts were checked when written and do not guarantee current completeness. Verify relevant behavior before changing it.
 
 Conventions: names are full identifiers, `module.function` for code and bare names for tables and external systems. A repository path in parentheses after a name is the file that defines it. A name followed by `(outside repository)` is a system with no file here and no partner line. `->` means "to" and `<-` means "from," in the direction control or data moves; an `out` line describes something leaving this file and an `in` line something arriving. Every fact whose two ends are both source files in this repository is written at both ends, so what you see here is also written on the other file. When the other end is a test, generated, vendored, or configuration file, or lies outside this repository, this line names it and nothing is written there. Two lines have no partner by design: `called from:`, because the caller's side is visible in the caller's own code, and a `soft-ref out:` into another database or service, which has no second end in this repository. A `di out:` line pairs with `di in:` on the implementation; the binding file it names gets nothing. A qualifier `; in <identifier>` names the local function or object; `; when <condition>` limits every relationship on that line. Endpoints on one line share these qualifiers; separate lines distinguish different subjects or conditions. Neither a listed caller nor a listed validator implies that it is the only one. Diagrams also show selected relationships; their omission warnings limit what they explain.
 
