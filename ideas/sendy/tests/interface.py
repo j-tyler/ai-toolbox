@@ -38,6 +38,8 @@ def main():
             env[key] = subprocess.check_output(["go", "env", key], text=True).strip()
         env["HOME"] = str(root / "home")
         env["SENDY_SOURCE"] = str(SOURCE)
+        # Setup must disable cgo even when the caller enables it.
+        env["CGO_ENABLED"] = "1"
         coverage = env.get("SENDY_COVERAGE_DIR")
         if coverage:
             Path(coverage).mkdir(parents=True, exist_ok=True)
@@ -82,6 +84,8 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             list(pool.map(lambda _: setup(), range(8)))
         assert templates_before == {p.name: p.read_bytes() for p in (project / ".sendy/templates").iterdir()}
+        build_info = checked(["go", "version", "-m", str(binary)], cwd=project, env=env).stdout
+        assert b"\tbuild\tCGO_ENABLED=0\n" in build_info, build_info
         st = binary.stat()
         fingerprint = st.st_ino, st.st_mtime_ns, hashlib.sha256(binary.read_bytes()).hexdigest()
         first_use(binary, env)

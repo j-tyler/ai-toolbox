@@ -1,6 +1,6 @@
 module github.com/j-tyler/ai-toolbox/ideas/sendy
 
-go 1.23.0
+go 1.25.8
 
 require modernc.org/sqlite v1.38.2
 

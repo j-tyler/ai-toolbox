@@ -11,7 +11,11 @@ A workspace for AI development tools, skills, and ideas.
 
 ## License
 
-Everything in this repository is released under [CC0 1.0 Universal](LICENSE) — a
+Original content in this repository is released under [CC0 1.0 Universal](LICENSE) — a
 public domain dedication. You can copy, modify, and reuse any of it for any
 purpose, commercial or not, with no attribution required and no obligation to
 include this license in whatever you build.
+
+Third-party dependencies retain their own licenses. See Sendy's
+[packaging and redistribution requirements](ideas/sendy/README.md#packaging-and-redistribution)
+before distributing a compiled binary or dependency source.
