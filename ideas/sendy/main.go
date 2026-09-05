@@ -14,7 +14,7 @@ import (
 )
 
 var version = "v0.1.0-dev"
-var idPattern = regexp.MustCompile(`^[a-z][0-9]{2}$`)
+var idPattern = regexp.MustCompile(`^[a-z][1-9][0-9]{3}$`)
 var decimal = regexp.MustCompile(`^[0-9]+$`)
 
 func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
@@ -43,7 +43,7 @@ func identifiers(ids []string) error {
 	seen := map[string]bool{}
 	for _, id := range ids {
 		if !idPattern.MatchString(id) {
-			return fmt.Errorf("invalid conversation ID %q: expected one lowercase letter and two digits", id)
+			return fmt.Errorf("invalid conversation ID %q: expected one lowercase letter and four digits (1000–9999)", id)
 		}
 		if seen[id] {
 			return fmt.Errorf("duplicate conversation ID %q", id)
@@ -207,7 +207,7 @@ func execute(args []string, in io.Reader, out io.Writer) error {
 			_, err = fmt.Fprintln(out, strings.Join(ids, " "))
 		}
 	case "submit":
-		var round int
+		var round submission
 		round, err = s.submit(ids[0], message)
 		if err == nil {
 			message, err = s.awaitReply(ids[0], round)

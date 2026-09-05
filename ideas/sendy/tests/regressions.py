@@ -3,6 +3,7 @@
 import concurrent.futures
 import os
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -24,7 +25,7 @@ def first_use(binary, env, trials=100):
                 calls = list(pool.map(create, range(2)))
             assert all(p.returncode == 0 and not p.stderr for p in calls), (
                 trial, [(p.returncode, p.stdout, p.stderr) for p in calls])
-            assert {p.stdout for p in calls} == {b"a00\n", b"a01\n"}
+            assert {p.stdout for p in calls} == {b"a1000\n", b"a1001\n"}
     print(f"PASS: simultaneous first use, {trials} fresh stores / {trials * 2} processes", flush=True)
 
 
@@ -55,8 +56,8 @@ def special_templates(binary, env):
         for name in ("stream", "indirect"):
             for args in (("template", "render", name),
                          ("template", "fields", name),
-                         ("submit", "a00", "--template", name),
-                         ("reply", "a00", "--template", name)):
+                         ("submit", "a1000", "--template", name),
+                         ("reply", "a1000", "--template", name)):
                 p = run(*args)
                 assert not p.stdout and b"expected a regular file" in p.stderr
         assert not home.exists(), "template failures opened the conversation store"
@@ -116,8 +117,58 @@ def template_fields(binary, env):
     print("PASS: template fields JSON, sorting, duplicates, fixed text, diagnostics, arity, project lookup, no store mutation", flush=True)
 
 
+def daily_cleanup(binary, env):
+    with tempfile.TemporaryDirectory(prefix="sendy-cleanup-") as scratch:
+        root = Path(scratch)
+        home = root / "home"
+        cleanup_env = dict(env, HOME=str(home))
+        (root / ".sendy/templates").mkdir(parents=True)
+
+        def run(*args):
+            p = subprocess.run([str(binary), *args], cwd=root, env=cleanup_env,
+                               capture_output=True, timeout=15)
+            assert p.returncode == 0 and not p.stderr, (args, p.stdout, p.stderr)
+            return p.stdout
+
+        assert run("create", "1") == b"a1000\n"
+        with sqlite3.connect(home / ".sendy/conversations.db") as db:
+            db.executescript("""
+                WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<117000)
+                INSERT INTO conversations(id,last_used,generation)
+                SELECT char(97+n/9000)||printf('%04d',1000+n%9000),unixepoch(),printf('fixture-%d',n) FROM ids;
+                UPDATE conversations SET last_used=unixepoch()-15*86400,closed=1 WHERE id='a1000';
+                INSERT INTO replies VALUES('a1000',1,'discard this old reply');
+                UPDATE maintenance SET last_cleanup_day='';
+                CREATE TABLE checks(day TEXT);
+                CREATE TRIGGER count_checks AFTER UPDATE ON maintenance BEGIN
+                    INSERT INTO checks VALUES(NEW.last_cleanup_day);
+                END;
+            """)
+            assert run("template", "validate") == b""
+            assert db.execute("SELECT count(*) FROM checks").fetchone()[0] == 0
+            barrier = threading.Barrier(8)
+
+            def create(_):
+                barrier.wait()
+                return run("create", "1").strip()
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                ids = list(pool.map(create, range(8)))
+            assert len(set(ids)) == 8 and b"a1000" in ids, ids
+            assert db.execute("SELECT count(*) FROM checks").fetchone()[0] == 1
+            assert db.execute("SELECT count(*) FROM replies").fetchone()[0] == 0
+            # Stale IDs introduced after the check survive until a later day.
+            db.execute("UPDATE conversations SET last_used=0 WHERE id='a1001'")
+            db.commit()
+            run("create", "1")
+            assert db.execute("SELECT last_used FROM conversations WHERE id='a1001'").fetchone() == (0,)
+            assert db.execute("SELECT count(*) FROM checks").fetchone()[0] == 1
+    print("PASS: concurrent daily cleanup runs once, reclaims IDs/replies, skips template commands", flush=True)
+
+
 if __name__ == "__main__":
     binary = Path(sys.argv[1]).resolve()
     first_use(binary, os.environ)
     special_templates(binary, os.environ)
     template_fields(binary, os.environ)
+    daily_cleanup(binary, os.environ)

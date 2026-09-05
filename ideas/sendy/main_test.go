@@ -94,9 +94,9 @@ func TestArguments(t *testing.T) {
 	isolated(t)
 	cases := [][]string{
 		{}, {"bogus"}, {"--version", "extra"}, {"create"}, {"create", "1", "2"}, {"create", "0"}, {"create", "-1"}, {"create", "+1"}, {"create", "1.0"}, {"create", "999999999999999999999"},
-		{"submit"}, {"reply"}, {"submit", "Z12"}, {"reply", "a1"}, {"submit", "a001"}, {"submit", "a00", "text"}, {"submit", "a00", "--set", "x=y"}, {"submit", "a00", "--template"}, {"submit", "a00", "--set"}, {"submit", "a00", "--template", ""}, {"submit", "a00", "--template", "x", "--template", "x"}, {"submit", "a00", "--timeout", "1"},
-		{"wait"}, {"wait", "a00", "--timeout", "0"}, {"wait", "a00", "--timeout", "9223372036854775807"}, {"wait", "a00", "a00", "--timeout", "1"}, {"wait", "a00", "--timeout", "1.2"}, {"wait", "a00", "--timeout", "-2"}, {"wait", "a00", "--timeout", "1", "extra"},
-		{"close"}, {"close", "a00", "a00"}, {"close", "../a00"},
+		{"submit"}, {"reply"}, {"submit", "Z12"}, {"reply", "a1"}, {"submit", "a001"}, {"submit", "a1000", "text"}, {"submit", "a1000", "--set", "x=y"}, {"submit", "a1000", "--template"}, {"submit", "a1000", "--set"}, {"submit", "a1000", "--template", ""}, {"submit", "a1000", "--template", "x", "--template", "x"}, {"submit", "a1000", "--timeout", "1"},
+		{"wait"}, {"wait", "a1000", "--timeout", "0"}, {"wait", "a1000", "--timeout", "9223372036854775807"}, {"wait", "a1000", "a1000", "--timeout", "1"}, {"wait", "a1000", "--timeout", "1.2"}, {"wait", "a1000", "--timeout", "-2"}, {"wait", "a1000", "--timeout", "1", "extra"},
+		{"close"}, {"close", "a1000", "a1000"}, {"close", "../a1000"},
 		{"template"}, {"template", "validate", "--set", "a=b"}, {"template", "render"}, {"template", "render", "x", "--template", "x"}, {"template", "render", "x", "extra"},
 	}
 	for _, args := range cases {
@@ -111,19 +111,19 @@ func TestArguments(t *testing.T) {
 	if out := mustCall(t, "", "--version"); out != "sendy "+version+"\n" {
 		t.Fatal(out)
 	}
-	if got := mustCall(t, "", "create", "0002"); got != "a00 a01\n" {
+	if got := mustCall(t, "", "create", "0002"); got != "a1000 a1001\n" {
 		t.Fatal(got)
 	}
 	for _, input := range []string{"", string([]byte{0xff})} {
-		code, out, err := call(t, input, "submit", "a00")
+		code, out, err := call(t, input, "submit", "a1000")
 		if code != 1 || out != "" || !strings.Contains(err, "message must") {
 			t.Fatal(code, out, err)
 		}
 	}
-	checkError(t, execute([]string{"submit", "a00"}, brokenIO{}, io.Discard), "read failed")
-	for _, args := range [][]string{{"--version"}, {"create", "1"}, {"wait", "a00", "--timeout", "1"}} {
+	checkError(t, execute([]string{"submit", "a1000"}, brokenIO{}, io.Discard), "read failed")
+	for _, args := range [][]string{{"--version"}, {"create", "1"}, {"wait", "a1000", "--timeout", "1"}} {
 		if args[0] == "wait" {
-			mustCall(t, "", "close", "a00")
+			mustCall(t, "", "close", "a1000")
 		}
 		checkError(t, execute(args, strings.NewReader(""), brokenIO{}), "write failed")
 	}
@@ -137,11 +137,11 @@ func TestConversationRounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkError(t, s.reply(ids[0], "early"), "no result")
-	checkError(t, s.reply("z99", "missing"), "unknown")
-	if _, err = s.submit("z99", "missing"); err == nil {
+	checkError(t, s.reply("z1099", "missing"), "unknown")
+	if _, err = s.submit("z1099", "missing"); err == nil {
 		t.Fatal("unknown submit succeeded")
 	}
-	if _, err = s.snapshot([]string{"z99"}); err == nil {
+	if _, err = s.snapshot([]string{"z1099"}); err == nil {
 		t.Fatal("unknown wait succeeded")
 	}
 	original := "  result\n\"quoted\"\\$100\x00世界"
@@ -185,7 +185,7 @@ func TestConversationRounds(t *testing.T) {
 		}
 	}
 	// Unknown IDs cannot partially close a valid conversation.
-	checkError(t, s.close([]string{ids[0], "z99"}), "unknown")
+	checkError(t, s.close([]string{ids[0], "z1099"}), "unknown")
 	snap, err := s.snapshot(ids[:1])
 	if err != nil || len(snap.Closed) > 0 {
 		t.Fatal(snap, err)
@@ -227,14 +227,14 @@ func TestConversationRounds(t *testing.T) {
 	if err = s.close(ids[2:]); err != nil {
 		t.Fatal(err)
 	}
-	for round, want := range map[int]string{r: "accepted", r2: "second"} {
+	for round, want := range map[submission]string{r: "accepted", r2: "second"} {
 		got, err := s.awaitReply(ids[2], round)
 		if err != nil || got != want {
 			t.Fatal(got, err)
 		}
 	}
 	snap, err = s.snapshot([]string{ids[2], ids[0], ids[1]})
-	if err != nil || strings.Join(snap.Closed, " ") != "a02 a00 a01" || snap.Status != "ready" {
+	if err != nil || strings.Join(snap.Closed, " ") != "a1002 a1000 a1001" || snap.Status != "ready" {
 		t.Fatal(snap, err)
 	}
 }
@@ -255,7 +255,7 @@ func TestSnapshotOrderAndWake(t *testing.T) {
 		t.Fatal(err)
 	}
 	snap, err := s.wait([]string{ids[4], ids[3], ids[2], ids[1], ids[0]}, time.Now().Add(time.Millisecond))
-	if err != nil || snap.Status != "timeout" || strings.Join(snap.Pending, " ") != "a04 a01" || snap.Results[0].ID != "a03" || snap.Results[1].ID != "a00" || strings.Join(snap.Closed, " ") != "a02" {
+	if err != nil || snap.Status != "timeout" || strings.Join(snap.Pending, " ") != "a1004 a1001" || snap.Results[0].ID != "a1003" || snap.Results[1].ID != "a1000" || strings.Join(snap.Closed, " ") != "a1002" {
 		t.Fatal(snap, err)
 	}
 	done := make(chan error, 1)
@@ -272,11 +272,15 @@ func TestSnapshotOrderAndWake(t *testing.T) {
 func TestCapacity(t *testing.T) {
 	isolated(t)
 	s := testStore(t)
-	if _, err := s.create(2601); err == nil {
+	if _, err := s.create(idCapacity + 1); err == nil {
 		t.Fatal("capacity overrun")
 	}
-	ids, err := s.create(2600)
-	if err != nil || len(ids) != 2600 || ids[2599] != "z99" {
+	seedIDs(t, s, idCapacity-2, time.Now())
+	if _, err := s.create(3); err == nil {
+		t.Fatal("partial capacity overrun")
+	}
+	ids, err := s.create(2)
+	if err != nil || strings.Join(ids, " ") != "z9998 z9999" {
 		t.Fatal(len(ids), err)
 	}
 	if err = s.close(ids); err != nil {
@@ -317,22 +321,22 @@ func TestStorageErrors(t *testing.T) {
 	if _, err := s.create(1); err == nil {
 		t.Fatal("closed DB create")
 	}
-	if _, err := s.submit("a00", "x"); err == nil {
+	if _, err := s.submit("a1000", "x"); err == nil {
 		t.Fatal("closed DB submit")
 	}
-	if err := s.reply("a00", "x"); err == nil {
+	if err := s.reply("a1000", "x"); err == nil {
 		t.Fatal("closed DB reply")
 	}
-	if err := s.close([]string{"a00"}); err == nil {
+	if err := s.close([]string{"a1000"}); err == nil {
 		t.Fatal("closed DB close")
 	}
-	if _, err := s.snapshot([]string{"a00"}); err == nil {
+	if _, err := s.snapshot([]string{"a1000"}); err == nil {
 		t.Fatal("closed DB snapshot")
 	}
-	if _, err := s.awaitReply("a00", 1); err == nil {
+	if _, err := s.awaitReply("a1000", submission{round: 1}); err == nil {
 		t.Fatal("closed DB await")
 	}
-	code, out, diag := call(t, "", "wait", "z99", "--timeout", "1")
+	code, out, diag := call(t, "", "wait", "z1099", "--timeout", "1")
 	if code != 1 || out != "" || !strings.Contains(diag, "unknown") {
 		t.Fatal(code, out, diag)
 	}

@@ -85,16 +85,16 @@ With Sendy already available in the project, the parent creates a conversation:
 .tools/bin/sendy create 1
 ```
 
-Suppose the returned ID is `k07`. The parent starts a child session through its
+Suppose the returned ID is `k1007`. The parent starts a child session through its
 harness with this prompt:
 
-> Review the staged files. Submit your review using `.tools/bin/sendy submit k07`,
+> Review the staged files. Submit your review using `.tools/bin/sendy submit k1007`,
 > with the review text on stdin.
 
 The parent waits for the result:
 
 ```bash
-.tools/bin/sendy wait k07 --timeout 60
+.tools/bin/sendy wait k1007 --timeout 60
 ```
 
 When the child submits its review, the parent receives it and the child's
@@ -118,14 +118,14 @@ input. Template details and project setup are specified below.
 Use an existing file whenever possible:
 
 ```bash
-.tools/bin/sendy submit k07 < result.json
-.tools/bin/sendy reply k07 < next-task.txt
+.tools/bin/sendy submit k1007 < result.json
+.tools/bin/sendy reply k1007 < next-task.txt
 ```
 
 For inline text, use a quoted heredoc:
 
 ```bash
-.tools/bin/sendy submit k07 <<'SENDY_MESSAGE'
+.tools/bin/sendy submit k1007 <<'SENDY_MESSAGE'
 {
   "summary": "It's ready",
   "example": "A \"quoted\" value",
@@ -147,17 +147,30 @@ code, and prose alike and does not parse message content.
 their identifiers on one line, separated by single spaces, with a final newline:
 
 ```text
-k07 m02 p09
+k1007 m1002 p1009
 ```
 
-Identifiers are one lowercase ASCII letter followed by exactly two digits,
-such as `k07`, `m02`, or `p09`. Leading zeros are part of the ID. This consistent
-shape makes IDs easy to recognize in prompts and responses. IDs are unique locally;
-keep using the same ID for successive assignments to a child. Closed IDs cannot
-be reused for new conversations.
+Identifiers are one lowercase ASCII letter followed by a four-digit number from
+1000 to 9999, such as `k1007`, `m1002`, or `p1009`. The number never starts with
+zero. This consistent shape makes IDs easy to recognize in prompts and responses.
+IDs are unique locally; keep using the same ID for successive assignments to a
+child.
 
-This format provides 2,600 possible IDs. If there are not enough unused IDs for
+This format provides 234,000 possible IDs. If there are not enough unused IDs for
 the requested count, `create` returns an error without creating conversations.
+
+On the first conversation command (`create`, `submit`, `reply`, `wait`, or `close`)
+of each UTC day, Sendy checks capacity. If more than 117,000 IDs are stored, it
+deletes conversations unused for at least 14 days, including their results and
+saved replies. Their IDs become available for reuse. Closed conversations count
+toward capacity and are eligible for the same cleanup. There is no background
+cleanup service or command to configure; template commands do not trigger it.
+
+Successful conversation commands count as use. A running `submit` or `wait`
+keeps its conversations active while blocked, so waiting for human approval does
+not expire a child. An abandoned conversation can expire even if it was never
+closed. After abandonment, create a new conversation instead of relying on an old
+ID, which may have been reused.
 
 Creation returns immediately after recording the conversations. It does not
 start children or wait for them. Each new conversation expects a child result;
@@ -215,10 +228,10 @@ Print one JSON object followed by a newline, and exit `0` for either status:
 {
   "status": "timeout",
   "results": [
-    {"id": "k07", "message": "First result"},
-    {"id": "m02", "message": "{\"passed\":true}"}
+    {"id": "k1007", "message": "First result"},
+    {"id": "m1002", "message": "{\"passed\":true}"}
   ],
-  "pending": ["p09"],
+  "pending": ["p1009"],
   "closed": []
 }
 ```
@@ -256,10 +269,12 @@ still receives it. Subsequent `submit` calls return exit `2`, and subsequent
 returning its previous result.
 
 Closing does not kill a child process or interrupt work outside Sendy. A working
-child discovers closure if it later calls `submit`. Closing is optional cleanup:
-an agent session system may simply abandon children instead. Conversations do not
-expire automatically because abandoned work and legitimate long waits cannot be
-distinguished reliably.
+child discovers closure when it next calls `submit`, provided the conversation
+has not been reclaimed. Closing is optional, but abandoned conversations are
+eligible for the daily 14-day inactivity cleanup when capacity exceeds 50%, as
+described under `create`. Reclaimed IDs can be reused; do not keep addressing an
+old ID after abandonment. A running `submit` or `wait` keeps its conversations
+active while blocked.
 
 ## How a conversation progresses
 
@@ -324,7 +339,7 @@ For example, the supplied `staged-review` template can be used without `--set`:
 
 ```bash
 .tools/bin/sendy template render staged-review
-.tools/bin/sendy reply k07 --template staged-review
+.tools/bin/sendy reply k1007 --template staged-review
 ```
 
 When a template has fields, all are required. A field used several times needs
@@ -336,8 +351,8 @@ JSON-safe.
 ### Sending with a template
 
 ```bash
-.tools/bin/sendy reply k07 --template review --set filename=server.go --set name=Alice
-.tools/bin/sendy submit m02 --template completion --set filename=report.md
+.tools/bin/sendy reply k1007 --template review --set filename=server.go --set name=Alice
+.tools/bin/sendy submit m1002 --template completion --set filename=report.md
 ```
 
 The second example assumes the project also supplies `completion.txt`, with a

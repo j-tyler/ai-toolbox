@@ -16,16 +16,30 @@ import (
 
 var errClosed = errors.New("conversation closed")
 
+const idCapacity = 26 * 9000
+const retention = 14 * 24 * time.Hour
+const replyHeartbeatInterval = time.Minute
+
 type store struct{ db *sql.DB }
+type submission struct {
+	round      int
+	generation string
+}
+type conversation struct {
+	closed bool
+	submission
+	message sql.NullString
+}
 type result struct {
 	ID      string `json:"id"`
 	Message string `json:"message"`
 }
 type snapshot struct {
-	Status  string   `json:"status"`
-	Results []result `json:"results"`
-	Pending []string `json:"pending"`
-	Closed  []string `json:"closed"`
+	Status      string   `json:"status"`
+	Results     []result `json:"results"`
+	Pending     []string `json:"pending"`
+	Closed      []string `json:"closed"`
+	generations map[string]string
 }
 
 func openStore() (*store, error) {
@@ -56,16 +70,15 @@ func openStore() (*store, error) {
 		db.Close()
 		return nil, err
 	}
-	for _, query := range []string{
-		`CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, closed INTEGER NOT NULL DEFAULT 0, round INTEGER NOT NULL DEFAULT 0, result TEXT)`,
-		`CREATE TABLE IF NOT EXISTS replies (id TEXT NOT NULL, round INTEGER NOT NULL, message TEXT NOT NULL, PRIMARY KEY(id,round))`,
-	} {
-		if _, err = db.Exec(query); err != nil {
-			db.Close()
-			return nil, err
-		}
+	s := &store{db}
+	if err = s.initialize(); err == nil {
+		err = s.cleanup(time.Now())
 	}
-	return &store{db}, nil
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return s, nil
 }
 
 func enableWAL(db *sql.DB, timeout time.Duration) error {
@@ -111,14 +124,14 @@ func (s *store) create(count int) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if count > 2600-len(used) {
-		return nil, fmt.Errorf("not enough unused IDs: requested %d, available %d", count, 2600-len(used))
+	if count > idCapacity-len(used) {
+		return nil, fmt.Errorf("not enough unused IDs: requested %d, available %d", count, idCapacity-len(used))
 	}
 	ids := make([]string, 0, count)
 	for n := 0; len(ids) < count; n++ {
-		id := fmt.Sprintf("%c%02d", 'a'+n/100, n%100)
+		id := fmt.Sprintf("%c%d", 'a'+n/9000, 1000+n%9000)
 		if !used[id] {
-			if _, err = tx.Exec(`INSERT INTO conversations(id) VALUES(?)`, id); err != nil {
+			if _, err = tx.Exec(`INSERT INTO conversations(id,last_used,generation) VALUES(?,unixepoch(),lower(hex(randomblob(16))))`, id); err != nil {
 				return nil, err
 			}
 			ids = append(ids, id)
@@ -127,36 +140,46 @@ func (s *store) create(count int) ([]string, error) {
 	return ids, tx.Commit()
 }
 
-func state(tx *sql.Tx, id string) (closed bool, round int, message sql.NullString, err error) {
-	err = tx.QueryRow(`SELECT closed,round,result FROM conversations WHERE id=?`, id).Scan(&closed, &round, &message)
+func state(tx *sql.Tx, id string) (c conversation, err error) {
+	err = tx.QueryRow(`SELECT closed,round,result,generation FROM conversations WHERE id=?`, id).Scan(&c.closed, &c.round, &c.message, &c.generation)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = fmt.Errorf("unknown conversation %q", id)
+	}
+	if err == nil {
+		err = touch(tx, id)
 	}
 	return
 }
 
-func (s *store) submit(id, message string) (int, error) {
+func touch(tx *sql.Tx, id string) error {
+	// Explicit operations and heartbeat transactions record activity. At most
+	// one timestamp write per ID per second.
+	_, err := tx.Exec(`UPDATE conversations SET last_used=unixepoch() WHERE id=? AND last_used<unixepoch()`, id)
+	return err
+}
+
+func (s *store) submit(id, message string) (submission, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return 0, err
+		return submission{}, err
 	}
 	defer tx.Rollback()
-	closed, round, previous, err := state(tx, id)
+	c, err := state(tx, id)
 	if err != nil {
-		return 0, err
+		return submission{}, err
 	}
-	if closed {
-		return 0, errClosed
+	if c.closed {
+		return submission{}, errClosed
 	}
-	if previous.Valid {
-		return 0, fmt.Errorf("conversation %s already has an outstanding submission", id)
+	if c.message.Valid {
+		return submission{}, fmt.Errorf("conversation %s already has an outstanding submission", id)
 	}
-	round++
-	_, err = tx.Exec(`UPDATE conversations SET round=?,result=? WHERE id=?`, round, message, id)
+	c.round++
+	_, err = tx.Exec(`UPDATE conversations SET round=?,result=? WHERE id=?`, c.round, message, id)
 	if err != nil {
-		return 0, err
+		return submission{}, err
 	}
-	return round, tx.Commit()
+	return c.submission, tx.Commit()
 }
 
 func (s *store) reply(id, message string) error {
@@ -165,17 +188,17 @@ func (s *store) reply(id, message string) error {
 		return err
 	}
 	defer tx.Rollback()
-	closed, round, previous, err := state(tx, id)
+	c, err := state(tx, id)
 	if err != nil {
 		return err
 	}
-	if closed {
+	if c.closed {
 		return errClosed
 	}
-	if !previous.Valid {
+	if !c.message.Valid {
 		return fmt.Errorf("conversation %s has no result ready for a reply", id)
 	}
-	if _, err = tx.Exec(`INSERT INTO replies(id,round,message) VALUES(?,?,?)`, id, round, message); err != nil {
+	if _, err = tx.Exec(`INSERT INTO replies(id,round,message) VALUES(?,?,?)`, id, c.round, message); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(`UPDATE conversations SET result=NULL WHERE id=?`, id); err != nil {
@@ -184,42 +207,86 @@ func (s *store) reply(id, message string) error {
 	return tx.Commit()
 }
 
-func (s *store) awaitReply(id string, round int) (string, error) {
-	for {
-		var closed bool
-		var message sql.NullString
-		// One SQLite snapshot makes accepted replies take precedence over closure.
-		err := s.db.QueryRow(`SELECT c.closed, r.message FROM conversations c
-			LEFT JOIN replies r ON r.id=c.id AND r.round=? WHERE c.id=?`, round, id).Scan(&closed, &message)
+func (s *store) readReply(id string, round submission) (string, bool, error) {
+	var closed bool
+	var generation string
+	var message sql.NullString
+	var heartbeatDue bool
+	read := func(q interface{ QueryRow(string, ...any) *sql.Row }) error {
+		err := q.QueryRow(`SELECT c.closed, c.generation, r.message, c.last_used<=unixepoch()-?
+			FROM conversations c LEFT JOIN replies r ON r.id=c.id AND r.round=? WHERE c.id=?`,
+			int64(replyHeartbeatInterval/time.Second), round.round, id).Scan(&closed, &generation, &message, &heartbeatDue)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && generation != round.generation) {
+			return expired(id)
+		}
+		return err
+	}
+	// Most 20 ms polls are read-only. Share the heartbeat timestamp across
+	// processes so blocked submissions do not continually take the writer lock.
+	if err := read(s.db); err != nil {
+		return "", false, err
+	}
+	if heartbeatDue {
+		tx, err := s.db.Begin()
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
-		if message.Valid {
-			return message.String, nil
+		defer tx.Rollback()
+		// Cleanup may have recycled the ID after the first read. Recheck its
+		// generation and reply inside the same transaction as the heartbeat.
+		if err = read(tx); err != nil {
+			return "", false, err
 		}
-		if closed {
-			return "", errClosed
+		if heartbeatDue {
+			if err = touch(tx, id); err != nil {
+				return "", false, err
+			}
+		}
+		if err = tx.Commit(); err != nil {
+			return "", false, err
+		}
+	}
+	// Accepted replies still take precedence over closure.
+	if message.Valid {
+		return message.String, true, nil
+	}
+	if closed {
+		return "", false, errClosed
+	}
+	return "", false, nil
+}
+
+func expired(id string) error {
+	return fmt.Errorf("conversation %q expired", id)
+}
+
+func (s *store) awaitReply(id string, round submission) (string, error) {
+	for {
+		message, ready, err := s.readReply(id, round)
+		if err != nil || ready {
+			return message, err
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 }
 
 func (s *store) snapshot(ids []string) (snapshot, error) {
-	out := snapshot{Status: "ready", Results: []result{}, Pending: []string{}, Closed: []string{}}
+	out := snapshot{Status: "ready", Results: []result{}, Pending: []string{}, Closed: []string{}, generations: map[string]string{}}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return out, err
 	}
 	defer tx.Rollback()
 	for _, id := range ids {
-		closed, _, message, e := state(tx, id)
+		c, e := state(tx, id)
 		if e != nil {
 			return out, e
 		}
-		if closed {
+		out.generations[id] = c.generation
+		if c.closed {
 			out.Closed = append(out.Closed, id)
-		} else if message.Valid {
-			out.Results = append(out.Results, result{id, message.String})
+		} else if c.message.Valid {
+			out.Results = append(out.Results, result{id, c.message.String})
 		} else {
 			out.Pending = append(out.Pending, id)
 		}
@@ -231,8 +298,17 @@ func (s *store) snapshot(ids []string) (snapshot, error) {
 }
 
 func (s *store) wait(ids []string, deadline time.Time) (snapshot, error) {
+	var generations map[string]string
 	for {
 		out, err := s.snapshot(ids)
+		if err == nil {
+			for id, generation := range generations {
+				if out.generations[id] != generation {
+					return out, expired(id)
+				}
+			}
+			generations = out.generations
+		}
 		if err != nil || len(out.Pending) == 0 || !time.Now().Before(deadline) {
 			return out, err
 		}
@@ -251,7 +327,7 @@ func (s *store) close(ids []string) error {
 	}
 	defer tx.Rollback()
 	for _, id := range ids {
-		if _, _, _, err = state(tx, id); err != nil {
+		if _, err = state(tx, id); err != nil {
 			return err
 		}
 	}
