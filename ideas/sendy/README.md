@@ -2,28 +2,52 @@
 
 **Status: interface specification. Implementation is a separate change.**
 
-Sendy is an idea for keeping parent-child AI workflows disciplined through a small
-local message-passing utility. Agents, especially smaller models, can be
-rambunctious: they struggle with complex skills and workflows, make unnecessary
-tool calls, and explore beyond their assigned work when they should simply wait.
+## What Sendy is
 
-Sendy establishes clear bounds on how parents and children communicate. A parent
-can progressively disclose work, giving each child just its next unit of work.
-The child completes it, submits its result, and stays blocked inside that tool
-call until the parent provides the next instruction. The parent can collect
-results from several children, reply to each without blocking, and then wait for
-their next results. Blocking makes waiting part of the mechanism, reducing the
-opportunity for unnecessary activity between assignments.
+Sendy is a small local command-line message-passing utility for parent-child AI
+workflows. It establishes a simple communication boundary: a child completes its
+assigned work, submits its result, and intentionally stays blocked inside that
+command until its parent replies with the next instruction or closes the
+conversation. A parent can collect results from several children, reply to each
+without blocking, and then wait for their next results.
 
-The interface deliberately uses ordinary command arguments, stdin, stdout, and
-exit codes. There is very little protocol to learn, so even smaller models can
-follow the same simple cycle: do the assigned work, submit it, and wait for what
-comes next.
+## Why we are building it
 
-All Sendy design and implementation work belongs in this folder. The planned
-implementation is Go with embedded SQLite through `modernc.org/sqlite`. There is
-no separate database installation, broker service, or database configuration in
-the agent interface.
+Agents, especially smaller models, can be rambunctious. They may struggle with
+complex skills and workflows, make unnecessary tool calls, or keep exploring when
+all they should do is wait for the next portion of their work. Sendy lets a parent
+progressively disclose one unit of work at a time and makes waiting part of the
+communication mechanism. The child follows a small cycle: do the assigned work,
+submit it, and wait for what comes next.
+
+Sendy also gives skills a harness-agnostic communication protocol. A skill should
+not have to depend on each harness's particular agent-messaging API, coordination
+conventions, or how well those mechanisms enforce waiting. Instead, parents and
+children communicate through the same local commands. Sendy's intentional blocking
+is central to that contract: submitting a result also waits for the next instruction,
+so the skill does not need a harness-specific exchange of send and receive calls.
+
+Ordinary command arguments, stdin, stdout, and exit codes keep this protocol easy
+for smaller models to use. The same communication instructions can be reused
+across harnesses that support local commands and honor blocking tool calls. That
+last requirement is essential to achieving the intended behavior.
+
+## What makes the blocking effective
+
+The agent's tool runner must keep `submit` and `wait` calls in the foreground and
+withhold agent continuation until they complete. Background task handles, unrelated
+parallel tool calls, or runner deadlines can otherwise return control to the model
+while Sendy is still waiting. Long waits require a runner that supports them.
+
+Sendy cannot prevent an agent from doing extra work before `submit`, after `reply`,
+or after a timed-out `wait`. Agent instructions must direct the child to submit
+when finished and the parent to wait after dispatching work. The deliberate
+parent wake-up on timeout provides a chance to inspect or adjust the workflow.
+
+Skills use Sendy for messages and turn-taking across compatible harnesses.
+The harness still launches agent sessions and runs commands; Sendy does not
+replace those capabilities. Harness-agnostic communication does not mean a
+harness can ignore the blocking requirement.
 
 ## Interface at a glance
 
@@ -53,6 +77,49 @@ Each identifier names one parent/child conversation. It is used for every round
 of that conversation. Each child receives its own identifier; it needs no sibling
 identifiers, sender name, receiver name, or round number. The command determines
 the direction: the child submits results, and the parent replies with instructions.
+
+## Parent and child workflow
+
+The parent creates three identifiers:
+
+```bash
+sendy create 3
+```
+
+Suppose the output is `k7 m2 p9`. It launches three children through its existing
+agent session system, each with a task and an instruction like this:
+
+> When you finish, submit your result with `sendy submit k7`, reading the result
+> from stdin. Keep the tool call in the foreground and wait for it to return.
+> Its stdout is your next instruction. Perform that work and submit again using
+> the same ID. If it exits with code 2 and reports closure, end your session.
+
+The parent then waits:
+
+```bash
+sendy wait k7 m2 p9 --timeout 60
+```
+
+Each child independently submits, for example:
+
+```bash
+sendy submit k7 < result.json
+```
+
+After reviewing the results, the parent gives two children more work and closes
+the third conversation:
+
+```bash
+sendy reply k7 < follow-up-k7.txt
+sendy reply m2 < follow-up-m2.txt
+sendy close p9
+sendy wait k7 m2 --timeout 60
+```
+
+Each reply returns immediately. The children receive instructions as the output
+of their existing `submit` calls. The parent's next wait waits for the new results.
+If a wait times out, the parent can act on its partial results and pending list;
+it is free to run another wait for any needed combination of IDs.
 
 ## Message input
 
@@ -205,6 +272,43 @@ child discovers closure if it later calls `submit`. Closing is optional cleanup:
 an agent session system may simply abandon children instead. Conversations do not
 expire automatically because abandoned work and legitimate long waits cannot be
 distinguished reliably.
+
+## Conversation state machine
+
+```mermaid
+stateDiagram-v2
+    state "Child working" as Working
+    state "Result ready; child waiting" as Ready
+    state "Closed" as Closed
+
+    [*] --> Working: Parent creates identifier
+    Working --> Ready: Child submits result
+    Ready --> Working: Parent replies
+    Working --> Closed: Parent closes
+    Ready --> Closed: Parent closes
+    Closed --> [*]
+```
+
+These are protocol states, not child health indicators. A newly created child,
+a running child, and a child that failed before submitting all appear as
+`Child working`. `wait`, including a timeout, does not change these states.
+
+| State | `submit` | `reply` | What `wait` sees |
+| --- | --- | --- | --- |
+| Child working | Record result and block, provided no prior submission is still outstanding. | Error: no result to reply to. | Pending. |
+| Result ready; child waiting | Error: submission already outstanding. | Record instruction; move to child working. | Current result. |
+| Closed | Return the closed outcome without recording input. | Error: conversation closed. | Closed. |
+
+Internally, a reply must stay bound to the submission and round it answers, even
+while the conversation has advanced to `Child working`. A new submission cannot
+overtake the prior one while its response is still pending delivery. These are
+implementation bookkeeping requirements, not additional agent-visible states.
+
+If reply and close race, a reply already committed for a submission remains that
+submission's response; close cannot retract it. The conversation is nevertheless
+closed to subsequent work. If close commits first, reply fails and the submission
+receives the closed outcome. A committed submission racing with close is likewise
+serialized; no result or reply may revive a closed conversation.
 
 ## Templates
 
@@ -458,86 +562,6 @@ Tests that exercise message passing should create their own conversation IDs
 and close them afterward. They must not reset the shared local store. Template
 setup and validation alone do not create any conversations.
 
-## Conversation state machine
-
-```mermaid
-stateDiagram-v2
-    state "Child working" as Working
-    state "Result ready; child waiting" as Ready
-    state "Closed" as Closed
-
-    [*] --> Working: Parent creates identifier
-    Working --> Ready: Child submits result
-    Ready --> Working: Parent replies
-    Working --> Closed: Parent closes
-    Ready --> Closed: Parent closes
-    Closed --> [*]
-```
-
-These are protocol states, not child health indicators. A newly created child,
-a running child, and a child that failed before submitting all appear as
-`Child working`. `wait`, including a timeout, does not change these states.
-
-| State | `submit` | `reply` | What `wait` sees |
-| --- | --- | --- | --- |
-| Child working | Record result and block, provided no prior submission is still outstanding. | Error: no result to reply to. | Pending. |
-| Result ready; child waiting | Error: submission already outstanding. | Record instruction; move to child working. | Current result. |
-| Closed | Return the closed outcome without recording input. | Error: conversation closed. | Closed. |
-
-Internally, a reply must stay bound to the submission and round it answers, even
-while the conversation has advanced to `Child working`. A new submission cannot
-overtake the prior one while its response is still pending delivery. These are
-implementation bookkeeping requirements, not additional agent-visible states.
-
-If reply and close race, a reply already committed for a submission remains that
-submission's response; close cannot retract it. The conversation is nevertheless
-closed to subsequent work. If close commits first, reply fails and the submission
-receives the closed outcome. A committed submission racing with close is likewise
-serialized; no result or reply may revive a closed conversation.
-
-## Parent and child workflow
-
-The parent creates three identifiers:
-
-```bash
-sendy create 3
-```
-
-Suppose the output is `k7 m2 p9`. It launches three children through its existing
-agent session system, each with a task and an instruction like this:
-
-> When you finish, submit your result with `sendy submit k7`, reading the result
-> from stdin. Keep the tool call in the foreground and wait for it to return.
-> Its stdout is your next instruction. Perform that work and submit again using
-> the same ID. If it exits with code 2 and reports closure, end your session.
-
-The parent then waits:
-
-```bash
-sendy wait k7 m2 p9 --timeout 60
-```
-
-Each child independently submits, for example:
-
-```bash
-sendy submit k7 < result.json
-```
-
-After reviewing the results, the parent gives two children more work and closes
-the third conversation:
-
-```bash
-sendy reply k7 < follow-up-k7.txt
-sendy reply m2 < follow-up-m2.txt
-sendy close p9
-sendy wait k7 m2 --timeout 60
-```
-
-Each reply returns immediately. The children receive instructions as the output
-of their existing `submit` calls. The parent's next wait waits for the new results.
-If a wait times out, the parent can act on its partial results and pending list;
-it is free to run another wait for any needed combination of IDs.
-
 ## Errors, interruption, and local execution
 
 Successful commands use exit `0`, including a timed-out `wait`. A closed `submit`
@@ -570,17 +594,12 @@ route messages; they are not authentication credentials. Concurrent operations o
 different conversations are supported. Competing parent sessions controlling the
 same conversation are outside the intended workflow.
 
-## What makes the blocking effective
+## Implementation scope
 
-The agent's tool runner must keep `submit` and `wait` calls in the foreground and
-withhold agent continuation until they complete. Background task handles, unrelated
-parallel tool calls, or runner deadlines can otherwise return control to the model
-while Sendy is still waiting. Long waits require a runner that supports them.
-
-Sendy cannot prevent an agent from doing extra work before `submit`, after `reply`,
-or after a timed-out `wait`. Agent instructions must direct the child to submit
-when finished and the parent to wait after dispatching work. The deliberate
-parent wake-up on timeout provides a chance to inspect or adjust the workflow.
+All Sendy design and implementation work belongs in this folder. The planned
+implementation is Go with embedded SQLite through `modernc.org/sqlite`. There is
+no separate database installation, broker service, or database configuration in
+the agent interface.
 
 There are no additional queues, subscriptions, unsolicited status messages,
 child-controlled timeouts, launch commands, or extensibility mechanisms in this
