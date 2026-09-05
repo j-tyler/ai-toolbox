@@ -3,6 +3,7 @@
 import concurrent.futures
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -27,6 +28,69 @@ def first_use(binary, env, trials=100):
                 trial, [(p.returncode, p.stdout, p.stderr) for p in calls])
             assert {p.stdout for p in calls} == {b"a1000\n", b"a1001\n"}
     print(f"PASS: simultaneous first use, {trials} fresh stores / {trials * 2} processes", flush=True)
+
+
+def broken_stdout(binary, env):
+    with tempfile.TemporaryDirectory(prefix="sendy-broken-stdout-") as scratch:
+        pipe_env = dict(env, HOME=scratch)
+
+        def start(*args):
+            # Use a real fd 1 with no readers: synthetic writers miss Go's SIGPIPE exit.
+            reader, writer = os.pipe()
+            os.close(reader)
+            try:
+                return subprocess.Popen([str(binary), *args], env=pipe_env,
+                                        stdin=subprocess.PIPE, stdout=writer,
+                                        stderr=subprocess.PIPE)
+            finally:
+                os.close(writer)
+
+        def finish(p):
+            _, diagnostics = p.communicate(timeout=5)
+            assert p.returncode == 1, (p.args, p.returncode, diagnostics)
+            assert b"broken pipe" in diagnostics, diagnostics
+            return diagnostics
+
+        p = start("create", "2")
+        try:
+            diagnostics = finish(p)
+        finally:
+            if p.poll() is None:
+                p.kill()
+                p.communicate()
+        assert b"Conversations were created: a1000 a1001" in diagnostics, diagnostics
+        assert b"do not repeat create" in diagnostics, diagnostics
+        assert b"No conversations were created" not in diagnostics, diagnostics
+        with sqlite3.connect(Path(scratch) / ".sendy/conversations.db") as db:
+            assert db.execute("SELECT id,round,result FROM conversations ORDER BY id").fetchall() == [
+                ("a1000", 0, None), ("a1001", 0, None)]
+
+            p = start("submit", "a1000")
+            try:
+                p.stdin.write(b"child result")
+                p.stdin.close()
+                p.stdin = None
+                ready = subprocess.run([str(binary), "wait", "a1000", "--timeout", "1"],
+                                       env=pipe_env, capture_output=True, timeout=5)
+                assert ready.returncode == 0 and not ready.stderr, ready
+                assert db.execute("SELECT round,result FROM conversations WHERE id='a1000'").fetchone() == (1, "child result")
+                reply = subprocess.run([str(binary), "reply", "a1000"], input=b"next instruction",
+                                       env=pipe_env, capture_output=True, timeout=5)
+                assert reply.returncode == 0 and not reply.stdout and not reply.stderr, reply
+                diagnostics = finish(p)
+            finally:
+                if p.poll() is None:
+                    p.kill()
+                    p.communicate()
+            for text in (b"Your result was recorded", b"reply was accepted and read",
+                         b"stdout may be incomplete", b"Do not resubmit the completed work",
+                         b"ask the parent to provide the instruction again"):
+                assert text in diagnostics, diagnostics
+            assert b"No message was sent" not in diagnostics, diagnostics
+            assert db.execute("SELECT round,result FROM conversations WHERE id='a1000'").fetchone() == (1, None)
+            assert db.execute("SELECT id,round,message FROM replies").fetchall() == [
+                ("a1000", 1, "next instruction")]
+    print("PASS: real broken stdout pipes preserve create/submit effects and recovery diagnostics", flush=True)
 
 
 def special_templates(binary, env):
@@ -166,9 +230,45 @@ def daily_cleanup(binary, env):
     print("PASS: concurrent daily cleanup runs once, reclaims IDs/replies, skips template commands", flush=True)
 
 
+def setup_diagnostics(source, env):
+    with tempfile.TemporaryDirectory(prefix="sendy-setup-diagnostics-") as scratch:
+        root = Path(scratch)
+        (root / "tools").mkdir()
+        for name in ("ensure-sendy", "sendy.version"):
+            shutil.copy2(source / "tools" / name, root / "tools" / name)
+        fakebin = root / "fakebin"
+        fakebin.mkdir()
+        fakego = fakebin / "go"
+        fakego.write_text("#!/bin/sh\necho 'simulated compiler failure' >&2\nexit 1\n")
+        fakego.chmod(0o755)
+        test_env = dict(env, HOME=str(root / "home"),
+                        PATH=str(fakebin) + os.pathsep + env["PATH"],
+                        SENDY_SOURCE=str(source))
+
+        def fails(*expected):
+            p = subprocess.run(["./tools/ensure-sendy"], cwd=root, env=test_env,
+                               capture_output=True, timeout=5)
+            assert p.returncode == 1 and not p.stdout, p
+            for text in (*expected, b"No existing executable was replaced", b"no conversation data was changed", b"rerun make sendy"):
+                assert text in p.stderr, (text, p.stderr)
+            assert not (root / ".tools/bin/sendy").exists()
+            assert not (root / "home").exists()
+
+        lock = root / ".tools/sendy-setup.lock"
+        lock.mkdir(parents=True)
+        fails(b"cannot open .tools/sendy-setup.lock", b"permissions")
+        lock.rmdir()
+        fails(b"simulated compiler failure", b"source build failed", b"Go 1.25.8")
+        test_env.pop("SENDY_SOURCE")
+        fails(b"module installation failed", b"pinned release exists", b"set SENDY_SOURCE")
+    print("PASS: setup lock/build/install failures explain state and recovery", flush=True)
+
+
 if __name__ == "__main__":
     binary = Path(sys.argv[1]).resolve()
     first_use(binary, os.environ)
+    broken_stdout(binary, os.environ)
     special_templates(binary, os.environ)
     template_fields(binary, os.environ)
     daily_cleanup(binary, os.environ)
+    setup_diagnostics(Path(__file__).resolve().parents[1], os.environ)

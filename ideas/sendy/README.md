@@ -185,7 +185,8 @@ though `submit` is still running.
 When the parent replies, print the exact instruction on stdout and exit `0`.
 The child performs that instruction and calls `submit` again with the same ID.
 If the conversation closes before a reply is accepted, `submit` prints
-`sendy: conversation closed` on stderr, leaves stdout empty, and exits `2`.
+`sendy: conversation closed` followed by what happened to the submission and
+instructions to end the child session on stderr, leaves stdout empty, and exits `2`.
 Calling `submit` on an already closed conversation also returns exit `2`.
 The child should then end its session.
 
@@ -389,11 +390,13 @@ Unexpected fields: filenmae
 Duplicate fields: (none)
 Expected fields: filename, name
 No message was sent.
+Supply each expected field exactly once using --set KEY=VALUE. Correct missing, unexpected, duplicate, or malformed assignments listed above, then retry. Use sendy template fields review to list the required fields.
 ```
 
 Print diagnostics on stderr, leave stdout empty, exit `1`, and leave conversation
 state unchanged. The agent can fix its arguments and retry. For `template render`
-or `template fields`, the final line instead says `No output was produced.`
+or `template fields`, the diagnostic says `No output was produced.` and confirms
+that no messages were sent or templates changed, followed by recovery guidance.
 
 An unknown template error names the requested template, the searched directory,
 and the available template names. An invalid template error names the file and
@@ -452,8 +455,10 @@ and a Makefile. From this directory, run `make sendy` to build the project-local
 executable and validate the supplied templates, including the argument-free
 `staged-review` prompt.
 
-This initial version is `v0.1.0-dev`; no published release or prebuilt binary is
-provided yet. Setup requires Go 1.25.8 or newer, `make`, `flock`, and `sha256sum`
+This source version is `v0.2.0`, also pinned in `tools/sendy.version`. The source
+checkout installation below works before a release tag is published; a version
+string alone does not publish a Go module release or a prebuilt binary.
+Setup requires Go 1.25.8 or newer, `make`, `flock`, and `sha256sum`
 (the helper currently targets Linux). Dependency downloads require network access
 when they are not cached.
 
@@ -563,10 +568,23 @@ the project root.
 
 ### If a call fails
 
-Errors appear on stderr. Correct explicit pre-send validation errors, such as a
-missing template field, and retry. An interrupted `wait` is also safe to repeat.
-An interrupted or failed `submit` or `reply` may already have sent its message:
-if the outcome is uncertain, do not blindly retry it. The parent can close the
-conversation and create a new one for a replacement child; automatic reconnection
-is not provided. Setup errors are not instructions to delete the binary or reset
-Sendy state.
+Errors appear on stderr and explain the failure, what the invocation did or did
+not record, and how to recover. Use that guidance before retrying:
+
+| Diagnostic situation | What to do |
+| --- | --- |
+| Invalid arguments, empty input, or missing template fields | Nothing was sent. Correct the reported input and retry. |
+| Outstanding submission | The earlier result remains recorded. Keep the original `submit` running; if it was interrupted, ask the parent to recover it. |
+| No result ready for a reply | A reply requires a child submission. An earlier reply may already have been accepted; check with the child before repeating it. |
+| Unknown ID | The requested operation was not performed. Check the supplied ID and operating-system user, or have the parent establish a new ID with `sendy create 1`. |
+| Waiting failed after submission | The result was recorded before the failure. Do not resubmit it; ask the parent to check the conversation. |
+| Database commit could not be confirmed | The write may already have happened. Follow the command-specific check in stderr before retrying. |
+| Stdout delivery failed | Output may be partial. `create` lists its already-created IDs on stderr; `wait` can be repeated because it does not consume results. A failed instruction delivery requires coordination with the parent. |
+
+An interrupted `wait` is safe to repeat. A killed or interrupted `submit` or
+`reply` may have sent its message even if no diagnostic was delivered. The parent
+can close the conversation and create a replacement; automatic reconnection is
+not provided. Setup diagnostics distinguish installation problems from template
+validation failures after installation. Repair or upgrade existing installations
+in separate maintenance after active sessions finish; do not reset conversation
+data as part of setup recovery.

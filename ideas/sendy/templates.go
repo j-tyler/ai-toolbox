@@ -20,7 +20,7 @@ var actionPattern = regexp.MustCompile(`^\{\{[ \t\r\n]*\.([A-Za-z_][A-Za-z0-9_]*
 func templateFiles() (string, []os.DirEntry, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", nil, err
+		return "", nil, advise(err, "The current working directory is inaccessible. Change to the project root, then retry the template command.")
 	}
 	dir := filepath.Join(cwd, ".sendy", "templates")
 	entries, err := os.ReadDir(dir)
@@ -109,19 +109,14 @@ func namedTemplate(name string) (*template.Template, []string, error) {
 		}
 	}
 	if !found {
-		return nil, nil, fmt.Errorf("unknown template %q in %s; available templates: %s", name, dir, fieldList(available))
+		return nil, nil, advise(fmt.Errorf("unknown template %q in %s; available templates: %s", name, dir, fieldList(available)), "Choose an available template name, without the .txt suffix. If none is suitable, have the project maintainer add a .txt template in the directory above and run sendy template validate.")
 	}
 	return loadTemplate(filepath.Join(dir, name+".txt"))
 }
-func renderTemplate(name string, sets []string, sending bool) (string, error) {
-	ending := "No output was produced."
-	if sending {
-		ending = "No message was sent."
-	}
-	fail := func(err error) (string, error) { return "", fmt.Errorf("%w\n%s", err, ending) }
+func renderTemplate(name string, sets []string) (string, error) {
 	t, expected, err := namedTemplate(name)
 	if err != nil {
-		return fail(err)
+		return "", err
 	}
 	values := map[string]string{}
 	duplicates := map[string]bool{}
@@ -160,14 +155,14 @@ func renderTemplate(name string, sets []string, sending bool) (string, error) {
 		if len(malformed) > 0 {
 			detail += fmt.Sprintf("\nMalformed assignments (expected KEY=VALUE with a valid field name): %q", malformed)
 		}
-		return fail(errors.New(detail))
+		return "", advise(errors.New(detail), "Supply each expected field exactly once using --set KEY=VALUE. Correct missing, unexpected, duplicate, or malformed assignments listed above, then retry. Use sendy template fields "+name+" to list the required fields.")
 	}
 	var out bytes.Buffer
 	if err = t.Execute(&out, values); err != nil {
-		return fail(err)
+		return "", err
 	}
 	if err = validMessage(out.String()); err != nil {
-		return fail(err)
+		return "", err
 	}
 	return out.String(), nil
 }
