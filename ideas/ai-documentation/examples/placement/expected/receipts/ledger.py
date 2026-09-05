@@ -11,6 +11,7 @@ class ReceiptLedger:
     def record(self, receipt_id: str, amount: int) -> bool:
         if not self.available:
             raise RuntimeError("Ledger is unavailable")
+        # Duplicate protection lasts only while this ledger retains its receipt history.
         if receipt_id in self.receipts:
             return False
         self.receipts[receipt_id] = amount
