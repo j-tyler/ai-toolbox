@@ -1,6 +1,6 @@
 # Sendy
 
-**Status: interface specification. Implementation is a separate change.**
+**Status: proposed tool and user interface. Implementation is a separate change.**
 
 ## What Sendy is
 
@@ -34,33 +34,27 @@ last requirement is essential to achieving the intended behavior.
 
 ## What makes the blocking effective
 
-The agent's tool runner must keep `submit` and `wait` calls in the foreground and
-withhold agent continuation until they complete. Background task handles, unrelated
-parallel tool calls, or runner deadlines can otherwise return control to the model
-while Sendy is still waiting. Long waits require a runner that supports them.
+Your harness must support local commands and keep the agent waiting while
+`submit` or `wait` runs. Run these calls in the foreground. A harness that
+backgrounds the command or returns control to the model early defeats the intended
+blocking behavior. Long waits require a harness that supports them.
 
-Sendy cannot prevent an agent from doing extra work before `submit`, after `reply`,
-or after a timed-out `wait`. Agent instructions must direct the child to submit
-when finished and the parent to wait after dispatching work. The deliberate
-parent wake-up on timeout provides a chance to inspect or adjust the workflow.
-
-Skills use Sendy for messages and turn-taking across compatible harnesses.
-The harness still launches agent sessions and runs commands; Sendy does not
-replace those capabilities. Harness-agnostic communication does not mean a
-harness can ignore the blocking requirement.
+The harness still launches children. Sendy supplies their message exchange and
+waiting behavior. Skills should direct children to submit when finished and
+parents to wait after assigning work.
 
 ## Interface at a glance
 
 ```text
-sendy create COUNT
-sendy submit ID < result.txt
-sendy submit ID --template NAME [--set KEY=VALUE ...]
-sendy reply ID < instruction.txt
-sendy reply ID --template NAME [--set KEY=VALUE ...]
-sendy wait ID [ID ...] --timeout MINUTES
-sendy close ID [ID ...]
-sendy template render NAME [--set KEY=VALUE ...]
-sendy template validate
+.tools/bin/sendy create COUNT
+.tools/bin/sendy submit ID < result.txt
+.tools/bin/sendy submit ID --template NAME [--set KEY=VALUE ...]
+.tools/bin/sendy reply ID < instruction.txt
+.tools/bin/sendy reply ID --template NAME [--set KEY=VALUE ...]
+.tools/bin/sendy wait ID [ID ...] --timeout MINUTES
+.tools/bin/sendy close ID [ID ...]
+.tools/bin/sendy template render NAME [--set KEY=VALUE ...]
+.tools/bin/sendy template validate
 ```
 
 | Command | Returns when |
@@ -80,46 +74,72 @@ the direction: the child submits results, and the parent replies with instructio
 
 ## Parent and child workflow
 
-The parent creates three identifiers:
+Run every example from the project root, using the project-local executable
+`.tools/bin/sendy`. Once your project has the [setup files](#including-sendy-in-your-project),
+run `make sendy` and continue only if it succeeds. Repeating setup is safe,
+including when other sessions are using Sendy.
+
+### Parent instructions
+
+1. Create one conversation per child. Launch each child through your harness,
+   giving it its initial task, the project root, and its own conversation ID.
+2. Call `wait` with the IDs whose results you need and a timeout in minutes.
+3. Read the returned results. Reply to children that have more work, then wait
+   for their next results. You can reply to several children before waiting.
+4. On timeout, use the partial results and pending list to decide what to do next.
+   You can wait again or check on working children through your harness.
+5. Optionally close conversations you no longer need. If a command fails, follow
+   the recovery guidance below rather than blindly sending the same message again.
+
+For three children:
 
 ```bash
-sendy create 3
+.tools/bin/sendy create 3
 ```
 
-Suppose the output is `k7 m2 p9`. It launches three children through its existing
-agent session system, each with a task and an instruction like this:
-
-> When you finish, submit your result with `sendy submit k7`, reading the result
-> from stdin. Keep the tool call in the foreground and wait for it to return.
-> Its stdout is your next instruction. Perform that work and submit again using
-> the same ID. If it exits with code 2 and reports closure, end your session.
-
-The parent then waits:
+Suppose the output is `k7 m2 p9`. After launching the children with their IDs:
 
 ```bash
-sendy wait k7 m2 p9 --timeout 60
+.tools/bin/sendy wait k7 m2 p9 --timeout 60
 ```
 
-Each child independently submits, for example:
+After receiving and reviewing their results, give two children more work and
+close the third conversation:
 
 ```bash
-sendy submit k7 < result.json
+.tools/bin/sendy reply k7 < follow-up-k7.txt
+.tools/bin/sendy reply m2 < follow-up-m2.txt
+.tools/bin/sendy close p9
+.tools/bin/sendy wait k7 m2 --timeout 60
 ```
 
-After reviewing the results, the parent gives two children more work and closes
-the third conversation:
+### Child instructions
+
+> Work from the supplied project root. Run `make sendy` and continue only if it
+> succeeds. Complete your assigned task, then submit your result through stdin
+> using `.tools/bin/sendy submit YOUR_ID`. Keep the call in the foreground and
+> wait for it to finish. Only after exit `0`, treat stdout as your next instruction:
+> do that work and submit again using the same ID. Exit `2` means the conversation
+> is closed; end your session. For exit `1`, correct and retry only errors that
+> clearly rejected the message before sending. If delivery is uncertain or the
+> call was interrupted, stop and report through the agent session system instead
+> of submitting again. A still-running call is not a new assignment.
+
+For example, the child assigned `k7` submits its result with:
 
 ```bash
-sendy reply k7 < follow-up-k7.txt
-sendy reply m2 < follow-up-m2.txt
-sendy close p9
-sendy wait k7 m2 --timeout 60
+.tools/bin/sendy submit k7 < result.json
 ```
 
-Each reply returns immediately. The children receive instructions as the output
-of their existing `submit` calls. The parent's next wait waits for the new results.
-If a wait times out, the parent can act on its partial results and pending list;
-it is free to run another wait for any needed combination of IDs.
+### If a call fails
+
+Errors appear on stderr. Correct explicit pre-send validation errors, such as a
+missing template field, and retry. An interrupted `wait` is also safe to repeat.
+An interrupted or failed `submit` or `reply` may already have sent its message:
+if the outcome is uncertain, do not blindly retry it. The parent can close the
+conversation and create a new one for a replacement child; automatic reconnection
+is not provided. Setup errors are not instructions to delete the binary or reset
+Sendy state.
 
 ## Message input
 
@@ -137,14 +157,14 @@ input. Template details and project setup are specified below.
 Use an existing file whenever possible:
 
 ```bash
-sendy submit k7 < result.json
-sendy reply k7 < next-task.txt
+.tools/bin/sendy submit k7 < result.json
+.tools/bin/sendy reply k7 < next-task.txt
 ```
 
 For inline text, use a quoted heredoc:
 
 ```bash
-sendy submit k7 <<'SENDY_MESSAGE'
+.tools/bin/sendy submit k7 <<'SENDY_MESSAGE'
 {
   "summary": "It's ready",
   "example": "A \"quoted\" value",
@@ -160,7 +180,7 @@ code, and prose alike and does not parse message content.
 
 ## Commands
 
-### `sendy create COUNT`
+### `.tools/bin/sendy create COUNT`
 
 `COUNT` is a positive decimal integer. Create that many conversations and print
 their identifiers on one line, separated by single spaces, with a final newline:
@@ -169,16 +189,15 @@ their identifiers on one line, separated by single spaces, with a final newline:
 k7 m2 p9
 ```
 
-Identifiers are short lowercase ASCII letters and digits, unique within the
-local Sendy store. They may grow as needed; their length is not fixed and they
-are not globally unique. An identifier is never reassigned within that store,
-including after closure, so a late child cannot address a newer conversation.
+Identifiers are short lowercase ASCII letters and digits, unique locally.
+Keep using the same ID for successive assignments to a child. Closed IDs cannot
+be reused for new conversations.
 
 Creation returns immediately after recording the conversations. It does not
 start children or wait for them. Each new conversation expects a child result;
 the parent supplies the initial task through the system that launches the child.
 
-### `sendy submit ID`
+### `.tools/bin/sendy submit ID`
 
 Read a result from stdin or render the selected template, record it for the parent,
 and block. The result becomes available to `wait` as soon as it is recorded, even
@@ -186,22 +205,24 @@ though `submit` is still running.
 
 When the parent replies, print the exact instruction on stdout and exit `0`.
 The child performs that instruction and calls `submit` again with the same ID.
-When the parent closes, print `sendy: conversation closed` on stderr, leave stdout
-empty, and exit `2`. The child should then end its session.
+If the conversation closes before a reply is accepted, `submit` prints
+`sendy: conversation closed` on stderr, leaves stdout empty, and exits `2`.
+Calling `submit` on an already closed conversation also returns exit `2`.
+The child should then end its session.
 
 There is no timeout argument, default timeout, or message expiry. A submission
 can wait over a weekend or longer for human approval. The child does not choose
 how long it waits. During normal operation, only a reply or closure releases it;
 process interruption and operational failure are separate error conditions.
 
-Only one child submission may be outstanding per conversation. Reject a second
-submission without replacing the existing result or stealing a pending reply.
+Only one child submission may be outstanding per conversation. A second
+submission returns an error and leaves the first one untouched.
 
-### `sendy reply ID`
+### `.tools/bin/sendy reply ID`
 
 Read an instruction from stdin or render the selected template, record it for the
-outstanding submission, and return immediately with no stdout and exit `0`. Do not wait for the child to
-receive it, start work, or submit its next result.
+outstanding submission, and return immediately with no stdout and exit `0`.
+It does not wait for the child to receive it or finish the next task.
 
 A reply is valid only when a child result is ready. Recording the reply retires
 that result from future `wait` output and starts the next round. The instruction
@@ -210,7 +231,7 @@ remains associated with the particular blocked submission it answers.
 The parent can reply to several children in separate calls, then call `wait`.
 There is no batch-reply operation and no queue of unsolicited instructions.
 
-### `sendy wait ID [ID ...] --timeout MINUTES`
+### `.tools/bin/sendy wait ID [ID ...] --timeout MINUTES`
 
 Wait for all listed conversations. `MINUTES` is a required positive decimal
 integer, measured as elapsed time from the start of the wait. There is no default.
@@ -256,16 +277,17 @@ Sendy does not interrupt a working child to ask for status. A child receives a
 Sendy instruction when it is blocked in `submit`. Communication with a child that
 has not submitted yet uses the existing agent session system.
 
-### `sendy close ID [ID ...]`
+### `.tools/bin/sendy close ID [ID ...]`
 
 Close the listed conversations, return no stdout, and exit `0`. Identifiers must
-be distinct. Validate the whole list before changing anything; an unknown ID
-fails the command without closing any conversations. Closing an already closed
-conversation succeeds. The closure of a valid list is atomic.
+be distinct. An unknown ID fails the command without closing any conversations.
+Closing an already closed conversation succeeds.
 
-Closure is terminal. It releases outstanding submissions with the closed outcome,
-makes `wait` report those IDs as closed, and rejects future submissions and replies.
-A previously ready result is no longer returned by `wait` after closure.
+Closing releases a waiting child with exit `2`, unless Sendy has already accepted
+a reply for that submission. Closing cannot retract an accepted reply; the child
+still receives it. Subsequent `submit` calls return exit `2`, and subsequent
+`reply` calls fail with exit `1`. `wait` reports the ID as closed instead of
+returning its previous result.
 
 Closing does not kill a child process or interrupt work outside Sendy. A working
 child discovers closure if it later calls `submit`. Closing is optional cleanup:
@@ -273,7 +295,7 @@ an agent session system may simply abandon children instead. Conversations do no
 expire automatically because abandoned work and legitimate long waits cannot be
 distinguished reliably.
 
-## Conversation state machine
+## How a conversation progresses
 
 ```mermaid
 stateDiagram-v2
@@ -289,34 +311,17 @@ stateDiagram-v2
     Closed --> [*]
 ```
 
-These are protocol states, not child health indicators. A newly created child,
-a running child, and a child that failed before submitting all appear as
-`Child working`. `wait`, including a timeout, does not change these states.
-
-| State | `submit` | `reply` | What `wait` sees |
-| --- | --- | --- | --- |
-| Child working | Record result and block, provided no prior submission is still outstanding. | Error: no result to reply to. | Pending. |
-| Result ready; child waiting | Error: submission already outstanding. | Record instruction; move to child working. | Current result. |
-| Closed | Return the closed outcome without recording input. | Error: conversation closed. | Closed. |
-
-Internally, a reply must stay bound to the submission and round it answers, even
-while the conversation has advanced to `Child working`. A new submission cannot
-overtake the prior one while its response is still pending delivery. These are
-implementation bookkeeping requirements, not additional agent-visible states.
-
-If reply and close race, a reply already committed for a submission remains that
-submission's response; close cannot retract it. The conversation is nevertheless
-closed to subsequent work. If close commits first, reply fails and the submission
-receives the closed outcome. A committed submission racing with close is likewise
-serialized; no result or reply may revive a closed conversation.
+Waiting, including a timeout, does not change the conversation. A pending result
+means the child has not submitted yet; it does not tell you whether the child is
+healthy or making progress.
 
 ## Templates
 
 Templates let teams write a standard prompt once. An agent supplies its name and
 the changing values, and Sendy assembles the full message locally. The sending
 model does not have to regenerate the fixed prompt; the receiving model still
-reads the completed message. Rendering is an input mechanism and adds no states
-to the conversation protocol.
+reads the completed message. Using a template does not change when a command
+blocks or returns.
 
 ### Project files are the registration
 
@@ -356,8 +361,8 @@ JSON-safe.
 ### Sending with a template
 
 ```bash
-sendy reply k7 --template review --set filename=server.go --set name=Alice
-sendy submit m2 --template completion --set filename=report.md
+.tools/bin/sendy reply k7 --template review --set filename=server.go --set name=Alice
+.tools/bin/sendy submit m2 --template completion --set filename=report.md
 ```
 
 The second example assumes the project also supplies `completion.txt`, with a
@@ -376,17 +381,14 @@ Use ordinary shell quoting for a value with spaces, for example
 the agent does not reproduce or escape the whole template. Values containing
 additional equals signs are preserved after the first one.
 
-Sendy loads one snapshot of the template, validates the fields, and renders the
-entire message in memory before recording anything. Subsequent template edits
-cannot change a message already submitted or replied. Rendering failures return
-immediately; they never enter the blocking part of `submit`.
+Template errors return immediately, before any message is sent or `submit` begins
+waiting. Editing a template does not change messages already sent.
 
 ### Errors that let an agent correct itself
 
-Infer expected fields from the template's placeholders. Compare them with all
-supplied keys before rendering and report missing, unexpected, and duplicate
-fields together, followed by the complete expected field list. Lists are sorted
-and use `(none)` when empty. Do not stop at the first missing field.
+Sendy reports all missing, unexpected, and duplicate fields together, followed by
+the fields the template expects. Template authors do not maintain a separate
+field definition.
 
 For `review` with `--set filenmae=server.go --set name=Alice`:
 
@@ -409,14 +411,14 @@ the location and reason for the invalid syntax or unsupported action. A missing
 template directory error reports the expected path and tells the agent to run
 from the project root. These errors likewise occur before any message is sent.
 
-### `sendy template render NAME [--set KEY=VALUE ...]`
+### `.tools/bin/sendy template render NAME [--set KEY=VALUE ...]`
 
 Render using the same field validation as `submit` and `reply`, print the exact
 completed text on stdout without adding a newline, and exit `0`. This command
 does not create or change a conversation and does not wait for any agent.
 
 ```bash
-sendy template render review --set filename=server.go --set name=Alice > prompt.txt
+.tools/bin/sendy template render review --set filename=server.go --set name=Alice > prompt.txt
 ```
 
 This supports initial child prompts when the launching system accepts a prompt
@@ -424,183 +426,78 @@ file or can pass its contents programmatically. If the model must copy the file
 back into a launch tool argument, that copying still generates output tokens.
 Sendy itself does not launch children.
 
-### `sendy template validate`
+### `.tools/bin/sendy template validate`
 
-Check every project template's name, UTF-8 encoding, nonempty source, and allowed
-syntax. Validate names for all direct `.txt` files, including invalid names.
-Collect file errors rather than stopping after the first invalid template.
-This command takes no field values and does not attempt to send a message.
+Check project templates for valid names and syntax and nonempty UTF-8 text.
+Report all invalid files so you can correct them together. This command takes
+no field values and sends no messages.
 
 On success, leave stdout empty and exit `0`. On failure, leave stdout empty,
 report diagnostics on stderr, and exit `1`. A missing `.sendy/templates/` directory
 is an error; an existing empty directory is valid for projects without templates.
-The command does not populate a database registry or change conversations.
+Normal project setup creates this directory when it is missing.
 
 ## Including Sendy in your project
 
-The project owns the executable version, setup, and templates. Engineers do not
-need a global Sendy installation, and skills do not register templates on each
-run. Add these files to the consuming project:
+Sendy is not implemented yet. The following is the planned project setup; the
+setup helper and releases will be supplied with the implementation.
+
+The project owns the Sendy version and templates. Engineers do not need a global
+Sendy installation. Add these files to the consuming project:
 
 | Path | Purpose |
 | --- | --- |
-| `Makefile` | Provides a `sendy` setup target. |
-| `tools/ensure-sendy` | Setup helper supplied with Sendy; safely installs only when absent. |
+| `Makefile` | Provides the `sendy` setup target below. |
+| `tools/ensure-sendy` | Setup helper supplied with Sendy. |
 | `tools/sendy.version` | Pins an exact released Sendy version. |
 | `.sendy/templates/*.txt` | Version-controlled prompts, available by filename. |
-| `.tools/bin/sendy` | Generated executable; exclude it from Git. |
+| `.tools/bin/sendy` | Generated local executable; exclude it from Git. |
 
-Projects that keep templates beside their skills can copy them into
-`.sendy/templates/` during setup before validation, but keeping the authoritative
-files directly in that directory is the simplest arrangement.
+Use a released version, not `latest`. Source installation requires Go and access
+to download dependencies when they are not cached; a prebuilt-binary installation
+option is planned for teams without Go.
 
-### Project setup with Make
-
-`make sendy` means **ensure available and validate templates**, not rebuild Sendy.
-It must be safe for ten independent agent sessions to run it concurrently. An
-existing, verified installation of the pinned version is reused without building,
-downloading, rewriting, or restarting it. Setup never opens or resets the
-conversation database.
-
-The following is the intended Make integration after Sendy is implemented and
-released. The implementation/distribution change must supply `tools/ensure-sendy`
-with the installation contract below; that helper does not exist yet. Put a real
-released version in `tools/sendy.version`; do not use `latest`. Recipe indentation
-below uses tabs.
+Recipe indentation in this Makefile uses tabs:
 
 ```makefile
 .PHONY: sendy
 sendy:
 	./tools/ensure-sendy
+	mkdir -p .sendy/templates
 	./.tools/bin/sendy template validate
 ```
 
-The phony target runs the availability check each time; it does not unconditionally
-run a compiler. Do not make the executable depend on Makefile or template timestamps:
-editing those files must not cause a rebuild. Make's usual timestamp checks also
-do not provide an installation lock across independent Make invocations. The
-helper, rather than Make's scheduling, enforces installation reuse and exclusion.
-[GNU Make documentation](https://www.gnu.org/software/make/manual/make.html)
+`make sendy` ensures Sendy is available and checks templates. It reuses an existing
+installation of the pinned version without rebuilding or replacing it. It is safe
+for multiple sessions to run setup concurrently, including the first installation.
+Setup and validation never reset conversations or disturb blocked submissions.
 
-The lightweight template validation runs after successful setup each time, so
-template edits, additions, deletions, and branch switches do not depend on a stale
-registration stamp. It only reads template files; it neither rebuilds the executable
-nor accesses conversation state.
+A version mismatch or damaged installation produces an error requiring separate
+maintenance; ordinary skill runs do not upgrade or repair an existing executable.
+Changing the Makefile or templates does not trigger a binary rebuild.
 
-### Installation contract for concurrent sessions
+The `mkdir -p` step supports projects with no templates, including fresh checkouts
+where an empty directory would otherwise be missing. Existing templates are left
+untouched. Template files are the registration: setup validates them, and skills
+can immediately use their names. There is no per-run registration or global
+registry to synchronize. Pulling a project or switching branches selects its
+current templates.
 
-`tools/ensure-sendy` reads the project's pinned version and uses a project-local
-operating-system lock shared by all its invocations. The lock must be released
-when the installer exits or dies; an abandoned lock file must not block setup
-forever. It is separate from the conversation database and never held by message
-commands or while validating templates.
+Relevant build and test targets can depend on `sendy`, for example `test: sendy`,
+before running their existing recipes. Use `make sendy` as the single setup target.
+Tests should create their own conversation IDs and close them afterward, without
+resetting state used by other sessions.
 
-Under that lock, recheck the installation before deciding to build:
+## Exit codes and local use
 
-| Existing installation | Setup behavior |
+| Exit code | Meaning |
 | --- | --- |
-| Complete executable with verified pinned version | Return success immediately; do not write to the installation. |
-| Absent | Build or download once into a private temporary location, verify it, and publish the complete installation atomically. |
-| Another setup process is installing | Wait for the installation lock, then recheck and reuse its completed installation. |
-| Different version, corrupt executable, or unverifiable installation | Return a clear error without replacing it; repair or upgrade is a separate maintenance action. |
+| `0` | Success, including a `wait` that wakes on timeout. For `submit`, stdout is the next instruction. |
+| `1` | Error; read stderr and follow the recovery guidance in the workflow above. |
+| `2` | `submit` returned because the conversation is closed; end the child session. |
 
-The helper must verify the installed version using build identity or installation
-metadata tied to the executable, not just assume that any file named `sendy` is
-correct. Publish the executable and its verification information so concurrent
-callers cannot mistake a partial installation for a completed one. Never compile,
-download, or copy directly over `.tools/bin/sendy`. A failed first installation
-leaves no runnable partial installation; subsequent setup can retry safely.
-
-In a successful concurrent first setup, one session installs and the others reuse
-the result. Once installed, ordinary setup calls cannot replace that executable,
-even if the Makefile changes. Changing the pinned version produces an explicit
-version-mismatch error instead of upgrading underneath active workflows. Routine
-skills must not respond to that error by deleting the binary or running cleanup.
-Plan upgrades or repairs separately from active sessions, including compatibility
-with the shared conversation store; neither happens as a side effect of setup.
-
-Source installation requires a compatible Go toolchain and access to download
-the pinned module and its dependencies when they are not cached. These are needed
-when installation is actually necessary, not to rebuild on every skill run. Go's
-versioned `go install` can install a command into a private staging `GOBIN`
-independently of the consuming project's language or `go.mod`.
-[Go installation documentation](https://go.dev/ref/mod#go-install)
-
-For teams without Go, a distribution alternative is for the setup target to
-download a pinned release binary for the local operating system and architecture,
-verify its published checksum, and publish it at the same `.tools/bin/sendy` path
-under the same lock and atomic installation rules. Release binaries and the setup
-helper belong to the implementation/distribution change. Skills use the same
-interface with either installation path.
-
-Templates are thus pre-registered by being project files, and checked during
-build/setup. There are no repeated `template add` calls or global registrations.
-Pulling or switching branches selects the corresponding templates; different
-projects may use the same template names. Setup never clears the shared Sendy
-store or changes pending results, replies, or blocked submissions.
-
-### Use from skills and tests
-
-A skill's setup instruction can be:
-
-> From the project root, run `make sendy`. Continue only if it succeeds. Use
-> `.tools/bin/sendy` for communication; this project's templates are already
-> available. Keep blocking calls in the foreground.
-
-Then its message call can be as short as:
-
-```bash
-.tools/bin/sendy reply k7 --template review --set filename=server.go --set name=Alice
-```
-
-Have relevant build and test targets depend on `sendy`, for example
-`test: sendy`, before running their existing recipes. Use `make sendy` as the
-single setup target; `make build sendy` requests two independent targets and
-does not establish an ordering dependency between them.
-
-Tests that exercise message passing should create their own conversation IDs
-and close them afterward. They must not reset the shared local store. Template
-setup and validation alone do not create any conversations.
-
-## Errors, interruption, and local execution
-
-Successful commands use exit `0`, including a timed-out `wait`. A closed `submit`
-uses exit `2`. Invalid arguments, unknown IDs, invalid state transitions, invalid
-input, and operational failures use exit `1`, with a concise explanation on stderr
-and no normal output on stdout. Unknown or closed IDs should be detected before
-waiting for stdin where possible, with state checked again atomically at commit.
-Revalidate after reading input because the parent may close while input is read.
-
-Invalid requests leave existing state unchanged. Operational failures or process
-interruption can happen after a message commits; they do not imply rollback. An
-interrupted `wait` is safe to repeat because it never consumes messages. Do not
-blindly retry an interrupted `submit` or `reply`: its effect may already be recorded.
-
-Transparent reconnection and retry deduplication are outside this first version.
-If a child or its blocked submission is lost, the parent can close that
-conversation and create a new one for a replacement. Durable messages alone do
-not reconnect agent sessions. Process signals retain their ordinary operating
-system behavior; Sendy does not make blocked processes unkillable.
-
-All processes for the same local operating-system user share one persistent
-Sendy store, independent of working directory. Placement is chosen automatically
-by the implementation using a standard per-user application data location. There
-are no database paths, transport choices, or storage tuning flags in the protocol.
-State transitions are transactional, and waits never hold a database write lock.
-The blocked process must observe replies from other processes without a daemon.
-
-One parent coordinates each conversation and one child submits to it. Identifiers
-route messages; they are not authentication credentials. Concurrent operations on
-different conversations are supported. Competing parent sessions controlling the
-same conversation are outside the intended workflow.
-
-## Implementation scope
-
-All Sendy design and implementation work belongs in this folder. The planned
-implementation is Go with embedded SQLite through `modernc.org/sqlite`. There is
-no separate database installation, broker service, or database configuration in
-the agent interface.
-
-There are no additional queues, subscriptions, unsolicited status messages,
-child-controlled timeouts, launch commands, or extensibility mechanisms in this
-interface. The first implementation should implement this contract directly.
+Sendy uses one persistent local store per operating-system user, independent of
+working directory. No database setup or configuration is required. Each
+conversation has one parent and one child; independent conversations can run
+concurrently. Template lookup is project-local, so run template commands from
+the project root.
