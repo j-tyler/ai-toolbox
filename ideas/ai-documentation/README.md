@@ -52,6 +52,9 @@ current through direct reading, search, and editing. It is self-contained for
 readers who do not have the placement guide or its input artifacts. Take the parts
 that fit and include only commands and conventions established in your repository.
 
+See the [placement examples](examples/README.md) for runnable before/input/expected
+fixtures and a compact maintenance exercise.
+
 ## Status
 
 Early. The three documents exist and are usable, but the idea hasn't been run
