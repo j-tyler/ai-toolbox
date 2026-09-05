@@ -83,16 +83,16 @@ With Sendy already available in the project, the parent creates a conversation:
 .tools/bin/sendy create 1
 ```
 
-Suppose the returned ID is `k7`. The parent starts a child session through its
+Suppose the returned ID is `k07`. The parent starts a child session through its
 harness with this prompt:
 
-> Review the staged files. Submit your review using `.tools/bin/sendy submit k7`,
+> Review the staged files. Submit your review using `.tools/bin/sendy submit k07`,
 > with the review text on stdin.
 
 The parent waits for the result:
 
 ```bash
-.tools/bin/sendy wait k7 --timeout 60
+.tools/bin/sendy wait k07 --timeout 60
 ```
 
 When the child submits its review, the parent receives it and the child's
@@ -116,14 +116,14 @@ input. Template details and project setup are specified below.
 Use an existing file whenever possible:
 
 ```bash
-.tools/bin/sendy submit k7 < result.json
-.tools/bin/sendy reply k7 < next-task.txt
+.tools/bin/sendy submit k07 < result.json
+.tools/bin/sendy reply k07 < next-task.txt
 ```
 
 For inline text, use a quoted heredoc:
 
 ```bash
-.tools/bin/sendy submit k7 <<'SENDY_MESSAGE'
+.tools/bin/sendy submit k07 <<'SENDY_MESSAGE'
 {
   "summary": "It's ready",
   "example": "A \"quoted\" value",
@@ -145,12 +145,17 @@ code, and prose alike and does not parse message content.
 their identifiers on one line, separated by single spaces, with a final newline:
 
 ```text
-k7 m2 p9
+k07 m02 p09
 ```
 
-Identifiers are short lowercase ASCII letters and digits, unique locally.
-Keep using the same ID for successive assignments to a child. Closed IDs cannot
+Identifiers are one lowercase ASCII letter followed by exactly two digits,
+such as `k07`, `m02`, or `p09`. Leading zeros are part of the ID. This consistent
+shape makes IDs easy to recognize in prompts and responses. IDs are unique locally;
+keep using the same ID for successive assignments to a child. Closed IDs cannot
 be reused for new conversations.
+
+This format provides 2,600 possible IDs. If there are not enough unused IDs for
+the requested count, `create` returns an error without creating conversations.
 
 Creation returns immediately after recording the conversations. It does not
 start children or wait for them. Each new conversation expects a child result;
@@ -208,10 +213,10 @@ Print one JSON object followed by a newline, and exit `0` for either status:
 {
   "status": "timeout",
   "results": [
-    {"id": "k7", "message": "First result"},
-    {"id": "m2", "message": "{\"passed\":true}"}
+    {"id": "k07", "message": "First result"},
+    {"id": "m02", "message": "{\"passed\":true}"}
   ],
-  "pending": ["p9"],
+  "pending": ["p09"],
   "closed": []
 }
 ```
@@ -320,8 +325,8 @@ JSON-safe.
 ### Sending with a template
 
 ```bash
-.tools/bin/sendy reply k7 --template review --set filename=server.go --set name=Alice
-.tools/bin/sendy submit m2 --template completion --set filename=report.md
+.tools/bin/sendy reply k07 --template review --set filename=server.go --set name=Alice
+.tools/bin/sendy submit m02 --template completion --set filename=report.md
 ```
 
 The second example assumes the project also supplies `completion.txt`, with a
