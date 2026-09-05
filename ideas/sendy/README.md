@@ -45,6 +45,9 @@ parents to wait after assigning work.
 
 ## Interface at a glance
 
+Examples use the project-local executable from the project root after
+[project setup](#including-sendy-in-your-project).
+
 ```text
 .tools/bin/sendy create COUNT
 .tools/bin/sendy submit ID < result.txt
@@ -72,74 +75,30 @@ of that conversation. Each child receives its own identifier; it needs no siblin
 identifiers, sender name, receiver name, or round number. The command determines
 the direction: the child submits results, and the parent replies with instructions.
 
-## Parent and child workflow
+## A simple example
 
-Run every example from the project root, using the project-local executable
-`.tools/bin/sendy`. Once your project has the [setup files](#including-sendy-in-your-project),
-run `make sendy` and continue only if it succeeds. Repeating setup is safe,
-including when other sessions are using Sendy.
-
-### Parent instructions
-
-1. Create one conversation per child. Launch each child through your harness,
-   giving it its initial task, the project root, and its own conversation ID.
-2. Call `wait` with the IDs whose results you need and a timeout in minutes.
-3. Read the returned results. Reply to children that have more work, then wait
-   for their next results. You can reply to several children before waiting.
-4. On timeout, use the partial results and pending list to decide what to do next.
-   You can wait again or check on working children through your harness.
-5. Optionally close conversations you no longer need. If a command fails, follow
-   the recovery guidance below rather than blindly sending the same message again.
-
-For three children:
+With Sendy already available in the project, the parent creates a conversation:
 
 ```bash
-.tools/bin/sendy create 3
+.tools/bin/sendy create 1
 ```
 
-Suppose the output is `k7 m2 p9`. After launching the children with their IDs:
+Suppose the returned ID is `k7`. The parent starts a child session through its
+harness with this prompt:
+
+> Review the staged files. Submit your review using `.tools/bin/sendy submit k7`,
+> with the review text on stdin.
+
+The parent waits for the result:
 
 ```bash
-.tools/bin/sendy wait k7 m2 p9 --timeout 60
+.tools/bin/sendy wait k7 --timeout 60
 ```
 
-After receiving and reviewing their results, give two children more work and
-close the third conversation:
-
-```bash
-.tools/bin/sendy reply k7 < follow-up-k7.txt
-.tools/bin/sendy reply m2 < follow-up-m2.txt
-.tools/bin/sendy close p9
-.tools/bin/sendy wait k7 m2 --timeout 60
-```
-
-### Child instructions
-
-> Work from the supplied project root. Run `make sendy` and continue only if it
-> succeeds. Complete your assigned task, then submit your result through stdin
-> using `.tools/bin/sendy submit YOUR_ID`. Keep the call in the foreground and
-> wait for it to finish. Only after exit `0`, treat stdout as your next instruction:
-> do that work and submit again using the same ID. Exit `2` means the conversation
-> is closed; end your session. For exit `1`, correct and retry only errors that
-> clearly rejected the message before sending. If delivery is uncertain or the
-> call was interrupted, stop and report through the agent session system instead
-> of submitting again. A still-running call is not a new assignment.
-
-For example, the child assigned `k7` submits its result with:
-
-```bash
-.tools/bin/sendy submit k7 < result.json
-```
-
-### If a call fails
-
-Errors appear on stderr. Correct explicit pre-send validation errors, such as a
-missing template field, and retry. An interrupted `wait` is also safe to repeat.
-An interrupted or failed `submit` or `reply` may already have sent its message:
-if the outcome is uncertain, do not blindly retry it. The parent can close the
-conversation and create a new one for a replacement child; automatic reconnection
-is not provided. Setup errors are not instructions to delete the binary or reset
-Sendy state.
+When the child submits its review, the parent receives it and the child's
+`submit` call stays blocked. The parent can review the answer and send a follow-up
+through `reply`; that instruction becomes the output of the child's waiting call.
+The child needs only its task and the command for submitting its result.
 
 ## Message input
 
@@ -493,7 +452,7 @@ resetting state used by other sessions.
 | Exit code | Meaning |
 | --- | --- |
 | `0` | Success, including a `wait` that wakes on timeout. For `submit`, stdout is the next instruction. |
-| `1` | Error; read stderr and follow the recovery guidance in the workflow above. |
+| `1` | Error; read stderr and follow the recovery guidance below. |
 | `2` | `submit` returned because the conversation is closed; end the child session. |
 
 Sendy uses one persistent local store per operating-system user, independent of
@@ -501,3 +460,13 @@ working directory. No database setup or configuration is required. Each
 conversation has one parent and one child; independent conversations can run
 concurrently. Template lookup is project-local, so run template commands from
 the project root.
+
+### If a call fails
+
+Errors appear on stderr. Correct explicit pre-send validation errors, such as a
+missing template field, and retry. An interrupted `wait` is also safe to repeat.
+An interrupted or failed `submit` or `reply` may already have sent its message:
+if the outcome is uncertain, do not blindly retry it. The parent can close the
+conversation and create a new one for a replacement child; automatic reconnection
+is not provided. Setup errors are not instructions to delete the binary or reset
+Sendy state.
