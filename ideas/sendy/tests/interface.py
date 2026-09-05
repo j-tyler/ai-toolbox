@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import time
 
-from regressions import daily_cleanup, first_use, special_templates, template_fields
+from regressions import broken_stdout, daily_cleanup, first_use, setup_diagnostics, special_templates, template_fields
 
 SOURCE = Path(__file__).resolve().parents[1]
 CHILDREN = []
@@ -89,9 +89,11 @@ def main():
         st = binary.stat()
         fingerprint = st.st_ino, st.st_mtime_ns, hashlib.sha256(binary.read_bytes()).hexdigest()
         first_use(binary, env)
+        broken_stdout(binary, env)
         special_templates(binary, env)
         template_fields(binary, env)
         daily_cleanup(binary, env)
+        setup_diagnostics(SOURCE, env)
         for name, expected in (("review", ["filename", "name"]), ("completion", ["filename"]), ("staged-review", [])):
             fields = cli("template", "fields", name)
             assert json.loads(fields.stdout) == expected and not fields.stderr
@@ -101,6 +103,7 @@ def main():
         os.mkfifo(fifo)
         failed = setup(code=2, timeout=2)
         assert b"stream.txt" in failed.stderr and b"expected a regular file" in failed.stderr
+        assert b"The executable is installed, but template setup did not complete" in failed.stderr
         unchanged_binary(fingerprint)
         fifo.unlink()
         assert cli("--version").stdout == b"sendy " + (project / "tools/sendy.version").read_bytes()
@@ -185,8 +188,10 @@ def main():
         assert snap == {"status": "timeout", "results": [{"id": second, "message": "second after wait"}, {"id": first, "message": "after wait"}], "pending": [pending], "closed": [closed]}
         assert p1.poll() is None and p2.poll() is None
         cli("close", first, second)
-        assert receive(p1, 2) == (b"", b"sendy: conversation closed\n")
-        assert receive(p2, 2) == (b"", b"sendy: conversation closed\n")
+        out, diag = receive(p1, 2)
+        assert not out and diag.startswith(b"sendy: conversation closed\n") and b"End the child session" in diag
+        out, diag = receive(p2, 2)
+        assert not out and diag.startswith(b"sendy: conversation closed\n") and b"End the child session" in diag
         cli("submit", first, data=b"later", code=2)
         cli("reply", first, data=b"later", code=1)
         assert wait(first)["closed"] == [first]
@@ -217,7 +222,8 @@ def main():
         out, err = receive(eof_wait)
         assert not err and json.loads(out)["results"] == [{"id": eof_id, "message": "before EOF after EOF"}]
         cli("close", eof_id)
-        assert receive(eof_child, 2) == (b"", b"sendy: conversation closed\n")
+        out, diag = receive(eof_child, 2)
+        assert not out and diag.startswith(b"sendy: conversation closed\n") and b"End the child session" in diag
         # Working-directory changes do not select another conversation store.
         assert wait(ids[-1])["closed"] == [ids[-1]]
         assert json.loads(cli("wait", ids[-1], "--timeout", "1", cwd=empty_project).stdout)["closed"] == [ids[-1]]

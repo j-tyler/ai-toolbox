@@ -201,7 +201,7 @@ func TestConversationRounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, diag := call(t, "later", "submit", ids[0])
-	if code != 2 || out != "" || diag != "sendy: conversation closed\n" {
+	if code != 2 || out != "" || (!strings.HasPrefix(diag, "sendy: conversation closed\n") || !strings.Contains(diag, "End the child session")) {
 		t.Fatal(code, out, diag)
 	}
 	code, out, diag = call(t, "later", "reply", ids[0])

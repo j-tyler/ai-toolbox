@@ -1,49 +1,61 @@
 #!/bin/sh
 # Run from the consuming project root. SENDY_SOURCE optionally selects a source checkout.
 set -eu
-fail() { printf 'sendy setup: %s\n' "$*" >&2; exit 1; }
-command -v flock >/dev/null 2>&1 || fail 'flock is required for safe concurrent setup'
-command -v sha256sum >/dev/null 2>&1 || fail 'sha256sum is required for installation verification'
+setup_effect='Setup did not complete. No existing executable was replaced; no conversation data was changed.'
+fail() { printf 'sendy setup: %s\n%s\nFix the reported setup problem, then rerun make sendy from the project root. Do not reset conversation data.\n' "$*" "$setup_effect" >&2; exit 1; }
+maintenance() { fail "$*; ask the project maintainer to repair or upgrade the installation in separate maintenance after active sessions finish"; }
+command -v flock >/dev/null 2>&1 || fail 'flock is required for safe concurrent setup; install the Linux util-linux package'
+command -v sha256sum >/dev/null 2>&1 || fail 'sha256sum is required for installation verification; install the Linux coreutils package'
 [ -f tools/sendy.version ] || fail 'missing tools/sendy.version; run from the project root'
-pin=$(cat tools/sendy.version)
-printf '%s\n' "$pin" | LC_ALL=C grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$' || fail 'tools/sendy.version must pin an exact version (for example v0.1.0)'
-mkdir -p .tools/bin
-exec 9>.tools/sendy-setup.lock
-flock -x 9
+pin=$(cat tools/sendy.version) || fail 'cannot read tools/sendy.version; check its permissions'
+printf '%s\n' "$pin" | LC_ALL=C grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$' || fail 'tools/sendy.version must pin an exact version (for example v0.2.0)'
+mkdir -p .tools/bin || fail 'cannot create .tools/bin; check directory permissions and free disk space'
+# A failed redirection on the special builtin exec can terminate a POSIX shell
+# before an || handler runs. Open the lock on a function call instead.
+setup() {
+flock -x 9 || fail 'cannot acquire .tools/sendy-setup.lock; check access to the lock file'
 binary=.tools/bin/sendy
 check() {
- [ -f "$binary" ] && [ ! -L "$binary" ] && [ -x "$binary" ] || fail 'damaged installation; separate maintenance is required'
- [ -f .tools/sendy.sha256 ] || fail 'missing installation checksum; separate maintenance is required'
- sha256sum -c .tools/sendy.sha256 >/dev/null 2>&1 || fail 'damaged installation checksum; separate maintenance is required'
- actual=$("$binary" --version) || fail 'unusable executable; separate maintenance is required'
- [ "$actual" = "sendy $pin" ] || fail "installed version differs from $pin; separate maintenance is required"
+ [ -f "$binary" ] && [ ! -L "$binary" ] && [ -x "$binary" ] || maintenance 'damaged installation'
+ [ -f .tools/sendy.sha256 ] || maintenance 'missing installation checksum'
+ sha256sum -c .tools/sendy.sha256 >/dev/null 2>&1 || maintenance 'damaged installation checksum'
+ actual=$("$binary" --version) || maintenance 'unusable executable'
+ [ "$actual" = "sendy $pin" ] || maintenance "installed version differs from $pin"
 }
 if [ -e "$binary" ] || [ -L "$binary" ]; then
  check
 else
- [ ! -e .tools/sendy.sha256 ] || fail 'missing executable from existing installation; separate maintenance is required'
- command -v go >/dev/null 2>&1 || fail 'Go 1.25.8 or newer is required for source installation'
- stage=$(mktemp -d .tools/sendy-build.XXXXXX)
+ [ ! -e .tools/sendy.sha256 ] || maintenance 'missing executable from existing installation'
+ command -v go >/dev/null 2>&1 || fail 'Go 1.25.8 or newer is required for source installation; install that toolchain first'
+ stage=$(mktemp -d .tools/sendy-build.XXXXXX) || fail 'cannot create a build directory under .tools; check permissions and free disk space'
  trap 'rm -rf "$stage"' EXIT HUP INT TERM
- stage=$(cd "$stage" && pwd)
+ stage=$(cd "$stage" && pwd) || fail 'cannot access the temporary build directory; check .tools permissions'
  source=${SENDY_SOURCE:-}
  # The helper included in the Sendy checkout can build that checkout directly.
- if [ -z "$source" ] && [ -f go.mod ] && [ -f main.go ] && [ -f tools/sendy.version ] && [ "$(sed -n '1p' go.mod)" = 'module github.com/j-tyler/ai-toolbox/ideas/sendy' ]; then source=$(pwd); fi
+ if [ -z "$source" ] && [ -f go.mod ] && [ -f main.go ] && [ -f tools/sendy.version ] && [ "$(sed -n '1p' go.mod)" = 'module github.com/j-tyler/ai-toolbox/ideas/sendy' ]; then
+  source=$(pwd) || fail 'cannot determine the source directory; change to an accessible Sendy checkout'
+ fi
  if [ -n "$source" ]; then
-  [ -f "$source/tools/sendy.version" ] || fail 'SENDY_SOURCE must name the Sendy source directory'
-  [ "$(cat "$source/tools/sendy.version")" = "$pin" ] || fail 'source version differs from project pin'
-  (cd "$source" && CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=$pin" -o "$stage/sendy" .)
+  [ -f "$source/tools/sendy.version" ] || fail 'SENDY_SOURCE must name the Sendy source directory containing tools/sendy.version'
+  source_pin=$(cat "$source/tools/sendy.version") || fail 'cannot read SENDY_SOURCE/tools/sendy.version; check source file permissions'
+  [ "$source_pin" = "$pin" ] || fail 'source version differs from project pin; select the matching source checkout'
+  (cd "$source" && CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=$pin" -o "$stage/sendy" .) || fail 'source build failed; check the compiler output above, Go 1.25.8 or newer, and dependency network access'
  else
   # Published releases embed their exact version in main.go.
-  CGO_ENABLED=0 GOBIN="$stage" go install "github.com/j-tyler/ai-toolbox/ideas/sendy@$pin"
+  CGO_ENABLED=0 GOBIN="$stage" go install "github.com/j-tyler/ai-toolbox/ideas/sendy@$pin" || fail 'module installation failed; verify the pinned release exists and network access works, or set SENDY_SOURCE to a matching checkout'
  fi
- [ "$("$stage/sendy" --version)" = "sendy $pin" ] || fail 'built executable does not match pinned version'
- chmod 755 "$stage/sendy"
- hash=$(sha256sum "$stage/sendy"); hash=${hash%% *}
- printf '%s  .tools/bin/sendy\n' "$hash" > "$stage/sendy.sha256"
+ built_version=$("$stage/sendy" --version) || fail 'built executable could not run; check its error above and build for this operating system and architecture'
+ [ "$built_version" = "sendy $pin" ] || fail 'built executable does not match pinned version; select source matching tools/sendy.version'
+ chmod 755 "$stage/sendy" || fail 'cannot make the staged binary executable; check filesystem permissions'
+ hash=$(sha256sum "$stage/sendy") || fail 'cannot checksum the staged binary; check file access'
+ hash=${hash%% *}
+ printf '%s  .tools/bin/sendy\n' "$hash" > "$stage/sendy.sha256" || fail 'cannot write the staged checksum; check permissions and free disk space'
  # Publish only a completed executable; the lock serializes all setup readers.
- mv "$stage/sendy.sha256" .tools/sendy.sha256
- mv "$stage/sendy" "$binary"
+ mv "$stage/sendy.sha256" .tools/sendy.sha256 || fail 'cannot publish the checksum; check .tools permissions and free disk space'
+ mv "$stage/sendy" "$binary" || maintenance 'checksum was installed but the executable could not be published'
 fi
-mkdir -p .sendy/templates
-"$binary" template validate
+setup_effect='The executable is installed, but template setup did not complete. No conversation data was changed.'
+mkdir -p .sendy/templates || fail 'cannot create .sendy/templates; check directory permissions'
+"$binary" template validate || fail 'template validation failed; correct the template diagnostics above'
+}
+setup 9>.tools/sendy-setup.lock || fail 'cannot open .tools/sendy-setup.lock; check directory and file permissions'

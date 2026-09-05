@@ -125,7 +125,7 @@ func (s *store) create(count int) ([]string, error) {
 		return nil, err
 	}
 	if count > idCapacity-len(used) {
-		return nil, fmt.Errorf("not enough unused IDs: requested %d, available %d", count, idCapacity-len(used))
+		return nil, advise(fmt.Errorf("not enough unused IDs: requested %d, available %d", count, idCapacity-len(used)), "Request no more than the available count if it is positive. If none are available, wait for eligible IDs to be reclaimed. Closing does not free an ID immediately: automatic cleanup reclaims IDs inactive for 14 days on the first conversation command of a UTC day when usage exceeds 50%.")
 	}
 	ids := make([]string, 0, count)
 	for n := 0; len(ids) < count; n++ {
@@ -137,13 +137,13 @@ func (s *store) create(count int) ([]string, error) {
 			ids = append(ids, id)
 		}
 	}
-	return ids, tx.Commit()
+	return ids, commit(tx)
 }
 
 func state(tx *sql.Tx, id string) (c conversation, err error) {
 	err = tx.QueryRow(`SELECT closed,round,result,generation FROM conversations WHERE id=?`, id).Scan(&c.closed, &c.round, &c.message, &c.generation)
 	if errors.Is(err, sql.ErrNoRows) {
-		err = fmt.Errorf("unknown conversation %q", id)
+		err = advise(fmt.Errorf("unknown conversation %q: this ID is not recorded in the current user's store", id), "The requested operation was not performed. Check the ID and HOME; IDs belong to one operating-system user. To establish a new conversation, run sendy create 1 and give its returned ID to the participants. Do not guess IDs or reuse an abandoned ID.")
 	}
 	if err == nil {
 		err = touch(tx, id)
@@ -172,14 +172,14 @@ func (s *store) submit(id, message string) (submission, error) {
 		return submission{}, errClosed
 	}
 	if c.message.Valid {
-		return submission{}, fmt.Errorf("conversation %s already has an outstanding submission", id)
+		return submission{}, advise(fmt.Errorf("conversation %s already has an outstanding submission; the earlier submission remains recorded", id), "Do not submit the same result again. Keep the original submit call running until the parent replies or closes. If that call was interrupted, ask the parent to read the earlier result with sendy wait "+id+" --timeout 5 and recover the conversation.")
 	}
 	c.round++
 	_, err = tx.Exec(`UPDATE conversations SET round=?,result=? WHERE id=?`, c.round, message, id)
 	if err != nil {
 		return submission{}, err
 	}
-	return c.submission, tx.Commit()
+	return c.submission, commit(tx)
 }
 
 func (s *store) reply(id, message string) error {
@@ -196,7 +196,7 @@ func (s *store) reply(id, message string) error {
 		return errClosed
 	}
 	if !c.message.Valid {
-		return fmt.Errorf("conversation %s has no result ready for a reply", id)
+		return advise(fmt.Errorf("conversation %s has no result ready for a reply: no child result is currently recorded; replies require an outstanding submission", id), "An earlier reply may already have been accepted. Check whether the child received it before repeating it. Use sendy wait "+id+" --timeout 5 to wait for the child's next result before replying.")
 	}
 	if _, err = tx.Exec(`INSERT INTO replies(id,round,message) VALUES(?,?,?)`, id, c.round, message); err != nil {
 		return err
@@ -204,7 +204,7 @@ func (s *store) reply(id, message string) error {
 	if _, err = tx.Exec(`UPDATE conversations SET result=NULL WHERE id=?`, id); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return commit(tx)
 }
 
 func (s *store) readReply(id string, round submission) (string, bool, error) {
@@ -257,7 +257,7 @@ func (s *store) readReply(id string, round submission) (string, bool, error) {
 }
 
 func expired(id string) error {
-	return fmt.Errorf("conversation %q expired", id)
+	return advise(fmt.Errorf("conversation %q expired or its ID was reused; this call cannot access the replacement conversation", id), "Do not retry with this old ID. Have the parent create a new conversation with sendy create 1 and give the returned ID to the participants.")
 }
 
 func (s *store) awaitReply(id string, round submission) (string, error) {
@@ -336,5 +336,5 @@ func (s *store) close(ids []string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return commit(tx)
 }
