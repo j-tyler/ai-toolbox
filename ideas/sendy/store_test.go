@@ -58,7 +58,7 @@ func TestWALInitializationContention(t *testing.T) {
 func TestInitializationSchemaError(t *testing.T) {
 	isolated(t)
 	s := testStore(t)
-	if _, err := s.db.Exec(`DROP TABLE conversations; CREATE INDEX conversations ON replies(id)`); err != nil {
+	if _, err := s.db.Exec(`DROP TABLE conversations; CREATE INDEX conversations ON replies(id); PRAGMA user_version=0`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := openStore(); err == nil {

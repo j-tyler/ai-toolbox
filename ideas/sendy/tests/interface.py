@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import time
 
-from regressions import first_use, special_templates, template_fields
+from regressions import daily_cleanup, first_use, special_templates, template_fields
 
 SOURCE = Path(__file__).resolve().parents[1]
 CHILDREN = []
@@ -91,6 +91,7 @@ def main():
         first_use(binary, env)
         special_templates(binary, env)
         template_fields(binary, env)
+        daily_cleanup(binary, env)
         for name, expected in (("review", ["filename", "name"]), ("completion", ["filename"]), ("staged-review", [])):
             fields = cli("template", "fields", name)
             assert json.loads(fields.stdout) == expected and not fields.stderr
@@ -123,7 +124,7 @@ def main():
             batches = list(pool.map(lambda _: cli("create", "2").stdout.decode().split(), range(12)))
         ids = [id for batch in batches for id in batch]
         assert len(set(ids)) == 24
-        assert all(len(id) == 3 and id[0].islower() and id[1:].isdigit() for id in ids)
+        assert all(len(id) == 5 and id[0].islower() and id[1:].isdigit() and id[1] != "0" for id in ids)
         first, second, pending, closed = ids[:4]
         cli("close", closed)
         exact = '  {"value":"$100 = \\\""}\n世界\x00no final newline'.encode()
@@ -135,7 +136,7 @@ def main():
         assert b"outstanding submission" in cli("submit", first, data=b"duplicate", code=1).stderr
         assert wait(first)["results"][0]["message"] == exact.decode()
         cli("reply", pending, data=b"unsolicited", code=1)
-        cli("close", pending, "z99", code=1)
+        cli("close", pending, "z1099", code=1)
         # Invalid template/UTF-8/empty stdin must not submit a result.
         bad = cli("submit", pending, "--template", "review", "--set", "filenmae=x", "--set", "name=A", "--set", "name=B", code=1)
         assert bad.stdout == b""
@@ -143,7 +144,7 @@ def main():
             assert text in bad.stderr
         cli("submit", pending, data=b"\xff", code=1)
         cli("submit", pending, data=b"", code=1)
-        for args in (("create", "2600"), ("create", "0"), ("wait", first), ("wait", first, first, "--timeout", "1"), ("submit", first, "--timeout", "1"), ("close", first, first)):
+        for args in (("create", "234000"), ("create", "0"), ("wait", first), ("wait", first, first, "--timeout", "1"), ("submit", first, "--timeout", "1"), ("close", first, first)):
             assert cli(*args, code=1).stdout == b""
         # A blocked submit remains blocked through repeated/concurrent setup.
         setup()
