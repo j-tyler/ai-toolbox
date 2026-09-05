@@ -40,13 +40,17 @@ useful facts, or omit redundant or unsupported material. It places the result in
 source maps, comments beside code, owner-local explanations, root indexes, or the
 glossary. Full explanations keep the context that makes their relationships useful;
 source pointers make them discoverable without copying them into every file.
+README and root navigation select useful starting points rather than aggregating
+every source map or flow.
 Hand it to an agent with the diagrams and current code for placement.
 
 **3. [Example agents file](agents-file-example.md)** — not something to copy as-is.
 It shows what a repository's root instructions file needs to say once the placement
 guide has been run against it: how to read the blocks and comments that are now in
 the files, what to trust when documentation and code disagree, and how to keep it
-current. Take the parts that fit and adapt them for your own repository.
+current through direct reading, search, and editing. It is self-contained for
+readers who do not have the placement guide or its input artifacts. Take the parts
+that fit and include only commands and conventions established in your repository.
 
 ## Status
 

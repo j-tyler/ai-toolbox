@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file is read at the start of every task. Name it whatever your agent harness loads automatically, `AGENTS.md` or `CLAUDE.md`, and keep one such file. It says how to run the code, where things are, and how to read and maintain the documentation you will find inside files. Anything in square brackets is a placeholder to be filled in for this repository.
+This is a template, not a description of an existing repository. Adapt it into the repository's root agent instructions file. Use the established filename and loading convention; if none is established, `AGENTS.md` is a conventional name, not a guarantee of automatic loading. Fill in or remove square-bracketed placeholders, retain only commands and conventions verified for this repository, and include navigation sections only when they have useful existing destinations.
 
 ## Commands
 
-Every command runs non-interactively from a clean checkout. If a command needs a service, the command starts it.
+List the actual commands, their working directory, and any required setup or services. State whether each starts its dependencies; do not assume it does. The categories below are examples: omit those the repository does not support.
 
 - Install: `[command]`
 - Run all tests: `[command]`
@@ -15,7 +15,7 @@ Every command runs non-interactively from a clean checkout. If a command needs a
 
 ## Conventions
 
-Rules that apply everywhere in this repository, stated as rules.
+Include only established repository-wide rules. The following are examples to replace or remove, not defaults to adopt.
 
 - [Rule. Example: All database access goes through `repositories/`; nothing else imports the ORM.]
 - [Rule. Example: Handlers return `Result`; they never raise.]
@@ -24,15 +24,15 @@ Rules that apply everywhere in this repository, stated as rules.
 
 ## Map
 
-One line per top-level directory that has been described, looking past a bare wrapper directory such as `src/`. A directory not listed here has nothing written in it yet. A directory listed as not yet described carries facts written from another directory's side but no description of its own. Neither says anything about what it contains.
+Selected directories that help readers choose where to start, looking past a bare wrapper such as `src/` when useful. Use `directory/ — responsibility`, supported by the code and existing documentation. An unlisted directory may still contain relevant code and documentation.
 
 ## Flows
 
-Named scenarios that bring together behavior scattered across code locations. Each line names the flow, its actual first sender as shown in the diagram, and the Markdown path and heading anchor holding its sequence.
+Selected scenarios useful as repository starting points, using `flow name — entry identifier — Markdown path#heading-anchor`. The entry is the actual first sender shown in the sequence, including an external system or queue. Other flows may be reached through source pointers and owner-local documentation.
 
 ## Glossary
 
-See GLOSSARY.md.
+[Include `See GLOSSARY.md.` only when that file exists.]
 
 ## Reading the documentation
 
@@ -48,7 +48,7 @@ Check behavior against current code. Documentation records selected claims verif
 
 Before changing code, read its map, relevant linked explanations, and comments near the affected definitions or operations. Source search can land below a header, so inspect those local comments too. Follow exact identifiers and paths to the implementation; documentation helps decide what to read and does not replace that reading.
 
-The Placement Guide's key reference gives the exact form of each map line.
+The self-contained map legend below explains the keys and qualifiers. When maintaining a map, use its established line forms and only the listed keys; preserve their order and keep one `map` / `end map` comment block with no duplicate facts. Keep comments outside strings and preserve language-required headers and directives.
 
 ## Comments in code
 
@@ -59,14 +59,16 @@ Code should explain itself. Write an inline comment only when it cannot and some
 Keep affected documentation current with the code:
 
 - For a known rename, move, or removal, find existing mentions by the old identifier and location and reconcile them against the code. Preserve unaffected supported wording and information.
-- For a hidden connection, verify the endpoints and actual wiring. Use paired entries for compact connections, or the Placement Guide's shared-explanation exception: exact relationships and conditions in one explanation, routes from both eligible ends, necessary local qualifications, and references back to source. Do not place this documentation in excluded files, including tests, generated, vendored, configuration, migration, or pure utility files; name an excluded endpoint from the eligible end or explanation.
+- For a hidden connection, verify endpoints and actual registration, binding, subscription, or handoff. Keep paired entries for compact connections. A larger network may have one full explanation containing exact endpoints, conditions, and wiring locations, with specific pointers from both eligible ends and references back to source. Keep locally necessary conditions and hazards at the affected code. Excluded files are tests, generated or vendored code, migrations, configuration, constants, translations, static assets, build scripts, and pure utilities without domain meaning; name an excluded endpoint from the eligible end or explanation without adding this documentation there.
 - Reconcile a removed connection wherever it was documented. Keep a shared pointer when its explanation still covers another relevant relationship.
-- Maintain the permitted `writes:` and `calls:` indexes for documented table writes and external calls.
-- Reconcile affected diagrams and their direct source pointers and index entries. Keep supported transitions, guards, notes, and qualifications absent from an incoming partial view. Add compatible verified information without inventing order or other connections between fragments. Distinct scenarios may need separate views.
+- Maintain `writes:` and `calls:` facts for documented table writes and external calls. Keep directory and root navigation useful and accurate; do not copy every file map or aggregate every flow into them.
+- Check the entire affected diagram against current code, including edges, guards, terminal markers, layout fields, notes, and necessary qualifications. Preserve supported information beyond the lines being changed. Add compatible verified information without inventing order or other connections; distinct scenarios may need separate views. Update its direct source pointers and any existing index entries.
 - When a diagram moves or is removed, update its direct references. Search the affected subject, explanation name, and known locations; do not recursively audit unrelated explanations reached through participants.
 - Keep one full copy of each explanation. Owner and shown-writer `transitions:` pointers, definition-owner and documented codec `format:` pointers, and flow pointers lead to the actual retained view. A targeted local hazard can remain beside the code as well.
 
-Do not add inspection history or completeness claims. Unlisted behavior may exist; an omission warning does not repair an unsupported claim. Verify additions and changed meaning, preserve unresolved existing limitations, and follow the Placement Guide's reconciliation rules when a view contains a known-false claim.
+Do not add inspection history or completeness claims. Unlisted behavior may exist; an omission warning does not repair an unsupported claim. Verify additions and changed meaning; reasons, intent, and prohibitions also need an explicit source. Leave unresolved existing claims unchanged without broadening them. Repair a known-false claim only when the resulting explanation remains coherent and supported. If that cannot be done without inventing relationships, remove the misleading view and its direct pointers as a last resort; preserve independently useful supported facts in suitable comments or explanations. Removing a sequence message must not imply an unsupported order, and removing a layout field must not alter later offsets.
+
+Edit the affected lines or sections as needed; preserve valid wording and avoid duplicate facts, blocks, or full explanations. Maintain documentation through direct reading, search, and editing of current code and existing explanations.
 
 ## Map blocks
 
@@ -85,10 +87,10 @@ Conventions: names are full identifiers, `module.function` for code and bare nam
 - `hook in:` a function here runs as a hook on an object defined elsewhere, when the registered operation and its conditions trigger the hook.
 - `flag out:` a feature flag checked here decides which code runs. The two paths appear together as `FLAG -> on: ...; off: ...`, or on separate lines as `FLAG on -> ...` and `FLAG off -> ...` when their conditions differ. A `when` clause applies to its whole line, and `skipped` means that branch does nothing. Check both paths when changing the decision.
 - `flag in:` the named caller reaches code here when its flag check has the named state, on or off. Other callers may reach the same code without that flag.
-- `di out:` an abstraction resolved through a container here, and where its binding lives. The implementation is not named here; to find or change it, go to the binding.
+- `di out:` an abstraction resolved through a container here, and where its binding lives. Value: `<abstraction> via <binding file>`. The implementation is not named here; to find or change it, go to the binding.
 - `di in:` a class here is what a container hands out for the named abstraction. The resolver need not name the implementation directly; other construction paths may also exist.
 - `callback out:` a function here is handed to another module, which calls it later, in a context decided there.
-- `callback in:` the named function from elsewhere is supplied to the stated parameter or registration point. Check how this receiver invokes it and handles its failures; other functions may also be supplied.
+- `callback in:` the named function from elsewhere is supplied to the stated parameter or registration point. Value: `<parameter or registration point> of <receiver> <- <function> (<defining file>)`. Check how this receiver invokes it and handles its failures; other functions may also be supplied.
 - `other out:` / `other in:` a hidden dependency through a mechanism named first: a file on disk, a cache key, an environment variable, a database trigger. Read both ends before changing the mechanism.
 - `writes:` tables whose rows code in this file can change. Search for `writes:` and the table name to find documented writers; unlisted writers may exist.
 - `reads remote:` a table in another database, schema, or service, whose schema this repository does not control.
@@ -96,6 +98,6 @@ Conventions: names are full identifiers, `module.function` for code and bare nam
 - `calls:` external systems reached over the network, with the operations used. These fail, stall, and throttle independently of this code. Search for `calls:` and a system's name to find documented callers; unlisted callers may exist.
 - `soft-ref out:` the named source column points at another table with no foreign key. A named validator is a verified check, not necessarily the only check or one used by every write. No validation clause makes no claim about validation.
 - `soft-ref in:` the named source column points at the named local table with no foreign key. Deleting or re-keying rows can orphan those references.
-- `transitions:` this file defines a stored state or performs a shown transition; the line points to its canonical diagram beside a source definition or in a named Markdown section. Labels name transition functions and conditions. An omitted edge does not establish a prohibition; a stated prohibition needs an explicit basis.
-- `format:` the byte layout this file defines, encodes, or decodes, with its one full explanation above a named source definition/operation or at a Markdown section. The eligible definition owner and documented codecs point to the same layout; a definition-only file need not encode or decode it.
+- `transitions:` this file defines a stored state or performs a shown transition; the line points to its canonical diagram. Value: `<entity>.<field>, diagram <location>`; use `<entity> (<field>, <field>)` for combined state. The location is `above <definition>`, `in <source file> above <definition>`, or `in <Markdown path>#<heading anchor>`. A diagram placed below its owner's map uses `below this block` there and `in <owner file> below map block` elsewhere. Labels name transition functions and conditions. An omitted edge does not establish a prohibition; a stated prohibition needs an explicit basis.
+- `format:` the byte layout this file defines, encodes, or decodes. Value: `<name>, diagram <location>`, where the location is `above <local definition or operation>`, `in <source file> above <identifier>`, or `in <Markdown path>#<heading anchor>`. The eligible definition owner and documented codecs point to the same full explanation; a definition-only file need not encode or decode it.
 - `hazard:` something about this file's behavior to know before editing anything in it.

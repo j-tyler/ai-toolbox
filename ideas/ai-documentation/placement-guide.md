@@ -45,7 +45,7 @@ Use only these homes. Keep one full copy of each explanation; targeted local fac
 
 **3. Owner-local documentation.** Prefer an existing suitable explanation. For a new explanation spanning code locations, use the responsible area's README. Use a nearby subject-specific Markdown file when the full explanation would crowd the README's other subjects or an existing subject-document convention fits. The README links to that document. Keep enough prose to identify the scenario, conditions, source locations, and semantics needed to read the explanation.
 
-**4. The root agent file**: the repository's existing root instructions file for AI readers (`AGENTS.md`, `CLAUDE.md`, or similar). If several exist, use the one agents are configured to load where stated, otherwise `AGENTS.md`; if none exists, create `AGENTS.md`. Add fixed index sections with one line per top-level directory, one per named flow, and one pointing to the glossary, plus the appendix's map block legend. Never add diagrams or tables, or prose beyond a line outside the legend. AI readers load this file at each session's start, so its length costs every task.
+**4. The root agent file**: the repository's existing root instructions file for AI readers (`AGENTS.md`, `CLAUDE.md`, or similar). If several exist, use the one agents are configured to load where stated, otherwise `AGENTS.md`; if none exists, create `AGENTS.md`. Add selected directory and flow navigation under the fixed index headings, a link to the glossary when present, and the appendix's map block legend. Never add diagrams or tables; keep each navigation entry to one line. This file may be loaded for many tasks, so keep it useful and concise without assuming how the agent harness loads it.
 
 **5. The root glossary**: `GLOSSARY.md` at the repository root, with the same columns as the artifact glossary table. Qualifying glossary rows from the artifacts are merged here and nowhere else.
 
@@ -68,7 +68,7 @@ This table summarizes allowed homes; some relationships need entries in multiple
 | what a directory owns | directory README | `## Owns` |
 | a dependency-direction rule that no tool enforces | directory README | `## Dependency direction` |
 | the data model, only when the repository has no schema source of truth | directory README | `## Data model` |
-| the index of described directories and named flows | root agent file | `## Map`, `## Flows`, `## Glossary` |
+| selected starting directories and named flows | root agent file | `## Map`, `## Flows`, `## Glossary` |
 | the meaning of the map block keys | root agent file | `## Map blocks` legend |
 | a domain term, its canonical identifier, and its aliases | `GLOSSARY.md` | one row |
 
@@ -78,7 +78,7 @@ Each diagram kind must meet its specific inclusion rules below. Supporting visib
 
 ### Format
 
-Each map entry uses the language's line-comment marker, a fixed key, a colon, and the fact. The opening and closing lines contain exactly `map` and `end map` after the marker, so tooling can replace the whole block. In Python:
+Each map entry uses the language's line-comment marker, a fixed key, a colon, and the fact. The opening and closing lines contain exactly `map` and `end map` after the marker, so readers can recognize and search for the map's boundaries. In Python:
 
 ```text
 # map
@@ -93,7 +93,7 @@ Each map entry uses the language's line-comment marker, a fixed key, a colon, an
 
 In a language with `//` comments, every line starts with `//`. In a language with only block comments, the block is one block comment whose lines follow the same shape. Never use a docstring or a string literal for the map block, even where that is the convention for module documentation; comments are uniform across languages and never affect runtime.
 
-The block goes after any shebang, encoding, license, magic comment, or compiler directive line, and before the first import or the first statement. Lines like Ruby's `# frozen_string_literal: true`, Go's build constraints, or `// @flow` must stay where the language expects them; placing the block above them can silently change behavior. If the file has an existing module docstring, the map block goes before it. If the file already has a map block, replace the whole block; never append a second one. Leave one blank line between `end map` and whatever follows, because several languages attach a leading comment to the next declaration, Go doc comments, JSDoc, and Javadoc among them. In Go the block goes after the package clause and before the imports. In PHP it goes after the opening tag and any `declare` line.
+The block goes after any shebang, encoding, license, magic comment, or compiler directive line, and before the first import or the first statement. Lines like Ruby's `# frozen_string_literal: true`, Go's build constraints, or `// @flow` must stay where the language expects them; placing the block above them can silently change behavior. If the file has an existing module docstring, the map block goes before it. If the file already has a map block, update it in place; keep one block with no duplicate facts. Leave one blank line between `end map` and whatever follows, because several languages attach a leading comment to the next declaration, Go doc comments, JSDoc, and Javadoc among them. In Go the block goes after the package clause and before the imports. In PHP it goes after the opening tag and any `declare` line.
 
 ### Shared explanations and paired entries
 
@@ -126,13 +126,13 @@ Conventions that apply to every value:
 - A key that says "one line per X" is repeated for each X, with further lines when local subjects or conditions differ. Sort by X, then local identifier, condition, and endpoint identifiers. Split flag branches follow the ordering in `flag out:` below. A file that owns several state fields has one `transitions:` line per field, in field-name order.
 
 **`map` and `end map`**
-Delimiters, not keys: comment lines containing exactly `map` and `end map` after the marker open and close the block. Add no colon or other text. Tooling finds the block by these lines; everything between them follows this reference.
+Delimiters, not keys: comment lines containing exactly `map` and `end map` after the marker open and close the block. Add no colon or other text. These lines identify the map for readers and text searches; everything between them follows this reference.
 
 **`owns:`**
 Means: what this file is responsible for.
 Template: `owns: <noun phrase describing the responsibility>`
 Example: `owns: creation and cancellation of orders`
-Write it when: the file notes supply its purpose, as they do for every described file. This is the block's first line and the source for directory navigation. If a module docstring states the same purpose, reuse its wording and leave the docstring alone. Resolve disagreements against the code before adding `owns:`; an unresolved discrepancy prevents adding or replacing the purpose statement.
+Write it when: the file notes supply its purpose, as they do for every described file. This is the block's first line and may supply directory navigation when it helps readers choose a starting point. If a module docstring states the same purpose, reuse its wording and leave the docstring alone. Resolve disagreements against the code before adding `owns:`; an unresolved discrepancy prevents adding or replacing the purpose statement.
 Do not add it when: the artifacts give no purpose statement for the file, as when an undescribed endpoint receives an `event in:` or `soft-ref in:` entry. An unresolved conflict also prevents adding or replacing `owns:`. Existing `owns:` entries follow reconciliation; if none survives, write the block without it. A file the artifacts say nothing about gets no new block.
 On: the file itself. Pairs with: nothing.
 
@@ -364,9 +364,9 @@ Reuse an existing accurate, discoverable explanation first. Do not move it just 
 
 Use the owner's README by default. A nearby subject-specific Markdown document is allowed when a full explanation would crowd the README's other subjects or fits an existing subject-document convention. Give it a descriptive title and named sections, and link it from the appropriate README section. Source pointers lead directly to the section containing the explanation. Verify every repository-relative path and heading anchor.
 
-These README sections are allowed; add only sections with content and reconcile existing sections before replacement. Preserve unrelated content. Reuse an existing relevant subject heading instead of creating a second explanation under a preferred heading.
+These README sections are allowed; add only sections with content and reconcile existing material before editing. Preserve unrelated content. Reuse an existing relevant subject heading instead of creating a second explanation under a preferred heading.
 
-`## Owns`: one line per file in the directory with an `owns:` map entry, in the form `orders/service.py — creation and cancellation of orders`, copied from that entry. Then one line per subdirectory with its own README: `handlers/ — see orders/handlers/README.md`. A file without `owns:` is not listed. A directory with no ownership facts can still have a README when it owns a qualifying explanation.
+`## Owns`: selected starting files or subdirectories whose entries help readers locate a responsibility or explanation. For a file, use its verified `owns:` wording: `orders/service.py — creation and cancellation of orders`. A subdirectory entry can point to its relevant README: `handlers/ — see orders/handlers/README.md`. Do not copy every map entry or list every README. Omission says nothing about other code or documentation. Preserve existing useful entries; a new README is unnecessary solely because a file acquired a map. A directory with no ownership facts can still have a README when it owns a qualifying explanation.
 
 `## Flows`: one `### <scenario name>` heading per retained sequence owned here, followed by its `mermaid` fenced diagram, or a descriptive link to its subject document. Keep the scenario and relevant notes. The entry and participating source files point to its actual section; do not repeat the full diagram in participants' directories.
 
@@ -380,17 +380,17 @@ New prose is limited to scenario, conditions, source references, special semanti
 
 ## The root agent file
 
-Touch only four sections. Three are indexes: add absent sections and add, update, or remove list lines to match the current state, one item per line in the fixed form, sorted alphabetically. Remove square-bracketed template placeholder list lines. Preserve descriptive text between each index heading and its first list item exactly. The fourth section is the legend.
+Touch only the four sections below. Add an index section only when it has a useful entry. Keep list entries in the fixed forms, sorted alphabetically, and remove square-bracketed placeholder list lines. Preserve accurate existing entries; selection is not a reason to prune useful navigation. Retain descriptive text unless it claims coverage, automatic aggregation, or availability not established by the repository; correct only that claim. The fourth section is the legend.
 
-`## Map`: one line per top-level directory that contains a map block or a README, in the form `orders/ — creation, cancellation, and lifecycle of orders`, derived from that directory's README `## Owns` section. This is the one place you compose a sentence rather than copy one: one sentence, naming responsibilities and nothing else. A bare wrapper directory that holds all of the code, `src/` for example, is skipped and its children are listed as top-level, the same way the identifier format drops `src`. Directories with nothing written in them are not listed. A directory whose blocks all lack an `owns:` line is listed with the fixed phrase `promotions/ — referenced by other directories; not yet described`, so that a reader can reach it.
+`## Map`: selected top-level directories that help readers choose where to start, in the form `orders/ — creation, cancellation, and lifecycle of orders`. Use verified responsibility statements from file maps or owner-local documentation; do not invent a summary for an undescribed directory. Look past a bare wrapper such as `src/` when that makes navigation useful. Do not list a directory solely because it contains a map or README. An unlisted directory may still contain relevant code and documentation; do not label directories by documentation coverage.
 
-`## Flows`: one line per retained named flow, in the form `order placement — entry api.orders — api/README.md#order-placement`, where the entry is the first participant to send a message, as declared in the diagram, whether or not it is in this repository, so that a flow which begins in a queue or an external system says so in the index. The destination is the Markdown section containing the sequence, including when a README links to a subject document.
+`## Flows`: selected retained scenarios useful as repository starting points, in the form `order placement — entry api.orders — orders/README.md#order-placement`. The entry is the first participant to send a message in the diagram, including an external system or queue. The destination is the Markdown section containing the sequence, including when a README links to a subject document. Do not aggregate every retained flow into this index; source pointers and owner-local documentation still provide the required routes to each explanation.
 
-`## Glossary`: the single line `See GLOSSARY.md.`
+`## Glossary`: the single line `See GLOSSARY.md.` when that file exists or is created in this change. Do not create a dangling link or an empty glossary just to fill this section.
 
-`## Map blocks`: the reader legend for map keys. Add it verbatim from the appendix if absent; replace the whole section if it differs; leave it untouched if it matches.
+`## Map blocks`: a self-contained reader legend for map keys. Add the appendix legend if absent. For an existing legend, correct conflicting meanings and add missing essential conventions or key explanations; preserve accurate wording and repository-specific information. Readers must understand the maps without access to this guide.
 
-If the file has other sections, commands, conventions, anything hand-written, they are not yours. Do not edit, reorder, or reformat them.
+If the file has other sections, commands, conventions, anything hand-written, they are not yours. Do not edit, reorder, or reformat them. Do not add assumed commands, generators, linters, aggregation, or harness behavior.
 
 ## The glossary
 
@@ -418,7 +418,7 @@ Retain the diagram type, identity, labels, edges, guards, notes, and order neede
 
 Preserve actual registration, binding, or selection locations needed to interpret connections, including third files distinct from the endpoints. Supporting prose or diagram comments may carry exact identifiers and paths when the diagram syntax cannot.
 
-Before replacing an existing diagram, reconcile all its behavioral facts, not just absence comments. Compare with the transformed, reconciled result rather than the raw artifact. These rules also apply to source-comment diagrams. Any other use of “copy” below means this qualified transformation, not a license to invent missing facts.
+Before changing an existing diagram, reconcile all its behavioral facts, not just absence comments. Compare with the transformed, reconciled result rather than the raw artifact. These rules also apply to source-comment diagrams. Any other use of “copy” below means this qualified transformation, not a license to invent missing facts.
 
 ### Dependency flowchart and edge table
 
@@ -449,7 +449,7 @@ Keep useful `Note over` lines in the full sequence. A note identifying a local h
 
 Keep a state diagram when it brings together transitions or guards scattered across functions or files; skip one that simply redraws a single nearby function or a declared machine. For a compact source view, write it under the copying rules as a comment block placed directly above the definition of the state's values in the owner file: above the enum, the union type, or the choices list that defines them. In a language where a comment directly above a declaration becomes its documentation, Go, Java, and anything using JSDoc among them, leave one blank line between the block and the definition, as with `end map`; otherwise the diagram becomes the type's generated documentation. If the state is a combination of booleans or timestamps, or its values are bare literals with no enum, the block goes directly above the class or type that declares the field. If no such definition exists in a source file, because the values are defined only in generated code or a migration and no source type declares the field, the block goes at the top of the file that assigns the field in the most places, immediately after its map block. If the full view would obscure the definition, put it in owner-local documentation instead. Keep a specific `transitions:` pointer in the owner and shown writers; a relevant local constraint may remain beside the definition.
 
-For a source view, prefix each diagram line with the language's line-comment marker. Keep observed transitions distinct from prohibited ones: a missing edge does not establish a prohibition, and an intentional restriction requires its explicit source. Do not copy claims contradicted by code. Apply whole-diagram reconciliation before replacing any diagram; it protects existing supported transitions, guards, and notes as well as absence statements. The owner file's map block gets a `transitions:` line per field or multi-field lifecycle pointing at the diagram actually retained.
+For a source view, prefix each diagram line with the language's line-comment marker. Keep observed transitions distinct from prohibited ones: a missing edge does not establish a prohibition, and an intentional restriction requires its explicit source. Do not copy claims contradicted by code. Apply whole-diagram reconciliation before changing any diagram; it protects existing supported transitions, guards, and notes as well as absence statements. The owner file's map block gets a `transitions:` line per field or multi-field lifecycle pointing at the diagram actually retained.
 
 ```text
 # stateDiagram-v2
@@ -536,13 +536,13 @@ For every file you would write into, read what is there first. Then:
 
 When rewriting a map block, remove legacy `complete within:` or `partial within:` lines. Do not use their removal to delete supported relationships or broaden their meaning. Preserve any limitation needed by a surviving entry as a verified subject or condition; if its meaning cannot be established, leave the block unchanged. Convert legacy relationship lines to the current forms only after confirming their subjects and conditions. A legacy `no consumer found` line is a search result and is removed; this is distinct from deleting a supported behavioral absence.
 
-**Whole-diagram reconciliation.** Whole replacement is a writing operation, not permission to discard existing facts. Apply the rules above to every existing edge, guard, terminal marker, layout field, and behavioral note. Also preserve qualifications needed by surviving claims. Removing inspection-only metadata does not count as losing a behavioral fact.
+**Whole-diagram reconciliation.** Consider the meaning of the entire affected diagram even when editing only a few lines. Apply the rules above to every existing edge, guard, terminal marker, layout field, and behavioral note. Also preserve qualifications needed by surviving claims. Removing inspection-only metadata does not count as losing a behavioral fact.
 
 - If the transformed artifact retains all existing facts that reconciliation says to keep, use it after verifying its additions and changes.
-- If the candidate omits facts that must remain, do not replace the existing diagram with it. Prepare a bounded update: retain those facts and their qualifications, add verified compatible information, and remove or replace contradicted claims. A partial artifact may contribute a valid addition without erasing existing content. Match the same subject and scenario conditions before merging; shared participants alone do not establish a common execution order. Preserve existing wording and order where still accurate. Do not invent transitions, sequencing, guards, or layout to connect the two versions. Write the repaired diagram whole only if its resulting meaning is clear and all changed claims are verified. Leave unresolved existing facts unchanged without broadening their claims.
+- If the candidate omits facts that must remain, do not replace the existing diagram with it. Prepare a bounded update: retain those facts and their qualifications, add verified compatible information, and remove or replace contradicted claims. A partial artifact may contribute a valid addition without erasing existing content. Match the same subject and scenario conditions before merging; shared participants alone do not establish a common execution order. Preserve existing wording and order where still accurate. Do not invent transitions, sequencing, guards, or layout to connect the two versions. Apply the update only if the resulting diagram's meaning is clear and all changed claims are verified. Leave unresolved existing facts unchanged without broadening their claims.
 - If a safe addition cannot be made and the existing diagram has no known-false claim, keep the existing diagram and omit that addition. If a known-false claim cannot be repaired without inventing relationships, remove the misleading diagram and its pointers. Independently useful supported facts may remain in another allowed home only if they meet that home's placement rules. This is a last resort, not permission to replace a valid diagram with a smaller one.
 
-Rebuild map blocks and README sections from the reconciled material, including retained facts and diagrams; do not rebuild them from incoming artifacts alone. Pointers and indexes describe the diagrams actually retained, not a rejected or deferred replacement.
+Update map blocks and README sections using the reconciled material, including retained facts and diagrams. Incoming artifacts alone do not determine the final content. Whole-block or whole-section replacement is not required; preserve accurate wording and avoid duplicate facts, blocks, or explanations. Pointers and indexes describe the diagrams actually retained, not a rejected or deferred replacement.
 
 **Direct references.** For each subject being placed or reconciled, follow existing pointers and search its exact identifiers, explanation name, and current location. Include previous names/locations only when known from supplied material or a supplied change. Read relevant matching explanations and their direct source/index references. Update pointers when a view moves, loses a participant, or is removed; add required routes for the view actually retained. Do not recursively audit other explanations associated with its participants. Verify Markdown paths and anchors, not just source identifiers.
 
@@ -551,11 +551,11 @@ Specific effects to handle when established by current code or supplied change i
 - A newly documented hidden edge: make both ends discoverable under the pairing rules.
 - A hidden edge confirmed removed: remove its paired entries or affected relationship in the shared explanation; retain pointers still useful for other relationships.
 - A hidden edge made explicit, such as an event replaced with a direct call: remove obsolete hidden-edge entries. A visible edge may still be necessary context in a qualifying coherent explanation.
-- A transition the change added or removed: reconcile all facts in the existing and transformed artifact diagrams before writing the result whole, then reconcile its owner and writer pointers. A removed transition becomes a `%%` absence line only if the artifact carries a qualifying, verified absence statement.
+- A transition the change added or removed: reconcile all facts in the existing and transformed artifact diagrams before editing the diagram, then reconcile its owner and writer pointers. A removed transition becomes a `%%` absence line only if the artifact carries a qualifying, verified absence statement.
 - An identifier the change renamed: update every map block line, README line, root index line, glossary row, and inline comment that names it. Search the repository for the old name to find them all; a file holding such a mention may be written into even when it is outside the artifacts' scope.
 - Code the change moved between files: the facts move with it. Delete from the old file's map block, add to the new file's, and update the other ends, which now point at a different file.
 - A file confirmed deleted: remove or revise its references and affected claims, preserving other supported content on the same line; delete a whole entry or index line only when no valid purpose remains. Apply whole-diagram reconciliation to diagrams.
-- A retained flow explanation confirmed removed from its source document: delete every `entry point of:` and `participates in:` mention of it and its root `## Flows` line. Flow names exist only in documentation, so nothing else will ever remove them.
+- A retained flow explanation confirmed removed from its source document: delete every `entry point of:` and `participates in:` mention of it and any root `## Flows` entry. Check these documentation references directly when removing the explanation.
 - A file the change created: it gets a map block if at least one artifact fact meets the inclusion rules.
 
 ## Procedure
@@ -567,7 +567,7 @@ Work in this order.
 3. Read existing destination content and relevant existing explanations before creating or replacing anything. Find direct references under the reconciliation rules.
 4. Confirm every proposed identifier and defining file in current code. For hidden edges, inspect endpoints and actual registration, binding, subscription, handoff, or reference checks; matching names are insufficient. Preserve a distinct wiring site when necessary for navigation. Confirm explicit sources for reasons and requirements. Outside-repository endpoints are verified from the in-repository code.
 5. Reconcile additions, corrections, removals, diagrams, and direct pointers/index entries. Preserve supported information missing from incoming artifacts. Do not invent joins between fragments or merge distinct scenarios. Validate every explanation path and heading anchor.
-6. Compare the final reconciled content with what is present; leave matching content and accurate wording untouched. Replace map blocks and affected diagram/README sections whole from reconciled content. Update root index lines and merge glossary rows. Reuse existing homes; an unchanged second pass should make no edits.
+6. Compare the final reconciled content with what is present; leave matching content and accurate wording untouched. Apply the necessary edits to map blocks and affected diagram/README sections, preserving the reconciled content. Update selected root navigation and merge glossary rows. Reuse existing homes; an unchanged second pass should make no edits.
 7. Re-read changed files to confirm language-safe comments, working paths/anchors, consistent source routes, and no changed code lines.
 
 ## Constraints
@@ -577,14 +577,14 @@ These are absolute.
 - You change comments and Markdown only. No code token changes, no whitespace changes to code lines, no reordering of imports, no formatting. If a placement cannot be made without touching code, it is not made.
 - Every identifier you write exists in the current code: the file in parentheses after it exists, and that file defines or contains the name's last segment. You searched for it. The one exception is an end written as `(outside repository)`, which names a system rather than a file. Every hidden-edge fact you write for the first time was confirmed at both ends in the code, not only in the artifacts.
 - New or rewritten map blocks contain no inspection-scope or completeness line. If a legacy block cannot be converted without changing the meaning of an unresolved claim, leave it untouched under reconciliation. Diagram copies preserve their explicit omission warnings under the copying rules; neither maps nor diagrams claim to be exhaustive.
-- A second run on unchanged inputs makes no edits: every fact it would write is already present, existing wording is kept, and nothing is appended to an existing block. Map blocks and README sections are replaced whole from the fixed vocabulary. Compare a diagram or packet block with the final transformed and reconciled version, ignoring comment markers and leading whitespace; if they match line for line, leave it untouched.
+- A second run on unchanged inputs makes no edits: every fact it would write is already present, existing wording is kept, and no duplicate facts, blocks, or explanations are added. Edited map entries retain the fixed vocabulary and order. Compare a diagram or packet block with the final transformed and reconciled version, ignoring comment markers and leading whitespace; if they match line for line, leave it untouched.
 - Both eligible ends of a hidden connection remain discoverable through paired entries or the four-condition shared-explanation exception. Excluded and outside endpoints are named without editing them.
 - You write an inline comment only where a rule in this document sends a specific fact from the artifacts to a specific line. You do not add comments to code because it seemed to want one.
 - Nothing marked `suspected` is written.
 - Every key you write is backed by a verified fact from this run's artifacts for that file or by an existing fact retained under reconciliation. You never write a key to signal that nothing was found.
 - Do not write outside the artifacts' scope except at a connection's other end, an affected explanation and its direct source/index references, mentions of a known rename/move/removal, the root agent file, the glossary, or owner-local documentation required by a qualifying placement. These exceptions permit only affected facts and references, not unrelated documentation or recursive audits. A new source map needs an artifact fact or such a required reference; do not invent responsibility statements for undescribed files.
 - You do not write into files on the never-diagram list.
-- Edit only the named root sections and qualifying owner-local sections; an existing relevant explanation may be reconciled in its current heading. Preserve unrelated text. Replace the `## Map blocks` legend only when it differs from the appendix.
+- Edit only the named root sections and qualifying owner-local sections; an existing relevant explanation may be reconciled in its current heading. Preserve unrelated text. Reconcile the `## Map blocks` legend with the appendix's meanings; do not replace accurate wording merely because it differs.
 - You preserve existing hand-written material outside the map-block vocabulary, prose, inline comments, docstrings, and README text, that the code still supports, wording and all. Lines inside a map block follow the map-block rules whoever wrote them.
 
 ## Checklist
@@ -596,10 +596,10 @@ These are absolute.
 - Were all `suspected` items excluded from the repository changes?
 - Does each addition meet the inclusion gate and a specific placement rule? Does it add a relationship, constraint, useful combined view, or explicitly allowed navigation entry rather than merely redraw nearby code?
 - Is every key in every block backed by a verified artifact fact or an existing fact retained under reconciliation, with no key written to signal absence?
-- Were established removals, renames, and moves reconciled at their affected documentation and direct references? Did whole-diagram replacement reconcile existing edges, guards, terminal markers, and notes as well as absences, without dropping facts that reconciliation requires keeping or retaining known-false claims?
+- Were established removals, renames, and moves reconciled at their affected documentation and direct references? Did diagram edits reconcile existing edges, guards, terminal markers, and notes as well as absences, without dropping facts that reconciliation requires keeping or retaining known-false claims?
 - Was every addition and changed claim verified against the current code? Are local subjects and material conditions clear, with each line's qualifiers applying to every endpoint and paired entries preserving the same condition? Do flags with different branch conditions use the split form consistently? Are intent, exclusivity, and prohibition claims explicitly supported?
 - Did any code line change? Diff to confirm none did.
-- Is the root agent file still index lines only in its three index sections, apart from the descriptive text allowed under each heading, is the `## Map blocks` legend present, and is everything else in it untouched?
+- Do README and root navigation entries identify useful starting points without requiring a complete inventory or implying coverage? Do they point to existing destinations? Is the root legend self-contained and consistent with the map meanings, with unrelated root content untouched?
 
 ## Appendix: a worked run
 
@@ -755,7 +755,7 @@ class OrderStatus(Enum):
 # end map
 ```
 
-`orders/README.md` holds the flow because the file notes establish order creation as that area's responsibility; `api/orders.py` remains the entry sender. `api/README.md` and `notifications/README.md` get only an `## Owns` section; `promotions/` gets no README because its only block lacks `owns:`, but it does get a root index line so that a reader can find the block.
+`orders/README.md` holds the flow because the file notes establish order creation as that area's responsibility; `api/orders.py` remains the entry sender. Its `## Owns` entries identify the model and service as useful starting points. No README is added to `api/`, `notifications/`, or `promotions/` merely to repeat their source maps. The flow and soft-reference entries already provide direct routes to those files.
 
 ```text
 ## Owns
@@ -771,13 +771,11 @@ class OrderStatus(Enum):
 %% selected view; omits: failure paths; omissions do not establish absence)
 ```
 
-The root `AGENTS.md` gains five index lines, four under `## Map` and one under `## Flows`, and `GLOSSARY.md` gains the order row:
+The root `AGENTS.md` gains selected starting points: the order area and its HTTP entry under `## Map`, and order placement under `## Flows`. It need not repeat every participating directory; their source routes remain intact. `GLOSSARY.md` gains the order row:
 
 ```text
 - api/ — HTTP handlers for orders
-- notifications/ — the OrderCreated consumer and the confirmation email
 - orders/ — creation, confirmation, and cancellation of orders, the Order model and its lifecycle, and promotion-code validation
-- promotions/ — referenced by other directories; not yet described
 
 - order placement — entry api.orders — orders/README.md#order-placement
 ```
@@ -831,7 +829,7 @@ On an unchanged second pass, reuse these headings, pointers, and supported wordi
 
 ## Appendix: legend text for the root agent file
 
-Copy the following `## Map blocks` section verbatim into the root agent file if absent; replace it whole if it differs. It is self-contained for readers who have not read this guide.
+Add the following `## Map blocks` section to the root agent file if absent. Reconcile an existing legend with these meanings: correct conflicts and add missing essentials without replacing accurate wording. Keep it self-contained for readers who do not have this guide.
 
 ---
 
@@ -852,10 +850,10 @@ Conventions: names are full identifiers, `module.function` for code and bare nam
 - `hook in:` a function here runs as a hook on an object defined elsewhere, when the registered operation and its conditions trigger the hook.
 - `flag out:` a feature flag checked here decides which code runs. The two paths appear together as `FLAG -> on: ...; off: ...`, or on separate lines as `FLAG on -> ...` and `FLAG off -> ...` when their conditions differ. A `when` clause applies to its whole line, and `skipped` means that branch does nothing. Check both paths when changing the decision.
 - `flag in:` the named caller reaches code here when its flag check has the named state, on or off. Other callers may reach the same code without that flag.
-- `di out:` an abstraction resolved through a container here, and where its binding lives. The implementation is not named here; to find or change it, go to the binding.
+- `di out:` an abstraction resolved through a container here, and where its binding lives. Value: `<abstraction> via <binding file>`. The implementation is not named here; to find or change it, go to the binding.
 - `di in:` a class here is what a container hands out for the named abstraction. The resolver need not name the implementation directly; other construction paths may also exist.
 - `callback out:` a function here is handed to another module, which calls it later, in a context decided there.
-- `callback in:` the named function from elsewhere is supplied to the stated parameter or registration point. Check how this receiver invokes it and handles its failures; other functions may also be supplied.
+- `callback in:` the named function from elsewhere is supplied to the stated parameter or registration point. Value: `<parameter or registration point> of <receiver> <- <function> (<defining file>)`. Check how this receiver invokes it and handles its failures; other functions may also be supplied.
 - `other out:` / `other in:` a hidden dependency through a mechanism named first: a file on disk, a cache key, an environment variable, a database trigger. Read both ends before changing the mechanism.
 - `writes:` tables whose rows code in this file can change. Search for `writes:` and the table name to find documented writers; unlisted writers may exist.
 - `reads remote:` a table in another database, schema, or service, whose schema this repository does not control.
@@ -863,8 +861,8 @@ Conventions: names are full identifiers, `module.function` for code and bare nam
 - `calls:` external systems reached over the network, with the operations used. These fail, stall, and throttle independently of this code. Search for `calls:` and a system's name to find documented callers; unlisted callers may exist.
 - `soft-ref out:` the named source column points at another table with no foreign key. A named validator is a verified check, not necessarily the only check or one used by every write. No validation clause makes no claim about validation.
 - `soft-ref in:` the named source column points at the named local table with no foreign key. Deleting or re-keying rows can orphan those references.
-- `transitions:` this file defines a stored state or performs a shown transition; the line points to its canonical diagram beside a source definition or in a named Markdown section. Labels name transition functions and conditions. An omitted edge does not establish a prohibition; a stated prohibition needs an explicit basis.
-- `format:` the byte layout this file defines, encodes, or decodes, with its one full explanation above a named source definition/operation or at a Markdown section. The eligible definition owner and documented codecs point to the same layout; a definition-only file need not encode or decode it.
+- `transitions:` this file defines a stored state or performs a shown transition; the line points to its canonical diagram. Value: `<entity>.<field>, diagram <location>`; use `<entity> (<field>, <field>)` for combined state. The location is `above <definition>`, `in <source file> above <definition>`, or `in <Markdown path>#<heading anchor>`. A diagram placed below its owner's map uses `below this block` there and `in <owner file> below map block` elsewhere. Labels name transition functions and conditions. An omitted edge does not establish a prohibition; a stated prohibition needs an explicit basis.
+- `format:` the byte layout this file defines, encodes, or decodes. Value: `<name>, diagram <location>`, where the location is `above <local definition or operation>`, `in <source file> above <identifier>`, or `in <Markdown path>#<heading anchor>`. The eligible definition owner and documented codecs point to the same full explanation; a definition-only file need not encode or decode it.
 - `hazard:` something about this file's behavior to know before editing anything in it.
 
 ---
