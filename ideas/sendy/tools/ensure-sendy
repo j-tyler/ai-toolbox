@@ -22,7 +22,7 @@ if [ -e "$binary" ] || [ -L "$binary" ]; then
  check
 else
  [ ! -e .tools/sendy.sha256 ] || fail 'missing executable from existing installation; separate maintenance is required'
- command -v go >/dev/null 2>&1 || fail 'Go 1.23 or newer is required for source installation'
+ command -v go >/dev/null 2>&1 || fail 'Go 1.25.8 or newer is required for source installation'
  stage=$(mktemp -d .tools/sendy-build.XXXXXX)
  trap 'rm -rf "$stage"' EXIT HUP INT TERM
  stage=$(cd "$stage" && pwd)
@@ -32,10 +32,10 @@ else
  if [ -n "$source" ]; then
   [ -f "$source/tools/sendy.version" ] || fail 'SENDY_SOURCE must name the Sendy source directory'
   [ "$(cat "$source/tools/sendy.version")" = "$pin" ] || fail 'source version differs from project pin'
-  (cd "$source" && go build -trimpath -ldflags "-X main.version=$pin" -o "$stage/sendy" .)
+  (cd "$source" && CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=$pin" -o "$stage/sendy" .)
  else
   # Published releases embed their exact version in main.go.
-  GOBIN="$stage" go install "github.com/j-tyler/ai-toolbox/ideas/sendy@$pin"
+  CGO_ENABLED=0 GOBIN="$stage" go install "github.com/j-tyler/ai-toolbox/ideas/sendy@$pin"
  fi
  [ "$("$stage/sendy" --version)" = "sendy $pin" ] || fail 'built executable does not match pinned version'
  chmod 755 "$stage/sendy"

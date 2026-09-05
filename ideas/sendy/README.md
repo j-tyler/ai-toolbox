@@ -438,9 +438,14 @@ executable and validate the supplied templates, including the argument-free
 `staged-review` prompt.
 
 This initial version is `v0.1.0-dev`; no published release or prebuilt binary is
-provided yet. Setup requires Go 1.23 or newer, `make`, `flock`, and `sha256sum`
+provided yet. Setup requires Go 1.25.8 or newer, `make`, `flock`, and `sha256sum`
 (the helper currently targets Linux). Dependency downloads require network access
 when they are not cached.
+
+Setup builds with `CGO_ENABLED=0`, producing a Linux executable without a system
+glibc dependency. It does not change an existing installation. For a manual build,
+use `CGO_ENABLED=0 go build`. Race-detector tests still require cgo and a C compiler;
+this test requirement does not enable cgo in the installed executable.
 
 The project owns the Sendy version and templates. Engineers do not need a global
 Sendy installation. Add these files to the consuming project:
@@ -496,6 +501,36 @@ Relevant build and test targets can depend on `sendy`, for example `test: sendy`
 before running their existing recipes. Use `make sendy` as the single setup target.
 Tests should create their own conversation IDs and close them afterward, without
 resetting state used by other sessions.
+
+## Packaging and redistribution
+
+Sendy's original source is covered by the repository's [CC0 dedication](../../LICENSE).
+Third-party dependencies retain their own licenses; a compiled Sendy binary is
+not entirely CC0. Building and using Sendy locally does not require a credit
+banner or a separate notice file beside the executable.
+
+If you distribute a binary, include the applicable third-party copyright notices,
+license conditions, and disclaimers for that build. This includes the Go runtime
+and standard library, the SQLite driver and its dependencies, and separately
+licensed code bundled within them. Use the actual upstream texts, not just license
+names or links. One `THIRD_PARTY_NOTICES.txt` shipped alongside the executable or
+in the package's documentation can hold them; no particular filename is required.
+See the [MIT](https://opensource.org/license/mit),
+[BSD-3-Clause](https://opensource.org/license/bsd-3-clause), and
+[Go](https://go.dev/LICENSE) terms. The setup helper does not assemble these notices.
+
+Linux builds with cgo enabled may also link to the system's glibc. For such a
+binary, clearly state in the accompanying notices that glibc is used under
+LGPL-2.1-or-later, include the LGPL-2.1 text, and preserve users' ability to use a
+compatible replacement shared library. Permit modification for users' own use and
+reverse engineering to debug those modifications. This uses the shared-library route in
+[LGPL section 6(b)](https://opensource.org/license/lgpl-2-1). Bundling glibc itself
+or linking it statically requires a separate assessment of the applicable terms.
+Check the actual build; requirements depend on its dependencies and linking mode.
+
+If you redistribute dependency source, preserve its applicable license files and
+source notices, including separately licensed material inside `modernc.org/libc`.
+Merely listing a dependency in `go.mod` does not require shipping its license text.
 
 ## Exit codes and local use
 
