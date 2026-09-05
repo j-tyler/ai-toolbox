@@ -341,6 +341,7 @@ run. Add these files to the consuming project:
 | Path | Purpose |
 | --- | --- |
 | `Makefile` | Provides a `sendy` setup target. |
+| `tools/ensure-sendy` | Setup helper supplied with Sendy; safely installs only when absent. |
 | `tools/sendy.version` | Pins an exact released Sendy version. |
 | `.sendy/templates/*.txt` | Version-controlled prompts, available by filename. |
 | `.tools/bin/sendy` | Generated executable; exclude it from Git. |
@@ -351,44 +352,82 @@ files directly in that directory is the simplest arrangement.
 
 ### Project setup with Make
 
+`make sendy` means **ensure available and validate templates**, not rebuild Sendy.
+It must be safe for ten independent agent sessions to run it concurrently. An
+existing, verified installation of the pinned version is reused without building,
+downloading, rewriting, or restarting it. Setup never opens or resets the
+conversation database.
+
 The following is the intended Make integration after Sendy is implemented and
-released. The command package path is planned, not an available release today.
-The implementation change must publish an installable module and document its
-release versions. Put a real released version in `tools/sendy.version`; do not use
-`latest`. Recipe indentation below uses tabs.
+released. The implementation/distribution change must supply `tools/ensure-sendy`
+with the installation contract below; that helper does not exist yet. Put a real
+released version in `tools/sendy.version`; do not use `latest`. Recipe indentation
+below uses tabs.
 
 ```makefile
-SENDY_VERSION := $(strip $(shell cat tools/sendy.version))
-SENDY_PACKAGE := github.com/j-tyler/ai-toolbox/ideas/sendy/cmd/sendy
-
 .PHONY: sendy
-sendy: .tools/bin/sendy
+sendy:
+	./tools/ensure-sendy
 	./.tools/bin/sendy template validate
-
-.tools/bin/sendy: tools/sendy.version Makefile
-	mkdir -p "$(CURDIR)/.tools/bin"
-	GOBIN="$(CURDIR)/.tools/bin" go install "$(SENDY_PACKAGE)@$(SENDY_VERSION)"
 ```
 
-`make sendy` installs the pinned executable if missing or if its version file or
-Makefile changed, then validates the current templates. Repeated calls skip the
-installation when the executable is current. The lightweight validation runs
-each time, so template edits, additions, deletions, and branch switches do not
-depend on a stale registration stamp. Template changes require no binary rebuild.
-Make's file prerequisites and phony targets support this setup pattern.
+The phony target runs the availability check each time; it does not unconditionally
+run a compiler. Do not make the executable depend on Makefile or template timestamps:
+editing those files must not cause a rebuild. Make's usual timestamp checks also
+do not provide an installation lock across independent Make invocations. The
+helper, rather than Make's scheduling, enforces installation reuse and exclusion.
 [GNU Make documentation](https://www.gnu.org/software/make/manual/make.html)
 
-This source-build path requires Make, a compatible Go toolchain, and access to
-download the pinned module and its dependencies when they are not cached. Go's
-versioned `go install` can install a command into `GOBIN` independently of the
-consuming project's language or `go.mod`.
+The lightweight template validation runs after successful setup each time, so
+template edits, additions, deletions, and branch switches do not depend on a stale
+registration stamp. It only reads template files; it neither rebuilds the executable
+nor accesses conversation state.
+
+### Installation contract for concurrent sessions
+
+`tools/ensure-sendy` reads the project's pinned version and uses a project-local
+operating-system lock shared by all its invocations. The lock must be released
+when the installer exits or dies; an abandoned lock file must not block setup
+forever. It is separate from the conversation database and never held by message
+commands or while validating templates.
+
+Under that lock, recheck the installation before deciding to build:
+
+| Existing installation | Setup behavior |
+| --- | --- |
+| Complete executable with verified pinned version | Return success immediately; do not write to the installation. |
+| Absent | Build or download once into a private temporary location, verify it, and publish the complete installation atomically. |
+| Another setup process is installing | Wait for the installation lock, then recheck and reuse its completed installation. |
+| Different version, corrupt executable, or unverifiable installation | Return a clear error without replacing it; repair or upgrade is a separate maintenance action. |
+
+The helper must verify the installed version using build identity or installation
+metadata tied to the executable, not just assume that any file named `sendy` is
+correct. Publish the executable and its verification information so concurrent
+callers cannot mistake a partial installation for a completed one. Never compile,
+download, or copy directly over `.tools/bin/sendy`. A failed first installation
+leaves no runnable partial installation; subsequent setup can retry safely.
+
+In a successful concurrent first setup, one session installs and the others reuse
+the result. Once installed, ordinary setup calls cannot replace that executable,
+even if the Makefile changes. Changing the pinned version produces an explicit
+version-mismatch error instead of upgrading underneath active workflows. Routine
+skills must not respond to that error by deleting the binary or running cleanup.
+Plan upgrades or repairs separately from active sessions, including compatibility
+with the shared conversation store; neither happens as a side effect of setup.
+
+Source installation requires a compatible Go toolchain and access to download
+the pinned module and its dependencies when they are not cached. These are needed
+when installation is actually necessary, not to rebuild on every skill run. Go's
+versioned `go install` can install a command into a private staging `GOBIN`
+independently of the consuming project's language or `go.mod`.
 [Go installation documentation](https://go.dev/ref/mod#go-install)
 
 For teams without Go, a distribution alternative is for the setup target to
 download a pinned release binary for the local operating system and architecture,
-verify its published checksum, and place it at the same `.tools/bin/sendy` path.
-Release binaries and their download recipe belong to the implementation and
-distribution change. Skills use the same interface with either installation path.
+verify its published checksum, and publish it at the same `.tools/bin/sendy` path
+under the same lock and atomic installation rules. Release binaries and the setup
+helper belong to the implementation/distribution change. Skills use the same
+interface with either installation path.
 
 Templates are thus pre-registered by being project files, and checked during
 build/setup. There are no repeated `template add` calls or global registrations.
