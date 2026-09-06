@@ -108,6 +108,31 @@ def main():
         unchanged_binary(fingerprint)
         fifo.unlink()
         assert cli("--version").stdout == b"sendy " + (project / "tools/sendy.version").read_bytes()
+        # Help must return even while stdin stays open, without initializing storage.
+        help_reference = cli("help")
+        assert help_reference.stdout and not help_reference.stderr
+        global_help_args = (("--help",), ("-h",), ("help", "--help"),
+                            ("help", "-h"), ("--help", "--help"))
+        for args in global_help_args + (("submit", "--help"), ("help", "submit", "--help"),
+                                        ("template", "render", "--help")):
+            p = subprocess.Popen([str(binary), *args], cwd=root, env=env,
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            CHILDREN.append(p)
+            # Drain stdout while leaving stdin open: a full help page may exceed
+            # pipe capacity, so waiting before reading could deadlock the test.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                output = pool.submit(p.stdout.read)
+                try:
+                    p.wait(timeout=5)
+                finally:
+                    if p.poll() is None:
+                        p.kill()
+                    p.stdin.close()
+                text = output.result(timeout=5)
+            assert p.returncode == 0 and text and p.stderr.read() == b"", args
+            if args in global_help_args:
+                assert text == help_reference.stdout
+        assert not (Path(env["HOME"]) / ".sendy").exists(), "help opened the store"
         assert cli("template", "validate").stdout == b""
         rendered = cli("template", "render", "review", "--set", "filename=server.go", "--set", "name=Alice").stdout
         assert rendered == b"You are reviewing server.go.\nYour reviewer name is Alice.\n\nCheck correctness, identify missing cases, and explain your findings.\n"

@@ -45,10 +45,23 @@ parents to wait after assigning work.
 
 ## Interface at a glance
 
+Run `sendy help` or `sendy --help` (`-h` also works) for the full CLI reference,
+including inputs, outputs, blocking behavior, templates, file extraction, and
+exit codes. Use `sendy help submit` or `sendy submit --help` for a command, and
+`sendy help template render` or `sendy template render --help` for a subcommand.
+Help prints to stdout and exits `0` without reading stdin, opening the database,
+or requiring project templates. Unknown help topics report an error on stderr
+and exit `1`. No arguments or invalid commands remain errors and point to help.
+
 Examples use the project-local executable from the project root after
 [project setup](#including-sendy-in-your-project).
 
 ```text
+.tools/bin/sendy help
+.tools/bin/sendy --help
+.tools/bin/sendy help COMMAND [SUBCOMMAND]
+.tools/bin/sendy COMMAND [SUBCOMMAND] --help
+.tools/bin/sendy --version
 .tools/bin/sendy create COUNT
 .tools/bin/sendy submit ID < result.txt
 .tools/bin/sendy submit ID --template NAME [--set KEY=VALUE ...]

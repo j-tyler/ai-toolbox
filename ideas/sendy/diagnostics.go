@@ -29,6 +29,10 @@ func commit(tx *sql.Tx) error {
 }
 
 func usage(cmd string) string {
+	return commandUsage(cmd) + " Run sendy help for the full CLI reference."
+}
+
+func commandUsage(cmd string) string {
 	switch cmd {
 	case "create":
 		return "Usage: sendy create COUNT (for example: sendy create 1)."
