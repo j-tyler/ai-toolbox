@@ -1,0 +1,66 @@
+--- a/shop/notifications.py
++++ b/shop/notifications.py
+@@ -4,7 +4,7 @@
+ # event in: OrderConfirmed <- shop.service.OrderService.confirm (shop/service.py); in shop.notifications.ConfirmationInbox.on_order_confirmed; when the inbox is registered and the confirmation status update commits
+ # end map
+ 
+-from shop.models import Order
++from shop.records import Order
+ from shop.service import OrderService
+ 
+ 
+--- a/shop/records.py
++++ b/shop/records.py
+@@ -21,6 +21,7 @@
+     PENDING = "pending"
+     CONFIRMED = "confirmed"
+     CANCELLED = "cancelled"
++    SHIPPED = "shipped"
+ 
+ 
+ @dataclass(frozen=True)
+--- a/shop/service.py
++++ b/shop/service.py
+@@ -8,7 +8,7 @@
+ from collections.abc import Callable
+ 
+ from shop import storage
+-from shop.models import Order
++from shop.records import Order
+ 
+ 
+ class OrderService:
+--- a/shop/storage.py
++++ b/shop/storage.py
+@@ -7,14 +7,14 @@
+ 
+ import sqlite3
+ 
+-from shop.models import Order, OrderStatus
++from shop.records import Order, OrderStatus
+ 
+ 
+ def open_store() -> sqlite3.Connection:
+     connection = sqlite3.connect(":memory:")
+     connection.execute(
+         "CREATE TABLE orders (id INTEGER PRIMARY KEY, status TEXT NOT NULL "
+-        "CHECK (status IN ('pending', 'confirmed', 'cancelled')))"
++        "CHECK (status IN ('pending', 'confirmed', 'cancelled', 'shipped')))"
+     )
+     return connection
+ 
+@@ -57,3 +57,14 @@
+         if result.rowcount != 1:
+             raise ValueError("Cancellation requires an existing pending order")
+     return get_order(connection, order_id)
++
++
++def ship_order(connection: sqlite3.Connection, order_id: int) -> Order:
++    with connection:
++        result = connection.execute(
++            "UPDATE orders SET status = ? WHERE id = ? AND status = ?",
++            (OrderStatus.SHIPPED.value, order_id, OrderStatus.CONFIRMED.value),
++        )
++        if result.rowcount != 1:
++            raise ValueError("Shipping requires an existing confirmed order")
++    return get_order(connection, order_id)

@@ -1,74 +1,17 @@
-# AGENTS.md
-
-This is a template, not a description of an existing repository. Adapt it into the repository's root agent instructions file. Use the established filename and loading convention; if none is established, `AGENTS.md` is a conventional name, not a guarantee of automatic loading. Fill in or remove square-bracketed placeholders, retain only commands and conventions verified for this repository, and include navigation sections only when they have useful existing destinations.
-
-## Commands
-
-List the actual commands, their working directory, and any required setup or services. State whether each starts its dependencies; do not assume it does. The categories below are examples: omit those the repository does not support.
-
-- Install: `[command]`
-- Run all tests: `[command]`
-- Run the tests for one file: `[command] path/to/test_file`
-- Typecheck: `[command]`
-- Lint and format: `[command]`
-- Run locally: `[command]`
-
-## Conventions
-
-Include only established repository-wide rules. The following are examples to replace or remove, not defaults to adopt.
-
-- [Rule. Example: All database access goes through `repositories/`; nothing else imports the ORM.]
-- [Rule. Example: Handlers return `Result`; they never raise.]
-- [Rule. Example: A stored state field is changed only through its owner's transition functions, never assigned directly.]
-- [Rule. Example: Generated code under `generated/` is never edited; change the source and regenerate.]
+# Agent instructions
 
 ## Map
 
-Selected directories that help readers choose where to start, looking past a bare wrapper such as `src/` when useful. Use `directory/ — responsibility`, supported by the code and existing documentation. An unlisted directory may still contain relevant code and documentation.
+- shop/ — order records and status values
+- transport/ — message frame representation
 
 ## Flows
 
-Selected scenarios useful as repository starting points, using `flow name — entry identifier — Markdown path#heading-anchor`. The entry is the actual first sender shown in the sequence, including an external system or queue. Other flows may be reached through source pointers and owner-local documentation.
+- order confirmation — entry shop.service.OrderService — shop/README.md#order-confirmation
 
 ## Glossary
 
-[Include `See GLOSSARY.md.` only when that file exists.]
-
-## Reading the documentation
-
-Documentation uses five homes:
-
-- A **map block** at the top of a source file: selected file-wide facts and routes to relevant explanations, using the keys below.
-- **Comments above code**: local reasons, constraints, hazards, and hidden wiring facts; compact state or packet diagrams may sit beside their definition or operation.
-- **Owner-local documentation**: directory READMEs hold ownership, named flows and explanations, and qualifying dependency rules or data models. A nearby subject document may hold a larger explanation, linked from the README. Source pointers lead directly to the relevant section.
-- **This file's index sections**, `## Map`, `## Flows`, and `## Glossary`: follow their named directories or document locations.
-- **`GLOSSARY.md`** at the root: domain terms, identifiers, and aliases.
-
-Check behavior against current code. Documentation records selected claims verified when written and can become stale. Preserve its stated scenario and conditions when using it. A missing block, key, section, comment, or diagram edge does not establish absence, completeness, or exclusivity. A pointer helps find an explanation; it does not independently prove the relationship.
-
-Before changing code, read its map, relevant linked explanations, and comments near the affected definitions or operations. Source search can land below a header, so inspect those local comments too. Follow exact identifiers and paths to the implementation; documentation helps decide what to read and does not replace that reading.
-
-The self-contained map legend below explains the keys and qualifiers. When maintaining a map, use its established line forms and only the listed keys; preserve their order and keep one `map` / `end map` comment block with no duplicate facts. Keep comments outside strings and preserve language-required headers and directives.
-
-## Comments in code
-
-Code should explain itself. Write an inline comment only when it cannot and something important would otherwise be unclear: why a line exists, why it is unusual, what it works around, what elsewhere depends on it. Put the comment directly above the code it refers to. Never describe what the code does; that is visible by reading it. If a better name or a small restructuring would make the comment unnecessary, do that instead. Do not simplify or remove a line that has such a comment without addressing what the comment says.
-
-## Maintaining the documentation
-
-Keep affected documentation current with the code:
-
-- For a known rename, move, or removal, find existing mentions by the old identifier and location and reconcile them against the code. Preserve unaffected supported wording and information.
-- For a hidden connection, verify endpoints and actual registration, binding, subscription, or handoff. Keep paired entries for compact connections. A larger network may have one full explanation containing exact endpoints, conditions, and wiring locations, with specific pointers from both eligible ends and references back to source. Keep locally necessary conditions and hazards at the affected code. Excluded files are tests, generated or vendored code, migrations, configuration, constants, translations, static assets, build scripts, and pure utilities without domain meaning; name an excluded endpoint from the eligible end or explanation without adding this documentation there.
-- Reconcile a removed connection wherever it was documented. Keep a shared pointer when its explanation still covers another relevant relationship.
-- Maintain `writes:` and `calls:` facts for documented table writes and external calls. Keep directory and root navigation useful and accurate; do not copy every file map or aggregate every flow into them.
-- Check the entire affected diagram against current code, including edges, guards, terminal markers, layout fields, notes, and necessary qualifications. Preserve supported information beyond the lines being changed. Add compatible verified information without inventing order or other connections; distinct scenarios may need separate views. Update its direct source pointers and any existing index entries.
-- When a diagram moves or is removed, update its direct references. Search the affected subject, explanation name, and known locations; do not recursively audit unrelated explanations reached through participants.
-- Keep one full copy of each explanation. Owner and shown-writer `transitions:` pointers, definition-owner and documented codec `format:` pointers, and flow pointers lead to the actual retained view. A targeted local hazard can remain beside the code as well.
-
-Do not add inspection history or completeness claims. Unlisted behavior may exist; an omission warning does not repair an unsupported claim. Verify additions and changed meaning; reasons, intent, and prohibitions also need an explicit source. Leave unresolved existing claims unchanged without broadening them. Repair a known-false claim only when the resulting explanation remains coherent and supported. If that cannot be done without inventing relationships, remove the misleading view and its direct pointers as a last resort; preserve independently useful supported facts in suitable comments or explanations. Removing a sequence message must not imply an unsupported order, and removing a layout field must not alter later offsets.
-
-Edit the affected lines or sections as needed; preserve valid wording and avoid duplicate facts, blocks, or full explanations. Maintain documentation through direct reading, search, and editing of current code and existing explanations.
+See GLOSSARY.md.
 
 ## Map blocks
 

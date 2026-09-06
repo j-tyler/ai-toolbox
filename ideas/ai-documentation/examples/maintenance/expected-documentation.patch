@@ -1,0 +1,46 @@
+--- a/shop/README.md
++++ b/shop/README.md
+@@ -1,6 +1,6 @@
+ ## Owns
+ 
+-- [models.py](models.py) — order records and status values
++- [records.py](records.py) — order records and status values
+ - [service.py](service.py) — order confirmation and synchronous confirmation-event delivery
+ 
+ ## Flows
+--- a/shop/records.py
++++ b/shop/records.py
+@@ -1,6 +1,6 @@
+ # map
+ # owns: order records and status values
+-# transitions: shop.models.Order.status, diagram above shop.models.OrderStatus
++# transitions: shop.records.Order.status, diagram above shop.records.OrderStatus
+ # end map
+ 
+ from dataclasses import dataclass
+@@ -8,12 +8,13 @@
+ 
+ 
+ # stateDiagram-v2
+-# %% entity: shop.models.Order, field: status
++# %% entity: shop.records.Order, field: status
+ # %% selected view; omissions do not establish absence
+ # %% triggers: shop/storage.py
+ # [*] --> pending: shop.storage.create_order
+ # pending --> confirmed: shop.storage.confirm_order [current status is pending]
+ # pending --> cancelled: shop.storage.cancel_order [current status is pending]
++# confirmed --> shipped: shop.storage.ship_order [current status is confirmed]
+ # %% shop.storage.cancel_order rejects confirmed orders without changing them.
+ # %% shop.storage.confirm_order rejects cancelled orders without changing them.
+ # %% Public operations guard transitions, but direct SQL on the supplied connection can change valid status values. No finality is asserted.
+--- a/shop/storage.py
++++ b/shop/storage.py
+@@ -2,7 +2,7 @@
+ # owns: SQLite order storage and guarded status changes
+ # participates in: order confirmation (shop/README.md#order-confirmation)
+ # writes: orders
+-# transitions: shop.models.Order.status, diagram in shop/models.py above shop.models.OrderStatus
++# transitions: shop.records.Order.status, diagram in shop/records.py above shop.records.OrderStatus
+ # end map
+ 
+ import sqlite3
