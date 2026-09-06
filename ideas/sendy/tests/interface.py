@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real CLI/process + consuming-project setup acceptance test (includes a 60s wait).
 
-Run from anywhere: python3 tests/interface.py. Needs Go, make, flock, sha256sum.
+Run from anywhere: python3 tests/interface.py. Needs Go, make, flock, Bash, jq, sha256sum.
 Optional SENDY_COVERAGE_DIR records production binary coverage with go build -cover.
 All conversations and installations live in temporary HOME/project directories.
 """
@@ -17,6 +17,7 @@ import tempfile
 import time
 
 from regressions import broken_stdout, daily_cleanup, first_use, setup_diagnostics, special_templates, template_fields
+from file_roundtrip import file_roundtrip
 
 SOURCE = Path(__file__).resolve().parents[1]
 CHILDREN = []
@@ -121,6 +122,8 @@ def main():
         nested = project / "nested"
         nested.mkdir()
         assert b"project root" in cli("template", "validate", cwd=nested, code=1).stderr
+
+        file_roundtrip(binary, env)
 
         print("Exercising concurrent creation, exact text, blocking submissions and repeated rounds...", flush=True)
         with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
