@@ -104,6 +104,9 @@ func options(args []string, render bool) (messageOptions, error) {
 }
 
 func execute(args []string, in io.Reader, out io.Writer) (err error) {
+	if topic, requested := helpRequest(args); requested {
+		return writeHelp(topic, out)
+	}
 	started := time.Now()
 	cmd := ""
 	if len(args) > 0 {
