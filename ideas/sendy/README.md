@@ -139,6 +139,71 @@ that does not appear alone on a line in the message. JSON needs only its own JSO
 syntax; the sender performs no additional escaping for Sendy. Sendy treats JSON,
 code, and prose alike and does not parse message content.
 
+### Receiving a file by itself
+
+Use shell redirection to send an existing file and save the eventual reply:
+
+```bash
+# Child: send result.json, then stay blocked until the parent replies or closes.
+.tools/bin/sendy submit k1007 < result.json > next-task.txt
+```
+
+The parent receives submissions through `wait`, whose stdout is a JSON envelope.
+To save only the submitted file, decode the matching `message` string with `jq`:
+
+```bash
+# Parent: run in Bash, with jq installed.
+set -o pipefail
+.tools/bin/sendy wait k1007 --timeout 60 |
+  jq -e -j --arg id k1007 \
+    '.results[] | select(.id == $id) | .message' > received-result.json
+```
+
+`received-result.json` contains only the original file bytes, without the Sendy
+envelope or additional escaping. The filter selects the conversation by ID and
+also works with a batch wait. `jq -j` decodes the string without adding a newline;
+`-e` returns a nonzero exit code if that ID has no result, including when it is
+pending or closed. Bash's `pipefail` also makes a failed Sendy command fail the
+pipeline. Only use the received file after the pipeline succeeds: redirection
+can create or truncate it even when the command fails.
+
+If `wait` output was already saved to `envelope.json`, extract the file with:
+
+```bash
+jq -e -j --arg id k1007 \
+  '.results[] | select(.id == $id) | .message' envelope.json > received-result.json
+```
+
+To verify integrity, compare the SHA-256 checksums of the original and received
+files. When both paths are available locally:
+
+```bash
+sha256sum result.json received-result.json
+```
+
+The first column must match exactly. If the files are in separate workspaces,
+the sender runs `sha256sum result.json` and the receiver runs
+`sha256sum received-result.json`, then they compare those digests. Extract and
+verify the result before replying, because a reply retires it from future waits.
+
+The parent sends its next instruction using ordinary input redirection:
+
+```bash
+.tools/bin/sendy reply k1007 < instruction.txt
+```
+
+The child's blocked `submit` then writes the exact instruction bytes to
+`next-task.txt`; replies need no JSON extraction. A successful `submit` exits `0`.
+Closure exits `2` and leaves stdout empty, so it does not deliver an instruction
+file. The parent can also reply with `< received-result.json` to return the same
+file and verify a complete round trip.
+
+This preserves all bytes of nonempty UTF-8 files, including CRLF/LF line endings,
+trailing newlines, quotes, backslashes, and whitespace. Keep file contents in
+files and pipes: `jq -r` adds a newline, shell `$(...)` captures strip trailing
+newlines, and reconstructing a file from displayed text can change its contents.
+Empty files and invalid UTF-8 remain unsupported as direct message input.
+
 ## Commands
 
 ### `.tools/bin/sendy create COUNT`
@@ -242,6 +307,8 @@ All four fields are always present. Every requested ID occurs exactly once, in
 is `ready` exactly when `pending` is empty. JSON whitespace is not significant.
 Sendy serializes and escapes the messages; senders do not construct this envelope.
 Decoding a `message` string recovers the original submitted text.
+For a byte-exact standalone file, use the
+[file extraction commands above](#receiving-a-file-by-itself).
 
 Waiting does not consume results or change conversation state. Results that
 arrive before the wait count. Waiting again returns the same ready results until
@@ -521,6 +588,15 @@ Relevant build and test targets can depend on `sendy`, for example `test: sendy`
 before running their existing recipes. Use `make sendy` as the single setup target.
 Tests should create their own conversation IDs and close them afterward, without
 resetting state used by other sessions.
+
+## Testing
+
+Run `make test` from this directory. It runs race-enabled Go tests and the real
+CLI acceptance suite, including a one-minute timeout. In addition to the setup
+requirements, tests need Python 3, Bash, `jq`, and a C compiler for the race
+detector. The file round-trip test uses the Bash/`jq` recipe above, replies with
+the received file, and checks that the original, received, and returned files
+have identical bytes and `sha256sum` digests.
 
 ## Packaging and redistribution
 
