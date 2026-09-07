@@ -17,6 +17,7 @@ sequenceDiagram
   %% scenario: order confirmation
   %% selected view; omits: connection setup, order creation, other subscribers; omissions do not establish absence
   %% source: shop/service.py, shop/storage.py, shop/notifications.py
+  %% condition: any OrderConfirmed listeners registered before this inbox return normally.
   participant shop.service.OrderService
   participant shop.storage
   participant shop.notifications.ConfirmationInbox

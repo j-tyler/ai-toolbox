@@ -1,7 +1,7 @@
 # map
 # owns: order confirmation and synchronous confirmation-event delivery
 # entry point of: order confirmation (shop/README.md#order-confirmation)
-# event out: OrderConfirmed -> shop.notifications.ConfirmationInbox.on_order_confirmed (shop/notifications.py); in shop.service.OrderService.confirm; when the inbox is registered and the confirmation status update commits
+# event out: OrderConfirmed -> shop.notifications.ConfirmationInbox.on_order_confirmed (shop/notifications.py); in shop.service.OrderService.confirm; when the inbox is registered, the confirmation status update commits, and all earlier OrderConfirmed listeners return normally
 # end map
 
 import sqlite3

@@ -1,7 +1,7 @@
 # map
 # owns: confirmation inbox and its OrderConfirmed subscription
 # participates in: order confirmation (shop/README.md#order-confirmation)
-# event in: OrderConfirmed <- shop.service.OrderService.confirm (shop/service.py); in shop.notifications.ConfirmationInbox.on_order_confirmed; when the inbox is registered and the confirmation status update commits
+# event in: OrderConfirmed <- shop.service.OrderService.confirm (shop/service.py); in shop.notifications.ConfirmationInbox.on_order_confirmed; when the inbox is registered, the confirmation status update commits, and all earlier OrderConfirmed listeners return normally
 # end map
 
 from shop.models import Order

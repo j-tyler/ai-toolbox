@@ -26,6 +26,7 @@ sequenceDiagram
   %% scenario: order confirmation
   %% partial within: shop/, transport/, receipts/; left out: connection setup, order creation, other subscribers
   %% source: shop/service.py, shop/storage.py, shop/notifications.py
+  %% condition: any OrderConfirmed listeners registered before this inbox return normally.
   participant shop.service.OrderService
   participant shop.storage
   participant shop.notifications.ConfirmationInbox
@@ -110,7 +111,7 @@ shop/models.py: Owns order records and status values. The lifecycle combines gua
 
 shop/storage.py: Owns SQLite order storage and guarded status changes. confirm_order commits before returning to the service; the store lasts only for the connection's lifetime.
 
-shop/service.py: Owns order confirmation and synchronous confirmation-event delivery. With an inbox registered, a successful status-update commit precedes its OrderConfirmed delivery. A listener error at _publish leaves the order confirmed; another confirm fails the pending-status guard before delivery.
+shop/service.py: Owns order confirmation and synchronous confirmation-event delivery. After a successful status-update commit, _publish calls OrderConfirmed listeners in registration order. A registered inbox is reached only if all earlier listeners return normally. A listener error stops dispatch and leaves the order confirmed; another confirm fails the pending-status guard before delivery.
 
 shop/notifications.py: Owns confirmation inbox and its OrderConfirmed subscription. register_inbox connects OrderService.confirm to ConfirmationInbox.on_order_confirmed without the service importing the consumer; delivery is synchronous.
 

@@ -1,7 +1,7 @@
 --- a/shop/notifications.py
 +++ b/shop/notifications.py
 @@ -4,7 +4,7 @@
- # event in: OrderConfirmed <- shop.service.OrderService.confirm (shop/service.py); in shop.notifications.ConfirmationInbox.on_order_confirmed; when the inbox is registered and the confirmation status update commits
+ # event in: OrderConfirmed <- shop.service.OrderService.confirm (shop/service.py); in shop.notifications.ConfirmationInbox.on_order_confirmed; when the inbox is registered, the confirmation status update commits, and all earlier OrderConfirmed listeners return normally
  # end map
  
 -from shop.models import Order
