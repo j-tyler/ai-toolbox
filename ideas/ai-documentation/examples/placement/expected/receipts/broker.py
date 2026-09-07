@@ -1,5 +1,6 @@
 # map
 # owns: receipt queue acceptance and completion tracking
+# participates in: queued receipt (receipts/README.md#queued-receipt)
 # end map
 
 from dataclasses import dataclass

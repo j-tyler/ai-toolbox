@@ -148,8 +148,8 @@ On: the entry file. Pairs with: `participates in:` on every other participating 
 Means: this file participates in a kept sequence whose entry is elsewhere; the diagram is in the named Markdown section.
 Template: `participates in: <flow name> (<Markdown path>#<heading anchor>), <flow name> (<Markdown path>#<heading anchor>)`
 Example: `participates in: order cancellation (orders/README.md#order-cancellation), order placement (api/README.md#order-placement)`
-Write it when: a kept sequence diagram has a participant defined in this file that is not the entry point.
-Do not write it when: the participant is a queue, an external system, code outside the repository, or a file on the never-diagram list.
+Write it when: this file defines a participant or implements queue operations shown in a kept sequence, and the entry point is elsewhere.
+Do not write it for a queue or external system itself, code outside the repository, or a file on the never-diagram list. A source file implementing the shown queue operations still qualifies; merely naming or configuring the queue does not.
 On: each participating file. Pairs with: `entry point of:`.
 
 **`explained in:`**
@@ -441,7 +441,7 @@ Do not inventory direct calls and imports as edges; they are visible at the call
 
 Keep a sequence when it assembles ordering, handoffs, conditions, side effects, acknowledgment, or failure consequences scattered across functions or files. A single directory or process is not disqualifying; an obvious call chain remains insufficient. Establish any claimed execution boundary from code; an asynchronous arrow alone does not prove a process or service boundary. Preserve a coherent scenario under the copying rules in owner-local documentation's `## Flows` or its linked subject document.
 
-The entry file defines the first eligible in-repository participant to send a call or asynchronous message, not a return. It gets `entry point of:`; every other eligible participating source file gets `participates in:`. Each names the actual Markdown path and heading anchor. A queue, external system, or excluded file gets no map entry; the diagram still shows the true first sender. Entry selection does not override the home rules.
+The entry file defines the first eligible in-repository participant to send a call or asynchronous message, not a return. It gets `entry point of:`; every other eligible participating source file gets `participates in:`. Each names the actual Markdown path and heading anchor. A queue or external system itself, or an excluded file, gets no map entry; this does not exclude eligible source files implementing the shown queue operations. The diagram still shows the true first sender. Entry selection does not override the home rules.
 
 Keep useful `Note over` lines in the full sequence. A note identifying a local hazard also becomes a comment above that operation when it matters to someone editing there. An ordering consequence attaches to the affected send or write. A retry-limit note attaches to the enforcing line; if the verified retry is unbounded and no one line owns the risk, use a file-wide `hazard:`. This limited duplication preserves local editing context without copying the full explanation.
 
