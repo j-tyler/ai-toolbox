@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,7 @@ type parameter struct{ key, value string }
 
 func readParamsFile(path string) ([]parameter, error) {
 	invalid := func(err error) ([]parameter, error) {
-		return nil, advise(fmt.Errorf("invalid file %q: %w", path, err), "Check the parameter file path, permissions, and content. Supply a UTF-8 JSON object of strings or dotenv assignments; see sendy help template render. Use --params-file PATH once, without --set.")
+		return nil, advise(fmt.Errorf("invalid file %q: %w", path, err), "Check the parameter file path, permissions, and content. Supply a UTF-8 JSON object with string, object, or array values, or dotenv assignments; see sendy help template render. Use --params-file PATH once, without --set.")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -52,7 +53,7 @@ func jsonParameters(source string) ([]parameter, error) {
 		return nil, err
 	}
 	if opening != json.Delim('{') {
-		return nil, errors.New("JSON must be a flat object with string values")
+		return nil, errors.New("JSON must be a top-level object with string, object, or array values")
 	}
 	parameters := []parameter{}
 	for d.More() {
@@ -64,13 +65,21 @@ func jsonParameters(source string) ([]parameter, error) {
 		if err = d.Decode(&raw); err != nil {
 			return nil, err
 		}
-		// Unmarshalling null directly into a string would silently accept it.
-		if len(raw) == 0 || raw[0] != '"' {
-			return nil, fmt.Errorf("JSON field %q must have a string value", key)
-		}
 		var value string
-		if err = json.Unmarshal(raw, &value); err != nil {
-			return nil, err
+		switch raw[0] {
+		case '"':
+			if err = json.Unmarshal(raw, &value); err != nil {
+				return nil, err
+			}
+		case '{', '[':
+			// Compact raw JSON so nested numbers and string escapes stay exact.
+			var compact bytes.Buffer
+			if err = json.Compact(&compact, raw); err != nil {
+				return nil, err
+			}
+			value = compact.String()
+		default:
+			return nil, fmt.Errorf("JSON field %q must have a string, object, or array value", key)
 		}
 		parameters = append(parameters, parameter{key.(string), value})
 	}

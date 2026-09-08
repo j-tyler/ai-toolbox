@@ -33,8 +33,15 @@ def params_files(binary, env):
                     ("reply", "a1000", "--template", "fields"))
         invalid = (
             b'{"name":"x",}', b'{\nname=x\nvalue=y', b'[]', b'"name=x"',
-            b'null', b'true', b'123', b'{"name":null}', b'{"name":false}',
-            b'{"name":42}', b'{"name":{}}', b'{"name":[]}',
+            b'null', b'true', b'123', b'{"name":null,"value":[]}',
+            b'{"name":false,"value":{}}', b'{"name":true,"value":"x"}',
+            b'{"name":42,"value":"x"}', b'{"name":{}}', b'{"name":[]}',
+            b'{"name":{"inner":[1,]}}', b'{"name":[{"inner":}]}',
+            b'{"name":[{"inner":true}]',
+            b'{"name":"x","na\\u006de":{"inner":1},"value":[]}',
+            b'{"name":{},"name":[],"value":"z"}',
+            b'{"name":[],"name":"x","extra":{}}',
+            b'{"name=x":{"inner":1},"value":[]}',
             b'{"name":"x"} {}', b'{"name":"x","name":"y","value":"z"}',
             b'{"name=x":"y","value":"z"}', b'name=x\nname=y\nvalue=z',
             b'name=x\nextra=y', b'name', b'name="unclosed', b'name="x" trailing',
@@ -47,6 +54,12 @@ def params_files(binary, env):
                 for prefix in prefixes:
                     failed = cli(*prefix, "--params-file", str(params), code=1)
                     assert b"invalid file" in failed.stderr, failed.stderr
+                    if b'na\\u006de' in content or b'"name":{},"name"' in content:
+                        assert b"Duplicate fields: name" in failed.stderr, failed.stderr
+                    if b'"extra":{}' in content:
+                        for detail in (b"Missing fields: value", b"Unexpected fields: extra",
+                                       b"Duplicate fields: name"):
+                            assert detail in failed.stderr, failed.stderr
             for prefix in prefixes:
                 for flags in (("--params-file",), ("--params-file", ""),
                               ("--params-file", "params", "--params-file", "params"),
@@ -84,6 +97,20 @@ def params_files(binary, env):
                               ("--help", json_content), ("-h", dotenv_content), ("-", json_content)):
             (project / path).write_bytes(content)
             assert cli("template", "render", "fields", "--params-file", path).stdout == expected
+
+        nested_content = r'''{
+  "name": {"items": ["世界", 9007199254740993, -0, 1.2300e+40, true, false, null], "meta": {}},
+  "value": [{"escaped": "quote: \" slash: \\ newline: \n unicode: \u4e16", "literal": "{{.name}} <>&"}, [], {"key": 1, "key": 2}]
+}'''.encode()
+        nested_expected = r'''[{"items":["世界",9007199254740993,-0,1.2300e+40,true,false,null],"meta":{}}]|[[{"escaped":"quote: \" slash: \\ newline: \n unicode: \u4e16","literal":"{{.name}} <>&"},[],{"key":1,"key":2}]]'''.encode()
+        mixed_expected = '[Alice\n世界]|[{"deep":[[{"ready":true}]]}]'.encode()
+        for path, content, rendered in (
+            ("nested", nested_content, nested_expected),
+            ("empty-collections", b'{"name": {}, "value": []}', b'[{}]|[[]]'),
+            ("mixed", '{"name":"Alice\\n世界","value":{"deep": [[{"ready": true}]]}}'.encode(), mixed_expected),
+        ):
+            (project / path).write_bytes(content)
+            assert cli("template", "render", "fields", "--params-file", path).stdout == rendered
         assert not (project / "sentinel").exists(), "parameter text executed"
         assert not (project / "home").exists(), "render opened storage"
 
@@ -96,14 +123,20 @@ def params_files(binary, env):
             before = state()
             check_failures()
             assert state() == before, "invalid input mutated a pending conversation"
-            for submit_file, reply_file in (("json.env", "dotenv.json"), ("dotenv.json", "json.env")):
+            for submit_file, reply_file, rendered in (
+                ("json.env", "dotenv.json", expected),
+                ("dotenv.json", "json.env", expected),
+                ("nested", "nested", nested_expected),
+                ("empty-collections", "empty-collections", b'[{}]|[[]]'),
+                ("mixed", "mixed", mixed_expected),
+            ):
                 p = subprocess.Popen([str(binary), "submit", "a1000", "--params-file", submit_file,
                                       "--template", "fields"], cwd=project, env=params_env,
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 try:
                     # stdin stays open: template mode must not read it before submitting.
                     ready = json.loads(cli("wait", "a1000", "--timeout", "1").stdout)
-                    assert ready["results"] == [{"id": "a1000", "message": expected.decode()}], ready
+                    assert ready["results"] == [{"id": "a1000", "message": rendered.decode()}], ready
                     assert p.poll() is None, "submit did not block for a reply"
                     before = state()
                     check_failures()
@@ -111,7 +144,7 @@ def params_files(binary, env):
                     assert p.poll() is None, "invalid reply released submit"
                     assert cli("reply", "a1000", "--template", "fields", "--params-file", reply_file).stdout == b""
                     out, err = p.communicate(timeout=5)
-                    assert p.returncode == 0 and out == expected and not err, (p.returncode, out, err)
+                    assert p.returncode == 0 and out == rendered and not err, (p.returncode, out, err)
                 finally:
                     if p.poll() is None:
                         p.kill()

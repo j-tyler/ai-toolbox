@@ -474,15 +474,33 @@ CR and LF, a first character of `{`, `[` or `"` selects strict JSON parsing, wit
 no fallback on failure. All other content is parsed as dotenv; JSON scalars such
 as `true`, `null`, or `123` also fail because they are not assignments.
 
-JSON must contain exactly one flat object whose values are all strings:
+JSON must contain exactly one top-level object whose parameter values are
+strings, objects, or arrays:
 
 ```json
 {"filename": "design notes.md", "name": "Alice"}
 ```
 
-Nested objects, arrays, numbers, booleans, `null`, trailing content, invalid JSON,
-and duplicate keys (including escaped spellings of the same key) are errors.
-JSON string escapes are decoded; values are then substituted literally.
+String values have their JSON escapes decoded. Object and array values become
+compact JSON text, then are inserted literally without surrounding string quotes
+or additional escaping. For example, with a template `Data: {{.data}}`, this file:
+
+```json
+{"data": {"items": ["世界", 9007199254740993, true, null], "meta": {}}}
+```
+
+renders `Data: {"items":["世界",9007199254740993,true,null],"meta":{}}`.
+Compaction removes whitespace outside strings and preserves number precision,
+number spelling, string escapes, and member order. Nested objects and arrays may
+contain any JSON values. Empty object and array parameters render as `{}` and
+`[]`. These are text values for the existing simple fields; there is no flattening
+or nested field syntax such as `{{.data.items}}`, and inserted text is not rendered
+again as a template.
+
+Standalone number, boolean, or `null` parameter values remain errors; put them
+inside an object/array or quote them as strings. Trailing content, invalid JSON,
+and duplicate top-level keys (including escaped spellings of the same key) are
+errors. Nested object keys are preserved as supplied, including duplicate keys.
 
 The dotenv format is a deliberately small, deterministic subset, not a shell
 script. This file supplies the same fields:
