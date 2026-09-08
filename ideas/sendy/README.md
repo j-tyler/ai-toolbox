@@ -385,6 +385,62 @@ model does not have to regenerate the fixed prompt; the receiving model still
 reads the completed message. Using a template does not change when a command
 blocks or returns.
 
+### Quick start: templates and parameter files
+
+The template holds the reusable text; the parameter file supplies the values for
+one rendering. Each parameter name matches a placeholder: `filename` supplies
+`{{.filename}}`.
+
+From your project root, create `.sendy/templates/review.txt` (create the directory
+if needed):
+
+```text
+You are reviewing {{.filename}}.
+Your reviewer name is {{.name}}.
+
+Check correctness, identify missing cases, and explain your findings.
+```
+
+Save the values in a separate file named `review-params`:
+
+```json
+{"filename": "server.go", "name": "Alice"}
+```
+
+Preview the completed message without sending it:
+
+```bash
+.tools/bin/sendy template render review --params-file review-params
+```
+
+This prints the template with `server.go` and `Alice` in place of its placeholders.
+To send that same message, use the appropriate command for your existing
+conversation ID:
+
+```bash
+# Parent: reply to a waiting child and return immediately.
+.tools/bin/sendy reply k1007 --template review --params-file review-params
+
+# Child: submit to the parent and wait for a reply or closure.
+.tools/bin/sendy submit k1007 --template review --params-file review-params
+```
+
+Use `review` as the template name, without its `.txt` suffix. The parameter file
+may have any filename; Sendy detects JSON or dotenv from its contents. The same
+values can instead be written as dotenv:
+
+```dotenv
+filename=server.go
+name=Alice
+```
+
+Supply every template field exactly once, with no extra fields. Missing,
+unexpected, or duplicate fields cause an error before anything is sent. Use
+`--params-file` or repeated `--set KEY=VALUE` options, never both. Run
+`.tools/bin/sendy template fields review` to list the required parameter names.
+See [Parameter files](#parameter-files) for quoting, multiline text, and JSON
+object/array values.
+
 ### Project files are the registration
 
 Run template commands and template-based submissions or replies from the project
@@ -398,15 +454,6 @@ Names contain lowercase ASCII letters, digits, hyphens, or underscores and start
 or digit. Template names are case-sensitive. Other files and subdirectories are
 not templates. There is no separate `template add` or registration command:
 checking a file into this directory makes it available to the project.
-
-For example, `.sendy/templates/review.txt` could contain:
-
-```text
-You are reviewing {{.filename}}.
-Your reviewer name is {{.name}}.
-
-Check correctness, identify missing cases, and explain your findings.
-```
 
 Use Go's standard [`text/template`](https://pkg.go.dev/text/template) syntax,
 restricted to plain text and simple named substitutions such as `{{.filename}}`.
@@ -459,13 +506,9 @@ waiting. Editing a template does not change messages already sent.
 
 ### Parameter files
 
-Use a file to keep values out of command-line quoting:
-
-```bash
-.tools/bin/sendy template render review --params-file review.env > prompt.txt
-.tools/bin/sendy reply k1007 --template review --params-file review.json
-.tools/bin/sendy submit m1002 --template completion --params-file completion-params
-```
+`--params-file PATH` loads the values used by `template render`, `submit`, or
+`reply`, as shown in the [quick start](#quick-start-templates-and-parameter-files).
+Choose JSON or dotenv using the rules below.
 
 Paths are relative to the current directory unless absolute. Files must be regular
 UTF-8 text files (symlinks to regular files are accepted). There are no filename or
@@ -503,7 +546,7 @@ and duplicate top-level keys (including escaped spellings of the same key) are
 errors. Nested object keys are preserved as supplied, including duplicate keys.
 
 The dotenv format is a deliberately small, deterministic subset, not a shell
-script. This file supplies the same fields:
+script. For the `review` template, a dotenv parameter file can contain:
 
 ```dotenv
 # Review assignment
