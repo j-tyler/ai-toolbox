@@ -18,6 +18,7 @@ import time
 
 from regressions import broken_stdout, daily_cleanup, first_use, setup_diagnostics, special_templates, template_fields
 from file_roundtrip import file_roundtrip
+from params_files import params_files
 
 SOURCE = Path(__file__).resolve().parents[1]
 CHILDREN = []
@@ -93,6 +94,7 @@ def main():
         broken_stdout(binary, env)
         special_templates(binary, env)
         template_fields(binary, env)
+        params_files(binary, env)
         daily_cleanup(binary, env)
         setup_diagnostics(SOURCE, env)
         for name, expected in (("review", ["filename", "name"]), ("completion", ["filename"]), ("staged-review", [])):

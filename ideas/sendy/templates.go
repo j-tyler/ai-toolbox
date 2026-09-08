@@ -113,21 +113,36 @@ func namedTemplate(name string) (*template.Template, []string, error) {
 	}
 	return loadTemplate(filepath.Join(dir, name+".txt"))
 }
-func renderTemplate(name string, sets []string) (string, error) {
+func renderTemplate(name string, sets []string, paramsFile string) (string, error) {
 	t, expected, err := namedTemplate(name)
 	if err != nil {
 		return "", err
 	}
-	values := map[string]string{}
-	duplicates := map[string]bool{}
+	parameters := []parameter{}
 	malformed := []string{}
 	for _, set := range sets {
 		key, value, ok := strings.Cut(set, "=")
-		if !ok || !fieldPattern.MatchString(key) {
+		if !ok {
 			malformed = append(malformed, set)
 			continue
 		}
-		if _, ok = values[key]; ok {
+		parameters = append(parameters, parameter{key, value})
+	}
+	if paramsFile != "" {
+		parameters, err = readParamsFile(paramsFile)
+		if err != nil {
+			return "", err
+		}
+	}
+	values := map[string]string{}
+	duplicates := map[string]bool{}
+	for _, parameter := range parameters {
+		key, value := parameter.key, parameter.value
+		if !fieldPattern.MatchString(key) {
+			malformed = append(malformed, key+"="+value)
+			continue
+		}
+		if _, ok := values[key]; ok {
 			duplicates[key] = true
 		}
 		values[key] = value
@@ -155,7 +170,10 @@ func renderTemplate(name string, sets []string) (string, error) {
 		if len(malformed) > 0 {
 			detail += fmt.Sprintf("\nMalformed assignments (expected KEY=VALUE with a valid field name): %q", malformed)
 		}
-		return "", advise(errors.New(detail), "Supply each expected field exactly once using --set KEY=VALUE. Correct missing, unexpected, duplicate, or malformed assignments listed above, then retry. Use sendy template fields "+name+" to list the required fields.")
+		if paramsFile != "" {
+			detail = fmt.Sprintf("invalid file %q: %s", paramsFile, detail)
+		}
+		return "", advise(errors.New(detail), "Supply each expected field exactly once using --set KEY=VALUE or --params-file PATH (never both). Correct missing, unexpected, duplicate, or malformed assignments listed above, then retry. Use sendy template fields "+name+" to list the required fields.")
 	}
 	var out bytes.Buffer
 	if err = t.Execute(&out, values); err != nil {

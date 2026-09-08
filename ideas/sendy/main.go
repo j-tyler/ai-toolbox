@@ -69,15 +69,16 @@ func validMessage(message string) error {
 }
 
 type messageOptions struct {
-	name string
-	sets []string
+	name       string
+	sets       []string
+	paramsFile string
 }
 
 func options(args []string, render bool) (messageOptions, error) {
 	o := messageOptions{}
 	for len(args) > 0 {
 		flag := args[0]
-		if flag != "--template" && flag != "--set" {
+		if flag != "--template" && flag != "--set" && flag != "--params-file" {
 			return o, fmt.Errorf("unexpected argument %q", flag)
 		}
 		if len(args) < 2 {
@@ -93,9 +94,23 @@ func options(args []string, render bool) (messageOptions, error) {
 				return o, errors.New("--template requires a name")
 			}
 			o.name = value
+		} else if flag == "--params-file" {
+			if o.paramsFile != "" {
+				return o, errors.New("--params-file must occur once")
+			}
+			if value == "" {
+				return o, errors.New("--params-file requires a path")
+			}
+			o.paramsFile = value
 		} else {
 			o.sets = append(o.sets, value)
 		}
+	}
+	if o.paramsFile != "" && len(o.sets) > 0 {
+		return o, errors.New("--set and --params-file cannot be mixed")
+	}
+	if !render && o.name == "" && o.paramsFile != "" {
+		return o, errors.New("--params-file requires --template")
 	}
 	if !render && o.name == "" && len(o.sets) > 0 {
 		return o, errors.New("--set requires --template")
@@ -167,7 +182,7 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 				return err
 			}
 			recovery = templateRecovery
-			message, err := renderTemplate(args[1], o.sets)
+			message, err := renderTemplate(args[1], o.sets, o.paramsFile)
 			if err != nil {
 				return err
 			}
@@ -176,7 +191,7 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 			_, err = io.WriteString(out, message)
 			return err
 		}
-		return errors.New("usage: sendy template render NAME [--set KEY=VALUE ...] | template fields NAME | template validate")
+		return errors.New("usage: sendy template render NAME [--set KEY=VALUE ... | --params-file PATH] | template fields NAME | template validate")
 	}
 	var count int
 	var message string
@@ -192,7 +207,7 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 		}
 	case "submit", "reply":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: sendy %s ID [--template NAME [--set KEY=VALUE ...]]", cmd)
+			return fmt.Errorf("usage: sendy %s ID [--template NAME [--set KEY=VALUE ... | --params-file PATH]]", cmd)
 		}
 		ids = args[:1]
 		if err = identifiers(ids); err != nil {
@@ -204,7 +219,7 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 		}
 		if o.name != "" {
 			recovery = templateRecovery
-			message, err = renderTemplate(o.name, o.sets)
+			message, err = renderTemplate(o.name, o.sets, o.paramsFile)
 		} else {
 			recovery = "Check that the stdin file or pipe can be read completely, then retry with nonempty UTF-8 text. Alternatively use --template NAME."
 			var b []byte
