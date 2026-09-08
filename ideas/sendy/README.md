@@ -387,9 +387,9 @@ blocks or returns.
 
 ### Quick start: templates and parameter files
 
-The template holds the reusable text; the parameter file supplies the values for
-one rendering. Each parameter name matches a placeholder: `filename` supplies
-`{{.filename}}`.
+The template holds the reusable text; a shared parameter file can collect values
+for several templates. Each template uses its own fields and ignores the rest:
+`filename` supplies `{{.filename}}`.
 
 From your project root, create `.sendy/templates/review.txt` (create the directory
 if needed):
@@ -401,28 +401,35 @@ Your reviewer name is {{.name}}.
 Check correctness, identify missing cases, and explain your findings.
 ```
 
-Save the values in a separate file named `review-params`:
+Also create `.sendy/templates/handoff.txt`:
+
+```text
+Next task: {{.next_task}}
+```
+
+Save the values for both templates in a separate file named `shared-params`:
 
 ```json
-{"filename": "server.go", "name": "Alice"}
+{"filename": "server.go", "name": "Alice", "next_task": "Run the tests"}
 ```
 
-Preview the completed message without sending it:
+Preview both completed messages using the same file, without filtering it:
 
 ```bash
-.tools/bin/sendy template render review --params-file review-params
+.tools/bin/sendy template render review --params-file shared-params
+.tools/bin/sendy template render handoff --params-file shared-params
 ```
 
-This prints the template with `server.go` and `Alice` in place of its placeholders.
-To send that same message, use the appropriate command for your existing
-conversation ID:
+The first command prints the review with `server.go` and `Alice`; the second
+prints `Next task: Run the tests`. To send the review, use the appropriate command
+for your existing conversation ID:
 
 ```bash
 # Parent: reply to a waiting child and return immediately.
-.tools/bin/sendy reply k1007 --template review --params-file review-params
+.tools/bin/sendy reply k1007 --template review --params-file shared-params
 
 # Child: submit to the parent and wait for a reply or closure.
-.tools/bin/sendy submit k1007 --template review --params-file review-params
+.tools/bin/sendy submit k1007 --template review --params-file shared-params
 ```
 
 Use `review` as the template name, without its `.txt` suffix. The parameter file
@@ -432,11 +439,14 @@ values can instead be written as dotenv:
 ```dotenv
 filename=server.go
 name=Alice
+next_task=Run the tests
 ```
 
-Supply every template field exactly once, with no extra fields. Missing,
-unexpected, or duplicate fields cause an error before anything is sent. Use
-`--params-file` or repeated `--set KEY=VALUE` options, never both. Run
+The same two render commands work with this dotenv content in `shared-params`.
+Supply every template field exactly once. Extra file fields are ignored, while
+missing fields, duplicate keys, and malformed files cause an error before
+anything is sent. Explicit `--set` assignments still reject unexpected fields.
+Use `--params-file` or repeated `--set KEY=VALUE` options, never both. Run
 `.tools/bin/sendy template fields review` to list the required parameter names.
 See [Parameter files](#parameter-files) for quoting, multiline text, and JSON
 object/array values.
@@ -491,7 +501,8 @@ they are not built into Sendy.
 exactly one `--params-file PATH`; mixing them, in either order, is an error. Both
 parameter options are valid only with template mode or `template render`. Split
 each `KEY=VALUE` at the first equals sign. Duplicate
-keys, malformed assignments, and invalid field names are errors. Empty values
+keys, malformed assignments, and invalid field names are errors. Unexpected
+`--set` fields are errors; extra file fields are ignored. Empty values
 are permitted when explicitly supplied as `--set name=`; omitted fields are not.
 There are no automatic fields, including the conversation ID. If a prompt needs
 an ID, give it a placeholder and pass the value explicitly.
@@ -508,7 +519,11 @@ waiting. Editing a template does not change messages already sent.
 
 `--params-file PATH` loads the values used by `template render`, `submit`, or
 `reply`, as shown in the [quick start](#quick-start-templates-and-parameter-files).
-Choose JSON or dotenv using the rules below.
+Choose JSON or dotenv using the rules below. One file can accumulate parameters
+for multiple templates: every field used by the selected template is required,
+and extra fields are ignored. Fixed-text templates also accept populated valid
+files. All entries, including unused ones, must still have valid field names,
+unique keys, and values allowed by the file format.
 
 Paths are relative to the current directory unless absolute. Files must be regular
 UTF-8 text files (symlinks to regular files are accepted). There are no filename or
@@ -582,17 +597,18 @@ one. Every required field must be supplied; Sendy produces no partial rendering
 when any field is missing. The final rendered message must still be nonempty.
 
 Unreadable or malformed files report `invalid file`, the path, and a reason
-(dotenv syntax errors include the starting line number). Field validation still
-lists missing, unexpected, duplicate, and malformed assignments together. All
-file, field, and render validation finishes before conversation storage is
+(dotenv syntax errors include the starting line number). File field validation
+lists missing fields, duplicate keys, and malformed assignments together; extra
+file fields are not reported as unexpected. All file, field, and render validation
+finishes before conversation storage is
 opened, messages are sent, or `submit` blocks. Template mode still ignores stdin;
 `--params-file -` means a file literally named `-`, not standard input.
 
 ### Errors that let an agent correct itself
 
-Sendy reports all missing, unexpected, and duplicate fields together, followed by
-the fields the template expects. Template authors do not maintain a separate
-field definition.
+Sendy reports all missing and duplicate fields together, plus unexpected fields
+when using `--set`, followed by the fields the template expects. Extra file
+fields are ignored. Template authors do not maintain a separate field definition.
 
 For `review` with `--set filenmae=server.go --set name=Alice`:
 
@@ -603,7 +619,7 @@ Unexpected fields: filenmae
 Duplicate fields: (none)
 Expected fields: filename, name
 No message was sent.
-Supply each expected field exactly once using --set KEY=VALUE or --params-file PATH (never both). Correct missing, unexpected, duplicate, or malformed assignments listed above, then retry. Use sendy template fields review to list the required fields.
+Supply each expected field exactly once using --set KEY=VALUE or --params-file PATH (never both). Correct missing, duplicate, or malformed assignments and remove unexpected --set fields; extra file fields are ignored. Use sendy template fields review to list the required fields, then retry.
 ```
 
 Print diagnostics on stderr, leave stdout empty, exit `1`, and leave conversation

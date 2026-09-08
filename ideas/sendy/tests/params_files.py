@@ -16,6 +16,7 @@ def params_files(binary, env):
         (templates / "fields.txt").write_text("[{{.name}}]|[{{.value}}]")
         (templates / "plain.txt").write_text("fixed")
         (templates / "empty.txt").write_text("{{.name}}")
+        (templates / "next.txt").write_text("Next: {{.task}}")
         params = project / "params"
 
         def cli(*args, code=0):
@@ -47,6 +48,15 @@ def params_files(binary, env):
             b'name=x\nextra=y', b'name', b'name="unclosed', b'name="x" trailing',
             b'name="\\q"', b'name=\xff', b'\xef\xbb\xbfname=x', b'name=x\rvalue=y',
         )
+        invalid_extras = (
+            (b'{"name":"x","value":"y","extra":{},"extra":[]}', b"Duplicate fields: extra"),
+            (b'{"name":"x","value":"y","extra":null}', b"string, object, or array value"),
+            (b'{"name":"x","value":"y","extra":[1,]}', b"invalid file"),
+            (b'{"name":"x","value":"y","bad-key":{}}', b"Malformed assignments"),
+            (b'name=x\nvalue=y\nextra=a\nextra=b', b"Duplicate fields: extra"),
+            (b'name=x\nvalue=y\nbad-key=z', b"Malformed assignments"),
+            (b'name=x\nvalue=y\nextra="unclosed', b"unterminated"),
+        )
 
         def check_failures():
             for content in invalid:
@@ -57,9 +67,22 @@ def params_files(binary, env):
                     if b'na\\u006de' in content or b'"name":{},"name"' in content:
                         assert b"Duplicate fields: name" in failed.stderr, failed.stderr
                     if b'"extra":{}' in content:
-                        for detail in (b"Missing fields: value", b"Unexpected fields: extra",
+                        for detail in (b"Missing fields: value", b"Unexpected fields: (none)",
                                        b"Duplicate fields: name"):
                             assert detail in failed.stderr, failed.stderr
+                    if content == b'name=x\nextra=y':
+                        assert b"Missing fields: value\nUnexpected fields: (none)" in failed.stderr, failed.stderr
+            for content, detail in invalid_extras:
+                params.write_bytes(content)
+                for template in ("fields", "plain"):
+                    for prefix in (("template", "render", template),
+                                   ("submit", "a1000", "--template", template),
+                                   ("reply", "a1000", "--template", template)):
+                        failed = cli(*prefix, "--params-file", str(params), code=1)
+                        assert b"invalid file" in failed.stderr and detail in failed.stderr, failed.stderr
+            for prefix in prefixes:
+                failed = cli(*prefix, "--set", "name=x", "--set", "value=y", "--set", "extra=z", code=1)
+                assert b"Missing fields: (none)\nUnexpected fields: extra" in failed.stderr, failed.stderr
             for prefix in prefixes:
                 for flags in (("--params-file",), ("--params-file", ""),
                               ("--params-file", "params", "--params-file", "params"),
@@ -111,6 +134,13 @@ def params_files(binary, env):
         ):
             (project / path).write_bytes(content)
             assert cli("template", "render", "fields", "--params-file", path).stdout == rendered
+        for path, content in (
+            ("shared.json", b'{"name":"Alice","value":"","task":"Review","metadata":{"ready":true},"items":[1,null]}'),
+            ("shared.env", b'name=Alice\nvalue=\ntask=Review\nmetadata=unused\nitems=unused'),
+        ):
+            (project / path).write_bytes(content)
+            for template, rendered in (("fields", b"[Alice]|[]"), ("next", b"Next: Review"), ("plain", b"fixed")):
+                assert cli("template", "render", template, "--params-file", path).stdout == rendered
         assert not (project / "sentinel").exists(), "parameter text executed"
         assert not (project / "home").exists(), "render opened storage"
 
@@ -123,15 +153,19 @@ def params_files(binary, env):
             before = state()
             check_failures()
             assert state() == before, "invalid input mutated a pending conversation"
-            for submit_file, reply_file, rendered in (
-                ("json.env", "dotenv.json", expected),
-                ("dotenv.json", "json.env", expected),
-                ("nested", "nested", nested_expected),
-                ("empty-collections", "empty-collections", b'[{}]|[[]]'),
-                ("mixed", "mixed", mixed_expected),
+            for submit_file, reply_file, submit_template, reply_template, rendered, reply in (
+                ("json.env", "dotenv.json", "fields", "fields", expected, expected),
+                ("dotenv.json", "json.env", "fields", "fields", expected, expected),
+                ("nested", "nested", "fields", "fields", nested_expected, nested_expected),
+                ("empty-collections", "empty-collections", "fields", "fields", b'[{}]|[[]]', b'[{}]|[[]]'),
+                ("mixed", "mixed", "fields", "fields", mixed_expected, mixed_expected),
+                ("shared.json", "shared.json", "fields", "next", b"[Alice]|[]", b"Next: Review"),
+                ("shared.env", "shared.env", "fields", "next", b"[Alice]|[]", b"Next: Review"),
+                ("shared.json", "shared.json", "plain", "plain", b"fixed", b"fixed"),
+                ("shared.env", "shared.env", "plain", "plain", b"fixed", b"fixed"),
             ):
                 p = subprocess.Popen([str(binary), "submit", "a1000", "--params-file", submit_file,
-                                      "--template", "fields"], cwd=project, env=params_env,
+                                      "--template", submit_template], cwd=project, env=params_env,
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 try:
                     # stdin stays open: template mode must not read it before submitting.
@@ -142,9 +176,9 @@ def params_files(binary, env):
                     check_failures()
                     assert state() == before, "invalid input mutated an outstanding result"
                     assert p.poll() is None, "invalid reply released submit"
-                    assert cli("reply", "a1000", "--template", "fields", "--params-file", reply_file).stdout == b""
+                    assert cli("reply", "a1000", "--template", reply_template, "--params-file", reply_file).stdout == b""
                     out, err = p.communicate(timeout=5)
-                    assert p.returncode == 0 and out == rendered and not err, (p.returncode, out, err)
+                    assert p.returncode == 0 and out == reply and not err, (p.returncode, out, err)
                 finally:
                     if p.poll() is None:
                         p.kill()

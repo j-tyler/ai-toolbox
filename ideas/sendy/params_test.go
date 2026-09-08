@@ -13,6 +13,7 @@ func TestParamsFileRendering(t *testing.T) {
 	home := filepath.Join(dir, "unused-home")
 	t.Setenv("HOME", home)
 	put(t, ".sendy/templates/fields.txt", "[{{.name}}]|[{{.value}}]")
+	put(t, ".sendy/templates/next.txt", "Next: {{.task}}")
 	put(t, ".sendy/templates/plain.txt", "fixed text")
 	cases := []struct{ name, content, want string }{
 		{"collections", `{
@@ -37,6 +38,19 @@ func TestParamsFileRendering(t *testing.T) {
 			code := run([]string{"template", "render", "fields", "--params-file", tc.name}, brokenIO{}, &out, &diag)
 			if code != 0 || out.String() != tc.want || diag.Len() != 0 {
 				t.Fatalf("(%d, %q, %q), want %q", code, out.String(), diag.String(), tc.want)
+			}
+		})
+	}
+	for _, tc := range []struct{ name, content string }{
+		{"shared-json", `{"name":"Alice","value":"","task":"Review","metadata":{"ready":true},"items":[1,null]}`},
+		{"shared-dotenv", "name=Alice\nvalue=\ntask=Review\nmetadata='unused'\nitems=unused"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			put(t, tc.name, tc.content)
+			for name, want := range map[string]string{"fields": "[Alice]|[]", "next": "Next: Review", "plain": "fixed text"} {
+				if got := mustCall(t, "", "template", "render", name, "--params-file", tc.name); got != want {
+					t.Fatalf("%s: got %q, want %q", name, got, want)
+				}
 			}
 		})
 	}
@@ -104,13 +118,21 @@ func TestInvalidParamsFiles(t *testing.T) {
 		{`{"name":"x","na\u006de":"y","value":"z"}`, "Duplicate fields: name"},
 		{`{"name":"x","na\u006de":{"inner":1},"value":[]}`, "Duplicate fields: name"},
 		{`{"name":{},"name":[],"value":"z"}`, "Duplicate fields: name"},
-		{`{"name":[],"name":"x","extra":{}}`, "Missing fields: value\nUnexpected fields: extra\nDuplicate fields: name"},
+		{`{"name":[],"name":"x","extra":{}}`, "Missing fields: value\nUnexpected fields: (none)\nDuplicate fields: name"},
+		{`{"name":"x","extra":[]}`, "Missing fields: value\nUnexpected fields: (none)"},
+		{`{"name":"x","value":"y","extra":{},"extra":[]}`, "Duplicate fields: extra"},
+		{`{"name":"x","value":"y","extra":null}`, "string, object, or array value"},
+		{`{"name":"x","value":"y","extra":[1,]}`, "invalid file"},
+		{`{"name":"x","value":"y","bad-key":{}}`, "Malformed assignments"},
 		{`{"name=x":{"inner":1},"value":[]}`, "Malformed assignments"},
 		{`{"name=x":"y","value":"z"}`, "Malformed assignments"},
 		{`{"1name":"x","value":"z"}`, "Malformed assignments"},
 		{"name=x\nname=y\nvalue=z", "Duplicate fields: name"},
 		{"name=x\nexport name=y\nvalue=z", "Duplicate fields: name"},
-		{"name=x\nextra=z", "Missing fields: value\nUnexpected fields: extra"},
+		{"name=x\nextra=z", "Missing fields: value\nUnexpected fields: (none)"},
+		{"name=x\nvalue=y\nextra=a\nextra=b", "Duplicate fields: extra"},
+		{"name=x\nvalue=y\nbad-key=z", "Malformed assignments"},
+		{"name=x\nvalue=y\nextra='unclosed", "unterminated"},
 		{"1name=x\nvalue=y", "Malformed assignments"},
 		{"name\nvalue=y", "dotenv line 1"},
 		{"name='unclosed\nvalue=y", "unterminated"},
@@ -150,6 +172,29 @@ func TestInvalidParamsFiles(t *testing.T) {
 	code, out, diag := call(t, "", "submit", "a1000", "--template", "empty", "--params-file", "parameters")
 	if code != 1 || out != "" || !strings.Contains(diag, "message must not be empty") {
 		t.Fatal(code, out, diag)
+	}
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatalf("validation created state: %v", err)
+	}
+}
+
+func TestSetUnexpectedFieldsRemainStrict(t *testing.T) {
+	dir := isolated(t)
+	home := filepath.Join(dir, "unused-home")
+	t.Setenv("HOME", home)
+	put(t, ".sendy/templates/fields.txt", "[{{.name}}]")
+	put(t, ".sendy/templates/plain.txt", "fixed text")
+	for _, name := range []string{"fields", "plain"} {
+		for _, prefix := range [][]string{{"template", "render", name}, {"submit", "a1000", "--template", name}, {"reply", "a1000", "--template", name}} {
+			args := append(prefix, "--set", "extra=unused")
+			if name == "fields" {
+				args = append(args, "--set", "name=Alice")
+			}
+			code, out, diag := call(t, "", args...)
+			if code != 1 || out != "" || !strings.Contains(diag, "Missing fields: (none)\nUnexpected fields: extra") {
+				t.Fatal(args, code, out, diag)
+			}
+		}
 	}
 	if _, err := os.Stat(home); !os.IsNotExist(err) {
 		t.Fatalf("validation created state: %v", err)
