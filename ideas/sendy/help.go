@@ -159,7 +159,9 @@ const templateHelp = `TEMPLATES
   Choose repeatable --set KEY=VALUE OR one --params-file PATH; never mix them.
   Parameter options require --template on submit/reply (or template render).
   Provide every required field exactly once; missing fields prevent rendering.
-  Empty values are allowed; missing, duplicate, and unexpected fields are errors.
+  Empty values are allowed; duplicate keys and invalid field names are errors.
+  --set rejects unexpected fields. Parameter files ignore extra fields, so one
+  shared file can supply different templates, including fixed-text templates.
   Split at the first equals sign; quote values with spaces using shell quoting:
     sendy reply k1007 --template review --set 'filename=design notes.md' --set name=Alice
   Values are inserted literally, without shell execution, recursive rendering,
@@ -183,8 +185,8 @@ const templateHelp = `TEMPLATES
   and text after closing quotes except whitespace/comments are rejected.
   No variable expansion or shell execution occurs, including with export.
   Empty/comment-only dotenv or {} supplies zero fields; name= and name="" supply
-  an explicit empty value. Fixed-text templates accept zero fields. The complete
-  rendered message must still be nonempty. Files are read before sending/blocking.
+  an explicit empty value. Fixed-text templates also accept populated valid files.
+  The rendered message must still be nonempty. Files are read before sending/blocking.
     sendy template render review --params-file review.env
     sendy reply k1007 --template review --params-file review.json
   No fields are automatic, including the conversation ID.

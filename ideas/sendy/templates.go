@@ -155,9 +155,13 @@ func renderTemplate(name string, sets []string, paramsFile string) (string, erro
 			missing = append(missing, key)
 		}
 	}
-	for key := range values {
-		if !required[key] {
-			unexpected = append(unexpected, key)
+	// Files may collect parameters for multiple templates. Validate every entry
+	// above, but reject unused fields only for explicit --set assignments.
+	if paramsFile == "" {
+		for key := range values {
+			if !required[key] {
+				unexpected = append(unexpected, key)
+			}
 		}
 	}
 	for key := range duplicates {
@@ -173,7 +177,7 @@ func renderTemplate(name string, sets []string, paramsFile string) (string, erro
 		if paramsFile != "" {
 			detail = fmt.Sprintf("invalid file %q: %s", paramsFile, detail)
 		}
-		return "", advise(errors.New(detail), "Supply each expected field exactly once using --set KEY=VALUE or --params-file PATH (never both). Correct missing, unexpected, duplicate, or malformed assignments listed above, then retry. Use sendy template fields "+name+" to list the required fields.")
+		return "", advise(errors.New(detail), "Supply each expected field exactly once using --set KEY=VALUE or --params-file PATH (never both). Correct missing, duplicate, or malformed assignments and remove unexpected --set fields; extra file fields are ignored. Use sendy template fields "+name+" to list the required fields, then retry.")
 	}
 	var out bytes.Buffer
 	if err = t.Execute(&out, values); err != nil {
