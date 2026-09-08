@@ -25,7 +25,7 @@ func helpRequest(args []string) (string, bool) {
 	}
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
-		case "--template", "--set", "--timeout":
+		case "--template", "--set", "--params-file", "--timeout":
 			i++
 		case "--help", "-h":
 			topic := args[0]
@@ -55,7 +55,7 @@ var helpTopics = []helpTopic{
   conversations expect a child result; create does not launch an agent.
 `},
 	{"submit", `Usage: sendy submit ID < result.txt
-       sendy submit ID --template NAME [--set KEY=VALUE ...]
+       sendy submit ID --template NAME [--set KEY=VALUE ... | --params-file PATH]
   Child: record a result, then BLOCK until the parent replies or closes.
   There is NO timeout. Run in the foreground in a harness that honors blocking
   commands; backgrounding or returning control to the agent defeats waiting.
@@ -67,7 +67,7 @@ var helpTopics = []helpTopic{
   recorded. Ask the parent to check and recover the conversation.
 `},
 	{"reply", `Usage: sendy reply ID < instruction.txt
-       sendy reply ID --template NAME [--set KEY=VALUE ...]
+       sendy reply ID --template NAME [--set KEY=VALUE ... | --params-file PATH]
   Parent: record the next instruction for an outstanding child submission.
   Returns immediately with empty stdout; does not wait for the child.
   A result must be ready. There is no unsolicited-instruction queue.
@@ -95,7 +95,7 @@ var helpTopics = []helpTopic{
   discovers closure at its next submit. Closing an already closed ID succeeds.
   An unknown ID fails without closing any of the listed conversations.
 `},
-	{"template render", `Usage: sendy template render NAME [--set KEY=VALUE ...]
+	{"template render", `Usage: sendy template render NAME [--set KEY=VALUE ... | --params-file PATH]
   Print the exact rendered text without adding a newline. No message is sent.
   Useful for initial prompts when the harness accepts a prompt file.
 `},
@@ -154,14 +154,39 @@ const templateHelp = `TEMPLATES
   Text may contain simple Go-style fields such as {{.filename}}. Fields start
   with an ASCII letter or underscore and contain letters, digits, or underscores.
   Names and fields are case-sensitive. Loops, functions, conditionals, nested
-  fields, and includes are unsupported. Fixed text needs no --set arguments.
+  fields, and includes are unsupported. Fixed text needs no parameter arguments.
   --template NAME occurs once on submit/reply and never reads or merges stdin.
-  --set KEY=VALUE is repeatable; provide every required field exactly once.
+  Choose repeatable --set KEY=VALUE OR one --params-file PATH; never mix them.
+  Parameter options require --template on submit/reply (or template render).
+  Provide every required field exactly once; missing fields prevent rendering.
   Empty values are allowed; missing, duplicate, and unexpected fields are errors.
   Split at the first equals sign; quote values with spaces using shell quoting:
     sendy reply k1007 --template review --set 'filename=design notes.md' --set name=Alice
   Values are inserted literally, without shell execution, recursive rendering,
   or JSON escaping. Use a serialized file on stdin for arbitrary JSON messages.
+  --params-file reads a regular UTF-8 file; any filename/suffix is accepted.
+  Content starting with {, [, or " after whitespace is parsed strictly as JSON,
+  with no dotenv fallback. JSON must be one top-level object with string, object,
+  or array values. Strings are decoded; objects/arrays become compact JSON text
+  inserted literally, preserving nested numbers and string escapes. Nested data
+  may contain any JSON value; nested template fields remain unsupported.
+  Top-level parameter values cannot be numbers, booleans, or null. Duplicate
+  top-level keys, invalid JSON, and trailing content are errors.
+  Other content uses dotenv: KEY=VALUE, optional export prefix, blank lines,
+  and # comments. Trim spaces/tabs around keys and unquoted values; preserve =.
+  A value starting with ' or " must be wholly quoted; remove the matching quotes.
+  # starts a comment in unquoted values or after a closing quote; quote literal #.
+  Quotes inside an unquoted value are literal (for example don't).
+  Single-quoted values are literal; double quotes decode only \\, \", \n, \r, \t.
+  Quoted values may span lines. LF and CRLF are accepted (CRLF becomes LF in
+  dotenv); bare CR, NUL, BOM, unknown double-quote escapes, line continuations,
+  and text after closing quotes except whitespace/comments are rejected.
+  No variable expansion or shell execution occurs, including with export.
+  Empty/comment-only dotenv or {} supplies zero fields; name= and name="" supply
+  an explicit empty value. Fixed-text templates accept zero fields. The complete
+  rendered message must still be nonempty. Files are read before sending/blocking.
+    sendy template render review --params-file review.env
+    sendy reply k1007 --template review --params-file review.json
   No fields are automatic, including the conversation ID.
   Errors list expected fields and occur before sending or blocking. Discover
   fields with sendy template fields NAME, then correct arguments and retry.

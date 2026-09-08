@@ -216,7 +216,7 @@ func TestTemplateValidation(t *testing.T) {
 	checkError(t, err, "unclosed.txt:2:1")
 	_, _, err = loadTemplate(".sendy/templates/missing.txt")
 	checkError(t, err, "template file")
-	_, err = renderTemplate("if", nil)
+	_, err = renderTemplate("if", nil, "")
 	checkError(t, err, "unsupported action")
 	if err = os.RemoveAll(".sendy/templates"); err != nil {
 		t.Fatal(err)

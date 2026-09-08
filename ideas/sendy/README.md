@@ -64,12 +64,12 @@ Examples use the project-local executable from the project root after
 .tools/bin/sendy --version
 .tools/bin/sendy create COUNT
 .tools/bin/sendy submit ID < result.txt
-.tools/bin/sendy submit ID --template NAME [--set KEY=VALUE ...]
+.tools/bin/sendy submit ID --template NAME [--set KEY=VALUE ... | --params-file PATH]
 .tools/bin/sendy reply ID < instruction.txt
-.tools/bin/sendy reply ID --template NAME [--set KEY=VALUE ...]
+.tools/bin/sendy reply ID --template NAME [--set KEY=VALUE ... | --params-file PATH]
 .tools/bin/sendy wait ID [ID ...] --timeout MINUTES
 .tools/bin/sendy close ID [ID ...]
-.tools/bin/sendy template render NAME [--set KEY=VALUE ...]
+.tools/bin/sendy template render NAME [--set KEY=VALUE ... | --params-file PATH]
 .tools/bin/sendy template fields NAME
 .tools/bin/sendy template validate
 ```
@@ -123,7 +123,7 @@ Messages are UTF-8 text, preserved without trimming or adding a newline. Empty
 messages are rejected; invalid UTF-8 is rejected before any message is recorded.
 
 Alternatively, `--template NAME` supplies the message using a project template
-and `--set` values. Template mode never reads stdin; do not pipe or redirect a
+and either `--set` values or a `--params-file PATH` file. Template mode never reads stdin; do not pipe or redirect a
 message into it. Stdin content is not merged with the rendered template. The
 completed message has the same text requirements and blocking behavior as stdin
 input. Template details and project setup are specified below.
@@ -385,6 +385,62 @@ model does not have to regenerate the fixed prompt; the receiving model still
 reads the completed message. Using a template does not change when a command
 blocks or returns.
 
+### Quick start: templates and parameter files
+
+The template holds the reusable text; the parameter file supplies the values for
+one rendering. Each parameter name matches a placeholder: `filename` supplies
+`{{.filename}}`.
+
+From your project root, create `.sendy/templates/review.txt` (create the directory
+if needed):
+
+```text
+You are reviewing {{.filename}}.
+Your reviewer name is {{.name}}.
+
+Check correctness, identify missing cases, and explain your findings.
+```
+
+Save the values in a separate file named `review-params`:
+
+```json
+{"filename": "server.go", "name": "Alice"}
+```
+
+Preview the completed message without sending it:
+
+```bash
+.tools/bin/sendy template render review --params-file review-params
+```
+
+This prints the template with `server.go` and `Alice` in place of its placeholders.
+To send that same message, use the appropriate command for your existing
+conversation ID:
+
+```bash
+# Parent: reply to a waiting child and return immediately.
+.tools/bin/sendy reply k1007 --template review --params-file review-params
+
+# Child: submit to the parent and wait for a reply or closure.
+.tools/bin/sendy submit k1007 --template review --params-file review-params
+```
+
+Use `review` as the template name, without its `.txt` suffix. The parameter file
+may have any filename; Sendy detects JSON or dotenv from its contents. The same
+values can instead be written as dotenv:
+
+```dotenv
+filename=server.go
+name=Alice
+```
+
+Supply every template field exactly once, with no extra fields. Missing,
+unexpected, or duplicate fields cause an error before anything is sent. Use
+`--params-file` or repeated `--set KEY=VALUE` options, never both. Run
+`.tools/bin/sendy template fields review` to list the required parameter names.
+See [Parameter files](#parameter-files) for quoting, multiline text, and JSON
+object/array values.
+
 ### Project files are the registration
 
 Run template commands and template-based submissions or replies from the project
@@ -398,15 +454,6 @@ Names contain lowercase ASCII letters, digits, hyphens, or underscores and start
 or digit. Template names are case-sensitive. Other files and subdirectories are
 not templates. There is no separate `template add` or registration command:
 checking a file into this directory makes it available to the project.
-
-For example, `.sendy/templates/review.txt` could contain:
-
-```text
-You are reviewing {{.filename}}.
-Your reviewer name is {{.name}}.
-
-Check correctness, identify missing cases, and explain your findings.
-```
 
 Use Go's standard [`text/template`](https://pkg.go.dev/text/template) syntax,
 restricted to plain text and simple named substitutions such as `{{.filename}}`.
@@ -440,8 +487,10 @@ The second example assumes the project also supplies `completion.txt`, with a
 `{{.filename}}` field. Template names and their fields belong to the project;
 they are not built into Sendy.
 
-`--template` occurs once. `--set` is repeatable and valid only with template mode
-or `template render`. Split each `KEY=VALUE` at the first equals sign. Duplicate
+`--template` occurs once. Choose either repeated `--set KEY=VALUE` options or
+exactly one `--params-file PATH`; mixing them, in either order, is an error. Both
+parameter options are valid only with template mode or `template render`. Split
+each `KEY=VALUE` at the first equals sign. Duplicate
 keys, malformed assignments, and invalid field names are errors. Empty values
 are permitted when explicitly supplied as `--set name=`; omitted fields are not.
 There are no automatic fields, including the conversation ID. If a prompt needs
@@ -454,6 +503,90 @@ additional equals signs are preserved after the first one.
 
 Template errors return immediately, before any message is sent or `submit` begins
 waiting. Editing a template does not change messages already sent.
+
+### Parameter files
+
+`--params-file PATH` loads the values used by `template render`, `submit`, or
+`reply`, as shown in the [quick start](#quick-start-templates-and-parameter-files).
+Choose JSON or dotenv using the rules below.
+
+Paths are relative to the current directory unless absolute. Files must be regular
+UTF-8 text files (symlinks to regular files are accepted). There are no filename or
+suffix restrictions: content determines the format. After leading spaces, tabs,
+CR and LF, a first character of `{`, `[` or `"` selects strict JSON parsing, with
+no fallback on failure. All other content is parsed as dotenv; JSON scalars such
+as `true`, `null`, or `123` also fail because they are not assignments.
+
+JSON must contain exactly one top-level object whose parameter values are
+strings, objects, or arrays:
+
+```json
+{"filename": "design notes.md", "name": "Alice"}
+```
+
+String values have their JSON escapes decoded. Object and array values become
+compact JSON text, then are inserted literally without surrounding string quotes
+or additional escaping. For example, with a template `Data: {{.data}}`, this file:
+
+```json
+{"data": {"items": ["世界", 9007199254740993, true, null], "meta": {}}}
+```
+
+renders `Data: {"items":["世界",9007199254740993,true,null],"meta":{}}`.
+Compaction removes whitespace outside strings and preserves number precision,
+number spelling, string escapes, and member order. Nested objects and arrays may
+contain any JSON values. Empty object and array parameters render as `{}` and
+`[]`. These are text values for the existing simple fields; there is no flattening
+or nested field syntax such as `{{.data.items}}`, and inserted text is not rendered
+again as a template.
+
+Standalone number, boolean, or `null` parameter values remain errors; put them
+inside an object/array or quote them as strings. Trailing content, invalid JSON,
+and duplicate top-level keys (including escaped spellings of the same key) are
+errors. Nested object keys are preserved as supplied, including duplicate keys.
+
+The dotenv format is a deliberately small, deterministic subset, not a shell
+script. For the `review` template, a dotenv parameter file can contain:
+
+```dotenv
+# Review assignment
+export filename = "design notes.md" # inline comment
+name = 'Alice'
+```
+
+- Each assignment is `KEY=VALUE`, optionally prefixed with `export` and spaces or
+  tabs. Keys use the same field-name rules as `--set`. Split at the first `=`;
+  additional equals signs belong to the value. Duplicate keys never override.
+- Ignore blank lines and `#` comments. Trim spaces and tabs around keys and
+  unquoted values. In an unquoted value, `#` starts a comment even without a
+  preceding space. To include a literal `#`, quote the whole value.
+- A single or double quote at the start of a value opens a quoted value. Remove
+  its matching closing quote and preserve the whitespace inside. After it, only
+  spaces, tabs, a comment, or the end of the line is allowed. Quotes elsewhere in
+  an unquoted value are literal, so `name=don't expand` is valid.
+- Single-quoted values preserve backslashes literally. Double-quoted values
+  decode only `\\`, `\"`, `\n`, `\r`, and `\t`; other escapes are errors. Both
+  quoted forms may span physical lines. No backslash line continuation is
+  supported. Unquoted backslashes are literal.
+- LF and CRLF files are accepted; dotenv CRLF line endings become LF, including
+  inside multiline values. Bare CR, NUL, and a UTF-8 BOM are rejected in dotenv.
+  JSON follows JSON whitespace/string rules and also rejects a BOM.
+- There is no variable expansion, interpolation, command substitution, shell
+  execution, or environment modification, even with `export`. `$HOME`, `${name}`,
+  and `$(command)` remain literal value text.
+
+`name=`, `name=''`, `name=""`, and JSON `"name": ""` explicitly supply an empty
+string. An empty file, comment-only dotenv, or `{}` supplies zero fields: this
+works for a fixed-text template and reports missing fields for a parameterized
+one. Every required field must be supplied; Sendy produces no partial rendering
+when any field is missing. The final rendered message must still be nonempty.
+
+Unreadable or malformed files report `invalid file`, the path, and a reason
+(dotenv syntax errors include the starting line number). Field validation still
+lists missing, unexpected, duplicate, and malformed assignments together. All
+file, field, and render validation finishes before conversation storage is
+opened, messages are sent, or `submit` blocks. Template mode still ignores stdin;
+`--params-file -` means a file literally named `-`, not standard input.
 
 ### Errors that let an agent correct itself
 
@@ -470,7 +603,7 @@ Unexpected fields: filenmae
 Duplicate fields: (none)
 Expected fields: filename, name
 No message was sent.
-Supply each expected field exactly once using --set KEY=VALUE. Correct missing, unexpected, duplicate, or malformed assignments listed above, then retry. Use sendy template fields review to list the required fields.
+Supply each expected field exactly once using --set KEY=VALUE or --params-file PATH (never both). Correct missing, unexpected, duplicate, or malformed assignments listed above, then retry. Use sendy template fields review to list the required fields.
 ```
 
 Print diagnostics on stderr, leave stdout empty, exit `1`, and leave conversation
@@ -484,7 +617,7 @@ the location and reason for the invalid syntax or unsupported action. A missing
 template directory error reports the expected path and tells the agent to run
 from the project root. These errors likewise occur before any message is sent.
 
-### `.tools/bin/sendy template render NAME [--set KEY=VALUE ...]`
+### `.tools/bin/sendy template render NAME [--set KEY=VALUE ... | --params-file PATH]`
 
 Render using the same field validation as `submit` and `reply`, print the exact
 completed text on stdout without adding a newline, and exit `0`. This command

@@ -37,17 +37,17 @@ func commandUsage(cmd string) string {
 	case "create":
 		return "Usage: sendy create COUNT (for example: sendy create 1)."
 	case "submit", "reply":
-		return fmt.Sprintf("Usage: sendy %s ID < message.txt, or sendy %s ID --template NAME [--set KEY=VALUE ...].", cmd, cmd)
+		return fmt.Sprintf("Usage: sendy %s ID < message.txt, or sendy %s ID --template NAME [--set KEY=VALUE ... | --params-file PATH].", cmd, cmd)
 	case "wait":
 		return "Usage: sendy wait ID [ID ...] --timeout MINUTES (for example: sendy wait a1000 --timeout 5)."
 	case "close":
 		return "Usage: sendy close ID [ID ...]. Include each ID once."
 	case "template":
-		return "Usage: sendy template render NAME [--set KEY=VALUE ...] | template fields NAME | template validate."
+		return "Usage: sendy template render NAME [--set KEY=VALUE ... | --params-file PATH] | template fields NAME | template validate."
 	case "--version":
 		return "Usage: sendy --version (no other arguments)."
 	default:
-		return "Choose a command: sendy create COUNT; sendy submit ID < result.txt; sendy reply ID < instruction.txt; sendy wait ID [ID ...] --timeout MINUTES; sendy close ID [ID ...]; sendy template render NAME [--set KEY=VALUE ...]; sendy template fields NAME; sendy template validate; sendy --version."
+		return "Choose a command: sendy create COUNT; sendy submit ID < result.txt; sendy reply ID < instruction.txt; sendy wait ID [ID ...] --timeout MINUTES; sendy close ID [ID ...]; sendy template render NAME [--set KEY=VALUE ... | --params-file PATH]; sendy template fields NAME; sendy template validate; sendy --version."
 	}
 }
 
