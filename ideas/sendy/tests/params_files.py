@@ -17,6 +17,7 @@ def params_files(binary, env):
         (templates / "plain.txt").write_text("fixed")
         (templates / "empty.txt").write_text("{{.name}}")
         (templates / "next.txt").write_text("Next: {{.task}}")
+        (templates / "all.txt").write_text("[{{.text}}]|{{.number}}|{{.yes}}|{{.no}}|{{.nothing}}|{{.object}}|{{.array}}")
         params = project / "params"
 
         def cli(*args, code=0):
@@ -34,13 +35,18 @@ def params_files(binary, env):
                     ("reply", "a1000", "--template", "fields"))
         invalid = (
             b'{"name":"x",}', b'{\nname=x\nvalue=y', b'[]', b'"name=x"',
-            b'null', b'true', b'123', b'{"name":null,"value":[]}',
-            b'{"name":false,"value":{}}', b'{"name":true,"value":"x"}',
-            b'{"name":42,"value":"x"}', b'{"name":{}}', b'{"name":[]}',
+            b'null', b'true', b'123', b'{"name":null}', b'{"name":{}}', b'{"name":[]}',
+            b'{"name":01,"value":null}', b'{"name":+1,"value":null}',
+            b'{"name":1.,"value":null}', b'{"name":1e,"value":null}',
+            b'{"name":NaN,"value":null}', b'{"name":Infinity,"value":null}',
+            b'{"name":True,"value":null}', b'{"name":nul,"value":null}',
             b'{"name":{"inner":[1,]}}', b'{"name":[{"inner":}]}',
             b'{"name":[{"inner":true}]',
             b'{"name":"x","na\\u006de":{"inner":1},"value":[]}',
             b'{"name":{},"name":[],"value":"z"}',
+            b'{"name":null,"na\\u006de":null,"value":false}',
+            b'{"name":true,"name":false,"value":null}',
+            b'{"name":1,"name":2,"value":null}',
             b'{"name":[],"name":"x","extra":{}}',
             b'{"name=x":{"inner":1},"value":[]}',
             b'{"name":"x"} {}', b'{"name":"x","name":"y","value":"z"}',
@@ -50,7 +56,11 @@ def params_files(binary, env):
         )
         invalid_extras = (
             (b'{"name":"x","value":"y","extra":{},"extra":[]}', b"Duplicate fields: extra"),
-            (b'{"name":"x","value":"y","extra":null}', b"string, object, or array value"),
+            (b'{"name":"x","value":"y","extra":null,"extra":null}', b"Duplicate fields: extra"),
+            (b'{"name":"x","value":"y","extra":true,"extra":false}', b"Duplicate fields: extra"),
+            (b'{"name":"x","value":"y","extra":1,"extra":2}', b"Duplicate fields: extra"),
+            (b'{"name":"x","value":"y","extra":falsee}', b"invalid file"),
+            (b'{"name":"x","value":"y","bad-key":null}', b"Malformed assignments"),
             (b'{"name":"x","value":"y","extra":[1,]}', b"invalid file"),
             (b'{"name":"x","value":"y","bad-key":{}}', b"Malformed assignments"),
             (b'name=x\nvalue=y\nextra=a\nextra=b', b"Duplicate fields: extra"),
@@ -64,7 +74,7 @@ def params_files(binary, env):
                 for prefix in prefixes:
                     failed = cli(*prefix, "--params-file", str(params), code=1)
                     assert b"invalid file" in failed.stderr, failed.stderr
-                    if b'na\\u006de' in content or b'"name":{},"name"' in content:
+                    if b'na\\u006de' in content or b',"name":' in content:
                         assert b"Duplicate fields: name" in failed.stderr, failed.stderr
                     if b'"extra":{}' in content:
                         for detail in (b"Missing fields: value", b"Unexpected fields: (none)",
@@ -72,6 +82,8 @@ def params_files(binary, env):
                             assert detail in failed.stderr, failed.stderr
                     if content == b'name=x\nextra=y':
                         assert b"Missing fields: value\nUnexpected fields: (none)" in failed.stderr, failed.stderr
+                    if content == b'{"name":null}':
+                        assert b"Missing fields: value\n" in failed.stderr, failed.stderr
             for content, detail in invalid_extras:
                 params.write_bytes(content)
                 for template in ("fields", "plain"):
@@ -127,15 +139,29 @@ def params_files(binary, env):
 }'''.encode()
         nested_expected = r'''[{"items":["世界",9007199254740993,-0,1.2300e+40,true,false,null],"meta":{}}]|[[{"escaped":"quote: \" slash: \\ newline: \n unicode: \u4e16","literal":"{{.name}} <>&"},[],{"key":1,"key":2}]]'''.encode()
         mixed_expected = '[Alice\n世界]|[{"deep":[[{"ready":true}]]}]'.encode()
+        scalar_cases = (
+            ("booleans", b'{"name": true, "value": false}', b'[true]|[false]'),
+            ("nulls", b'{"name": null, "value": null}', b'[null]|[null]'),
+            ("large-numbers", b'{"name":900719925474099312345678901234567890,"value":-900719925474099312345678901234567890}',
+             b'[900719925474099312345678901234567890]|[-900719925474099312345678901234567890]'),
+            ("exponents", b'{"name":1.2300e+400,"value":-2.500E-400}', b'[1.2300e+400]|[-2.500E-400]'),
+            ("zeroes", b'{"name": -0, "value": 0.000}', b'[-0]|[0.000]'),
+        )
         for path, content, rendered in (
             ("nested", nested_content, nested_expected),
             ("empty-collections", b'{"name": {}, "value": []}', b'[{}]|[[]]'),
             ("mixed", '{"name":"Alice\\n世界","value":{"deep": [[{"ready": true}]]}}'.encode(), mixed_expected),
-        ):
+        ) + scalar_cases:
             (project / path).write_bytes(content)
             assert cli("template", "render", "fields", "--params-file", path).stdout == rendered
+            assert cli("template", "render", "plain", "--params-file", path).stdout == b"fixed"
+        all_content = r'''{"text":"世界\n","number":1.2300e+400,"yes":true,"no":false,"nothing":null,"object":{ "n": -0 },"array":[ null, false ]}'''.encode()
+        all_expected = '[世界\n]|1.2300e+400|true|false|null|{"n":-0}|[null,false]'.encode()
+        (project / "all").write_bytes(all_content)
+        assert cli("template", "render", "all", "--params-file", "all").stdout == all_expected
+        assert cli("template", "render", "empty", "--params-file", "nulls").stdout == b"null"
         for path, content in (
-            ("shared.json", b'{"name":"Alice","value":"","task":"Review","metadata":{"ready":true},"items":[1,null]}'),
+            ("shared.json", b'{"name":"Alice","value":"","task":"Review","metadata":{"ready":true},"items":[1,null],"count":900719925474099312345678901234567890,"ready":true,"done":false,"result":null}'),
             ("shared.env", b'name=Alice\nvalue=\ntask=Review\nmetadata=unused\nitems=unused'),
         ):
             (project / path).write_bytes(content)
@@ -159,11 +185,14 @@ def params_files(binary, env):
                 ("nested", "nested", "fields", "fields", nested_expected, nested_expected),
                 ("empty-collections", "empty-collections", "fields", "fields", b'[{}]|[[]]', b'[{}]|[[]]'),
                 ("mixed", "mixed", "fields", "fields", mixed_expected, mixed_expected),
+                ("all", "all", "all", "all", all_expected, all_expected),
+                ("nulls", "nulls", "empty", "empty", b"null", b"null"),
                 ("shared.json", "shared.json", "fields", "next", b"[Alice]|[]", b"Next: Review"),
                 ("shared.env", "shared.env", "fields", "next", b"[Alice]|[]", b"Next: Review"),
                 ("shared.json", "shared.json", "plain", "plain", b"fixed", b"fixed"),
                 ("shared.env", "shared.env", "plain", "plain", b"fixed", b"fixed"),
-            ):
+            ) + tuple((path, path, "fields", "fields", rendered, rendered)
+                      for path, _, rendered in scalar_cases):
                 p = subprocess.Popen([str(binary), "submit", "a1000", "--params-file", submit_file,
                                       "--template", submit_template], cwd=project, env=params_env,
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

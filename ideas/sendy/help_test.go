@@ -30,7 +30,7 @@ func TestHelpDiscovery(t *testing.T) {
 			t.Fatalf("help aliases differ: %v", args)
 		}
 	}
-	for _, fragment := range []string{"sendy create COUNT", "sendy submit ID", "sendy reply ID", "sendy wait ID", "sendy close ID", "sendy template render NAME", "sendy template fields NAME", "sendy template validate", "sendy --version", "NO timeout", `"pending"`, "EXIT CODES", "jq -e -j", "--set KEY=VALUE", "--params-file PATH", "never mix", "dotenv"} {
+	for _, fragment := range []string{"sendy create COUNT", "sendy submit ID", "sendy reply ID", "sendy wait ID", "sendy close ID", "sendy template render NAME", "sendy template fields NAME", "sendy template validate", "sendy --version", "NO timeout", `"pending"`, "EXIT CODES", "jq -e -j", "--set KEY=VALUE", "--params-file PATH", "never mix", "dotenv", "any JSON values", "exact spelling and precision", "Null becomes literal null and counts as supplied"} {
 		if !strings.Contains(reference, fragment) {
 			t.Errorf("full reference missing %q", fragment)
 		}
