@@ -168,11 +168,11 @@ const templateHelp = `TEMPLATES
   or JSON escaping. Use a serialized file on stdin for arbitrary JSON messages.
   --params-file reads a regular UTF-8 file; any filename/suffix is accepted.
   Content starting with {, [, or " after whitespace is parsed strictly as JSON,
-  with no dotenv fallback. JSON must be one top-level object with string, object,
-  or array values. Strings are decoded; objects/arrays become compact JSON text
-  inserted literally, preserving nested numbers and string escapes. Nested data
-  may contain any JSON value; nested template fields remain unsupported.
-  Top-level parameter values cannot be numbers, booleans, or null. Duplicate
+  with no dotenv fallback. JSON must be one top-level object with any JSON values.
+  Strings are decoded; numbers retain their exact spelling and precision;
+  booleans become true/false. Null becomes literal null and counts as supplied,
+  not missing or empty. Objects/arrays become compact JSON text, preserving
+  numbers and string escapes. Nested template fields remain unsupported. Duplicate
   top-level keys, invalid JSON, and trailing content are errors.
   Other content uses dotenv: KEY=VALUE, optional export prefix, blank lines,
   and # comments. Trim spaces/tabs around keys and unquoted values; preserve =.

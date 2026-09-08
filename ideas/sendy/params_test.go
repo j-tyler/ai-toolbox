@@ -21,6 +21,11 @@ func TestParamsFileRendering(t *testing.T) {
   "value": [{"escaped": "quote: \" slash: \\ newline: \n unicode: \u4e16", "literal": "{{.name}} <>&"}, [], {"key": 1, "key": 2}]
 }`, `[{"items":["世界",9007199254740993,-0,1.2300e+40,true,false,null],"meta":{}}]|[[{"escaped":"quote: \" slash: \\ newline: \n unicode: \u4e16","literal":"{{.name}} <>&"},[],{"key":1,"key":2}]]`},
 		{"empty-collections", `{"name": {}, "value": []}`, `[{}]|[[]]`},
+		{"booleans", `{"name": true, "value": false}`, `[true]|[false]`},
+		{"nulls", `{"name": null, "value": null}`, `[null]|[null]`},
+		{"large-numbers", `{"name": 900719925474099312345678901234567890, "value": -900719925474099312345678901234567890}`, `[900719925474099312345678901234567890]|[-900719925474099312345678901234567890]`},
+		{"exponents", `{"name": 1.2300e+400, "value": -2.500E-400}`, `[1.2300e+400]|[-2.500E-400]`},
+		{"zeroes", `{"name": -0, "value": 0.000}`, `[-0]|[0.000]`},
 		{"mixed-values", `{"name": "Alice\n世界", "value": {"deep": [[{"ready": true}]]}}`, "[Alice\n世界]|[{\"deep\":[[{\"ready\":true}]]}]"},
 		{"json.env", " \r\n{\"name\":\"世界\",\"value\":\"a=b\\n\\t\\r\\\"\\\\\"}\n", "[世界]|[a=b\n\t\r\"\\]"},
 		{"dotenv.json", "# heading\r\n export name = Alice # note\r\nvalue= a=b=c  #more\r\n", "[Alice]|[a=b=c]"},
@@ -39,10 +44,13 @@ func TestParamsFileRendering(t *testing.T) {
 			if code != 0 || out.String() != tc.want || diag.Len() != 0 {
 				t.Fatalf("(%d, %q, %q), want %q", code, out.String(), diag.String(), tc.want)
 			}
+			if got := mustCall(t, "", "template", "render", "plain", "--params-file", tc.name); got != "fixed text" {
+				t.Fatal(got)
+			}
 		})
 	}
 	for _, tc := range []struct{ name, content string }{
-		{"shared-json", `{"name":"Alice","value":"","task":"Review","metadata":{"ready":true},"items":[1,null]}`},
+		{"shared-json", `{"name":"Alice","value":"","task":"Review","metadata":{"ready":true},"items":[1,null],"count":900719925474099312345678901234567890,"ready":true,"done":false,"result":null}`},
 		{"shared-dotenv", "name=Alice\nvalue=\ntask=Review\nmetadata='unused'\nitems=unused"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,6 +76,19 @@ func TestParamsFileRendering(t *testing.T) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("unexpected file/state %s: %v", path, err)
 		}
+	}
+}
+
+func TestParamsFileAllJSONTypes(t *testing.T) {
+	isolated(t)
+	put(t, ".sendy/templates/all.txt", "[{{.text}}]|{{.number}}|{{.yes}}|{{.no}}|{{.nothing}}|{{.object}}|{{.array}}")
+	put(t, "parameters", `{"text":"世界\n","number":1.2300e+400,"yes":true,"no":false,"nothing":null,"object":{ "n": -0 },"array":[ null, false ]}`)
+	if got := mustCall(t, "", "template", "render", "all", "--params-file", "parameters"); got != "[世界\n]|1.2300e+400|true|false|null|{\"n\":-0}|[null,false]" {
+		t.Fatal(got)
+	}
+	put(t, ".sendy/templates/null.txt", "{{.nothing}}")
+	if got := mustCall(t, "", "template", "render", "null", "--params-file", "parameters"); got != "null" {
+		t.Fatal(got)
 	}
 }
 
@@ -103,10 +124,18 @@ func TestInvalidParamsFiles(t *testing.T) {
 		{"{\nname=x\nvalue=y", "invalid file"},
 		{`{"name":"x"} value=y`, "after JSON object"},
 		{`{"name":"x"} {}`, "after JSON object"},
-		{`{"name":null}`, "string, object, or array value"},
-		{`{"name":12}`, "string, object, or array value"},
-		{`{"name":true}`, "string, object, or array value"},
-		{`{"name":false}`, "string, object, or array value"},
+		{`{"name":null}`, "Missing fields: value"},
+		{`{"name":12}`, "Missing fields: value"},
+		{`{"name":true}`, "Missing fields: value"},
+		{`{"name":false}`, "Missing fields: value"},
+		{`{"name":01,"value":null}`, "invalid file"},
+		{`{"name":+1,"value":null}`, "invalid file"},
+		{`{"name":1.,"value":null}`, "invalid file"},
+		{`{"name":1e,"value":null}`, "invalid file"},
+		{`{"name":NaN,"value":null}`, "invalid file"},
+		{`{"name":Infinity,"value":null}`, "invalid file"},
+		{`{"name":True,"value":null}`, "invalid file"},
+		{`{"name":nul,"value":null}`, "invalid file"},
 		{`{"name":{"inner":[1,]}}`, "invalid file"},
 		{`{"name":[{"inner":}]}`, "invalid file"},
 		{`{"name":[{"inner":true}]`, "invalid file"},
@@ -118,10 +147,17 @@ func TestInvalidParamsFiles(t *testing.T) {
 		{`{"name":"x","na\u006de":"y","value":"z"}`, "Duplicate fields: name"},
 		{`{"name":"x","na\u006de":{"inner":1},"value":[]}`, "Duplicate fields: name"},
 		{`{"name":{},"name":[],"value":"z"}`, "Duplicate fields: name"},
+		{`{"name":null,"na\u006de":null,"value":false}`, "Duplicate fields: name"},
+		{`{"name":true,"name":false,"value":null}`, "Duplicate fields: name"},
+		{`{"name":1,"name":2,"value":null}`, "Duplicate fields: name"},
 		{`{"name":[],"name":"x","extra":{}}`, "Missing fields: value\nUnexpected fields: (none)\nDuplicate fields: name"},
 		{`{"name":"x","extra":[]}`, "Missing fields: value\nUnexpected fields: (none)"},
 		{`{"name":"x","value":"y","extra":{},"extra":[]}`, "Duplicate fields: extra"},
-		{`{"name":"x","value":"y","extra":null}`, "string, object, or array value"},
+		{`{"name":"x","value":"y","extra":null,"extra":null}`, "Duplicate fields: extra"},
+		{`{"name":"x","value":"y","extra":true,"extra":false}`, "Duplicate fields: extra"},
+		{`{"name":"x","value":"y","extra":1,"extra":2}`, "Duplicate fields: extra"},
+		{`{"name":"x","value":"y","extra":falsee}`, "invalid file"},
+		{`{"name":"x","value":"y","bad-key":null}`, "Malformed assignments"},
 		{`{"name":"x","value":"y","extra":[1,]}`, "invalid file"},
 		{`{"name":"x","value":"y","bad-key":{}}`, "Malformed assignments"},
 		{`{"name=x":{"inner":1},"value":[]}`, "Malformed assignments"},

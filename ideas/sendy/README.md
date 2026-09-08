@@ -449,7 +449,7 @@ anything is sent. Explicit `--set` assignments still reject unexpected fields.
 Use `--params-file` or repeated `--set KEY=VALUE` options, never both. Run
 `.tools/bin/sendy template fields review` to list the required parameter names.
 See [Parameter files](#parameter-files) for quoting, multiline text, and JSON
-object/array values.
+values.
 
 ### Project files are the registration
 
@@ -529,18 +529,23 @@ Paths are relative to the current directory unless absolute. Files must be regul
 UTF-8 text files (symlinks to regular files are accepted). There are no filename or
 suffix restrictions: content determines the format. After leading spaces, tabs,
 CR and LF, a first character of `{`, `[` or `"` selects strict JSON parsing, with
-no fallback on failure. All other content is parsed as dotenv; JSON scalars such
-as `true`, `null`, or `123` also fail because they are not assignments.
+no fallback on failure. All other content is parsed as dotenv; files containing
+only JSON scalars such as `true`, `null`, or `123` fail because they are not assignments.
 
-JSON must contain exactly one top-level object whose parameter values are
-strings, objects, or arrays:
+JSON must contain exactly one top-level object. Its parameter values may be any
+JSON type: strings, numbers, booleans, null, objects, or arrays:
 
 ```json
-{"filename": "design notes.md", "name": "Alice"}
+{"filename": "design notes.md", "name": "Alice", "count": 9007199254740993, "ready": true, "result": null}
 ```
 
-String values have their JSON escapes decoded. Object and array values become
-compact JSON text, then are inserted literally without surrounding string quotes
+String values have their JSON escapes decoded. Numbers preserve their exact JSON
+spelling and precision, including large integers, exponents, and negative zero
+(for example, `9007199254740993`, `1.2300e+40`, and `-0`). Booleans render as
+`true` or `false`. A `null` value renders as the literal text `null` and counts as
+a supplied field; it is neither missing nor an empty string. Omitting a required
+key still fails. Object and array values become compact JSON text, then are
+inserted literally without surrounding string quotes
 or additional escaping. For example, with a template `Data: {{.data}}`, this file:
 
 ```json
@@ -555,10 +560,10 @@ contain any JSON values. Empty object and array parameters render as `{}` and
 or nested field syntax such as `{{.data.items}}`, and inserted text is not rendered
 again as a template.
 
-Standalone number, boolean, or `null` parameter values remain errors; put them
-inside an object/array or quote them as strings. Trailing content, invalid JSON,
-and duplicate top-level keys (including escaped spellings of the same key) are
-errors. Nested object keys are preserved as supplied, including duplicate keys.
+The file itself must remain an object, not a standalone scalar or array.
+Trailing content, invalid JSON, and duplicate top-level keys (including escaped
+spellings of the same key) are errors. Nested object keys are preserved as
+supplied, including duplicate keys.
 
 The dotenv format is a deliberately small, deterministic subset, not a shell
 script. For the `review` template, a dotenv parameter file can contain:
