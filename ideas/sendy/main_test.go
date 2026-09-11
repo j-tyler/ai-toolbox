@@ -94,7 +94,7 @@ func TestArguments(t *testing.T) {
 	isolated(t)
 	cases := [][]string{
 		{}, {"bogus"}, {"--version", "extra"}, {"create"}, {"create", "1", "2"}, {"create", "0"}, {"create", "-1"}, {"create", "+1"}, {"create", "1.0"}, {"create", "999999999999999999999"},
-		{"submit"}, {"reply"}, {"submit", "Z12"}, {"reply", "a1"}, {"submit", "a001"}, {"submit", "a1000", "text"}, {"submit", "a1000", "--set", "x=y"}, {"submit", "a1000", "--template"}, {"submit", "a1000", "--set"}, {"submit", "a1000", "--template", ""}, {"submit", "a1000", "--template", "x", "--template", "x"}, {"submit", "a1000", "--timeout", "1"},
+		{"submit"}, {"reply"}, {"submit", "Z12"}, {"reply", "a1"}, {"submit", "a001"}, {"submit", "a1000", "text"}, {"submit", "a1000", "--set", "x=y"}, {"submit", "a1000", "--template"}, {"submit", "a1000", "--set"}, {"submit", "a1000", "--template", ""}, {"submit", "a1000", "--template", "x", "--template", "x"}, {"submit", "a1000", "--timeout", "0"},
 		{"wait"}, {"wait", "a1000", "--timeout", "0"}, {"wait", "a1000", "--timeout", "9223372036854775807"}, {"wait", "a1000", "a1000", "--timeout", "1"}, {"wait", "a1000", "--timeout", "1.2"}, {"wait", "a1000", "--timeout", "-2"}, {"wait", "a1000", "--timeout", "1", "extra"},
 		{"close"}, {"close", "a1000", "a1000"}, {"close", "../a1000"},
 		{"template"}, {"template", "validate", "--set", "a=b"}, {"template", "render"}, {"template", "render", "x", "--template", "x"}, {"template", "render", "x", "extra"},
@@ -197,7 +197,7 @@ func TestConversationRounds(t *testing.T) {
 	if err = s.close(ids[:2]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.awaitReply(ids[0], r); !errors.Is(err, errClosed) {
+	if _, err = s.awaitReply(ids[0], r, time.Time{}); !errors.Is(err, errClosed) {
 		t.Fatal(err)
 	}
 	code, out, diag := call(t, "later", "submit", ids[0])
@@ -228,7 +228,7 @@ func TestConversationRounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	for round, want := range map[submission]string{r: "accepted", r2: "second"} {
-		got, err := s.awaitReply(ids[2], round)
+		got, err := s.awaitReply(ids[2], round, time.Time{})
 		if err != nil || got != want {
 			t.Fatal(got, err)
 		}
@@ -333,7 +333,7 @@ func TestStorageErrors(t *testing.T) {
 	if _, err := s.snapshot([]string{"a1000"}); err == nil {
 		t.Fatal("closed DB snapshot")
 	}
-	if _, err := s.awaitReply("a1000", submission{round: 1}); err == nil {
+	if _, err := s.awaitReply("a1000", submission{round: 1}, time.Time{}); err == nil {
 		t.Fatal("closed DB await")
 	}
 	code, out, diag := call(t, "", "wait", "z1099", "--timeout", "1")
@@ -374,7 +374,7 @@ func TestStorageErrors(t *testing.T) {
 	if err = s.reply(ids[0], "ok"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.awaitReply(ids[0], round); err != nil {
+	if _, err = s.awaitReply(ids[0], round, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	s.db.Exec(`CREATE TRIGGER block_create BEFORE INSERT ON conversations BEGIN SELECT RAISE(ABORT, 'blocked create'); END`)

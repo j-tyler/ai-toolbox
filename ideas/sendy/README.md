@@ -35,7 +35,7 @@ last requirement is essential to achieving the intended behavior.
 ## What makes the blocking effective
 
 Your harness must support local commands and keep the agent waiting while
-`submit` or `wait` runs. Run these calls in the foreground. A harness that
+`submit`, `receive`, or `wait` runs. Run these calls in the foreground. A harness that
 backgrounds the command or returns control to the model early defeats the intended
 blocking behavior. Long waits require a harness that supports them.
 
@@ -63,8 +63,9 @@ Examples use the project-local executable from the project root after
 .tools/bin/sendy COMMAND [SUBCOMMAND] --help
 .tools/bin/sendy --version
 .tools/bin/sendy create COUNT
-.tools/bin/sendy submit ID < result.txt
-.tools/bin/sendy submit ID --template NAME [--set KEY=VALUE ... | --params-file PATH]
+.tools/bin/sendy submit ID [--timeout MINUTES] < result.txt
+.tools/bin/sendy submit ID [--timeout MINUTES] --template NAME [--set KEY=VALUE ... | --params-file PATH]
+.tools/bin/sendy receive ID [--timeout MINUTES]
 .tools/bin/sendy reply ID < instruction.txt
 .tools/bin/sendy reply ID --template NAME [--set KEY=VALUE ... | --params-file PATH]
 .tools/bin/sendy wait ID [ID ...] --timeout MINUTES
@@ -77,7 +78,8 @@ Examples use the project-local executable from the project root after
 | Command | Returns when |
 | --- | --- |
 | `create` | The requested conversations have been created. |
-| `submit` | The parent has replied or closed the conversation. There is no timeout. |
+| `submit` | The parent has replied or closed the conversation, or the optional timeout expires. |
+| `receive` | The latest submission has a reply, the conversation closes, or the optional timeout expires. |
 | `reply` | The instruction has been recorded for the child. It does not wait for the child. |
 | `wait` | Every listed conversation has a result or is closed, or the timeout expires. |
 | `close` | The listed conversations have been closed. It does not wait for children to exit. |
@@ -237,14 +239,14 @@ child.
 This format provides 234,000 possible IDs. If there are not enough unused IDs for
 the requested count, `create` returns an error without creating conversations.
 
-On the first conversation command (`create`, `submit`, `reply`, `wait`, or `close`)
+On the first conversation command (`create`, `submit`, `receive`, `reply`, `wait`, or `close`)
 of each UTC day, Sendy checks capacity. If more than 117,000 IDs are stored, it
 deletes conversations unused for at least 14 days, including their results and
 saved replies. Their IDs become available for reuse. Closed conversations count
 toward capacity and are eligible for the same cleanup. There is no background
 cleanup service or command to configure; template commands do not trigger it.
 
-Successful conversation commands count as use. A running `submit` or `wait`
+Successful conversation commands count as use. A running `submit`, `receive`, or `wait`
 keeps its conversations active while blocked, so waiting for human approval does
 not expire a child. An abandoned conversation can expire even if it was never
 closed. After abandonment, create a new conversation instead of relying on an old
@@ -268,13 +270,44 @@ instructions to end the child session on stderr, leaves stdout empty, and exits 
 Calling `submit` on an already closed conversation also returns exit `2`.
 The child should then end its session.
 
-There is no timeout argument, default timeout, or message expiry. A submission
-can wait over a weekend or longer for human approval. The child does not choose
-how long it waits. During normal operation, only a reply or closure releases it;
-process interruption and operational failure are separate error conditions.
+Without `--timeout`, waiting is indefinite; a submission can wait over a weekend
+or longer for human approval. Optionally supply `--timeout MINUTES`, using the
+same positive whole-minute format as `wait`. The timeout starts after the result
+is recorded, so reading stdin or rendering a template does not spend that waiting
+period. It applies only to waiting for the reply, not input or storage setup.
+While waiting, both stdout and stderr remain quiet.
+
+If the timeout expires, leave stdout empty, explain the timeout on stderr, and
+exit `3`. The submitted result is not canceled, the channel stays open, and any
+reply remains available. The agent can investigate and resume with `receive`;
+it must not submit the same work again.
 
 Only one child submission may be outstanding per conversation. A second
 submission returns an error and leaves the first one untouched.
+
+### `.tools/bin/sendy receive ID [--timeout MINUTES]`
+
+Resume waiting for the reply to the latest submission on this ID without sending
+anything new. `receive` never reads stdin and accepts no template or message
+options. It returns an error if no work has been submitted on that conversation.
+Without a timeout, it blocks quietly indefinitely; an optional positive whole-minute
+timeout starts after locating the submission. Reply, closure, and timeout use the
+same stdout, stderr, and exit-code behavior as `submit`.
+
+```sh
+.tools/bin/sendy submit k1007 --timeout 5 < result.txt > next-task.txt
+# If exit 3, investigate why no reply arrived, then resume waiting:
+.tools/bin/sendy receive k1007 --timeout 10 > next-task.txt
+# Omit --timeout to wait indefinitely.
+```
+
+A reply that arrived between commands is returned immediately. Replies are not
+consumed, so a killed command or failed output write does not lose the reply.
+Repeated `receive` calls return the same reply until a new `submit` starts another
+round; rereading is not a new instruction. Use only a successful command's output.
+Once waiting, a call remains attached to the round it selected even if another
+process advances the conversation. An accepted reply still takes priority over
+closure. No database migration or additional round argument is needed.
 
 ### `.tools/bin/sendy reply ID`
 
@@ -334,7 +367,7 @@ the parent session, expire identifiers, discard results, or release children fro
 children through its agent session system, or close conversations it no longer needs.
 
 Sendy does not interrupt a working child to ask for status. A child receives a
-Sendy instruction when it is blocked in `submit`. Communication with a child that
+Sendy instruction when it is blocked in `submit` or `receive`. Communication with a child that
 has not submitted yet uses the existing agent session system.
 
 ### `.tools/bin/sendy close ID [ID ...]`
@@ -354,7 +387,7 @@ child discovers closure when it next calls `submit`, provided the conversation
 has not been reclaimed. Closing is optional, but abandoned conversations are
 eligible for the daily 14-day inactivity cleanup when capacity exceeds 50%, as
 described under `create`. Reclaimed IDs can be reused; do not keep addressing an
-old ID after abandonment. A running `submit` or `wait` keeps its conversations
+old ID after abandonment. A running `submit`, `receive`, or `wait` keeps its conversations
 active while blocked.
 
 ## How a conversation progresses
@@ -759,7 +792,8 @@ resetting state used by other sessions.
 ## Testing
 
 Run `make test` from this directory. It runs race-enabled Go tests and the real
-CLI acceptance suite, including a one-minute timeout. In addition to the setup
+CLI acceptance suite, including real one-minute parent and child timeouts,
+interrupted-process recovery, and repeated receives without losing replies. In addition to the setup
 requirements, tests need Python 3, Bash, `jq`, and a C compiler for the race
 detector. The file round-trip test uses the Bash/`jq` recipe above, replies with
 the received file, and checks that the original, received, and returned files
@@ -799,9 +833,10 @@ Merely listing a dependency in `go.mod` does not require shipping its license te
 
 | Exit code | Meaning |
 | --- | --- |
-| `0` | Success, including a `wait` that wakes on timeout. For `submit`, stdout is the next instruction. |
+| `0` | Success, including a `wait` that wakes on timeout. For `submit`/`receive`, stdout is the next instruction. |
 | `1` | Error; read stderr and follow the recovery guidance below. |
-| `2` | `submit` returned because the conversation is closed; end the child session. |
+| `2` | `submit`/`receive` returned because the conversation is closed; end the child session. |
+| `3` | `submit`/`receive` timed out; investigate and resume with `receive` on the same ID. |
 
 Sendy uses one persistent local store per operating-system user, independent of
 working directory. No database setup or configuration is required. Each
@@ -817,17 +852,19 @@ not record, and how to recover. Use that guidance before retrying:
 | Diagnostic situation | What to do |
 | --- | --- |
 | Invalid arguments, empty input, or missing template fields | Nothing was sent. Correct the reported input and retry. |
-| Outstanding submission | The earlier result remains recorded. Keep the original `submit` running; if it was interrupted, ask the parent to recover it. |
+| Outstanding submission | The earlier result remains recorded. Keep the original `submit` running; if it timed out or was interrupted, resume with `receive`. |
 | No result ready for a reply | A reply requires a child submission. An earlier reply may already have been accepted; check with the child before repeating it. |
 | Unknown ID | The requested operation was not performed. Check the supplied ID and operating-system user, or have the parent establish a new ID with `sendy create 1`. |
-| Waiting failed after submission | The result was recorded before the failure. Do not resubmit it; ask the parent to check the conversation. |
+| Waiting failed after submission | The result was recorded before the failure. Do not resubmit it; fix the failure and resume with `receive`. |
 | Database commit could not be confirmed | The write may already have happened. Follow the command-specific check in stderr before retrying. |
-| Stdout delivery failed | Output may be partial. `create` lists its already-created IDs on stderr; `wait` can be repeated because it does not consume results. A failed instruction delivery requires coordination with the parent. |
+| Stdout delivery failed | Output may be partial. `create` lists its already-created IDs on stderr; `wait` can be repeated because it does not consume results. `submit`/`receive` replies can be reread with `receive` before submitting the next result. |
 
-An interrupted `wait` is safe to repeat. A killed or interrupted `submit` or
-`reply` may have sent its message even if no diagnostic was delivered. The parent
-can close the conversation and create a replacement; automatic reconnection is
-not provided. Setup diagnostics distinguish installation problems from template
+An interrupted `wait` or `receive` is safe to repeat. A killed or interrupted
+`submit` may have recorded its result even if no diagnostic was delivered; use
+`receive` to resume waiting. If interrupted before recording, `receive` reports
+no submission on a new channel, or selects the earlier round on a reused channel;
+check with the parent if the outcome is uncertain. A killed `reply` may already
+have been accepted; confirm with the child before repeating it. Setup diagnostics distinguish installation problems from template
 validation failures after installation. Repair or upgrade existing installations
 in separate maintenance after active sessions finish; do not reset conversation
 data as part of setup recovery.

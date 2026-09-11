@@ -84,12 +84,15 @@ def broken_stdout(binary, env):
                     p.communicate()
             for text in (b"Your result was recorded", b"reply was accepted and read",
                          b"stdout may be incomplete", b"Do not resubmit the completed work",
-                         b"ask the parent to provide the instruction again"):
+                         b"sendy receive a1000"):
                 assert text in diagnostics, diagnostics
             assert b"No message was sent" not in diagnostics, diagnostics
             assert db.execute("SELECT round,result FROM conversations WHERE id='a1000'").fetchone() == (1, None)
             assert db.execute("SELECT id,round,message FROM replies").fetchall() == [
                 ("a1000", 1, "next instruction")]
+            recovered = subprocess.run([str(binary), "receive", "a1000"],
+                                       env=pipe_env, capture_output=True, timeout=5)
+            assert (recovered.returncode, recovered.stdout, recovered.stderr) == (0, b"next instruction", b""), recovered
     print("PASS: real broken stdout pipes preserve create/submit effects and recovery diagnostics", flush=True)
 
 

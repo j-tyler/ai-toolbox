@@ -19,6 +19,7 @@ import time
 from regressions import broken_stdout, daily_cleanup, first_use, setup_diagnostics, special_templates, template_fields
 from file_roundtrip import file_roundtrip
 from params_files import params_files
+from receive import receive_recovery
 
 SOURCE = Path(__file__).resolve().parents[1]
 CHILDREN = []
@@ -177,7 +178,7 @@ def main():
             assert text in bad.stderr
         cli("submit", pending, data=b"\xff", code=1)
         cli("submit", pending, data=b"", code=1)
-        for args in (("create", "234000"), ("create", "0"), ("wait", first), ("wait", first, first, "--timeout", "1"), ("submit", first, "--timeout", "1"), ("close", first, first)):
+        for args in (("create", "234000"), ("create", "0"), ("wait", first), ("wait", first, first, "--timeout", "1"), ("submit", first, "--timeout", "0"), ("close", first, first)):
             assert cli(*args, code=1).stdout == b""
         # A blocked submit remains blocked through repeated/concurrent setup.
         setup()
@@ -209,10 +210,15 @@ def main():
         out, err = receive(wp)
         assert not err and json.loads(out)["status"] == "ready"
 
-        print("Running the documented real one-minute timeout with ready, pending and closed IDs...", flush=True)
-        start = time.monotonic()
-        result = cli("wait", second, pending, closed, first, "--timeout", "1", timeout=75)
-        elapsed = time.monotonic() - start
+        print("Running the documented real one-minute timeouts for parent and child waits...", flush=True)
+        # Use a separate store so child timeout coverage runs alongside the
+        # existing parent timeout without adding another minute to this suite.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            recovery_future = pool.submit(receive_recovery, binary, env)
+            start = time.monotonic()
+            result = cli("wait", second, pending, closed, first, "--timeout", "1", timeout=75)
+            elapsed = time.monotonic() - start
+            recovery_future.result()
         snap = json.loads(result.stdout)
         assert 59.5 <= elapsed < 75, elapsed
         assert snap == {"status": "timeout", "results": [{"id": second, "message": "second after wait"}, {"id": first, "message": "after wait"}], "pending": [pending], "closed": [closed]}

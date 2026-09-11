@@ -54,17 +54,33 @@ var helpTopics = []helpTopic{
   The harness launches children and supplies their initial tasks. New
   conversations expect a child result; create does not launch an agent.
 `},
-	{"submit", `Usage: sendy submit ID < result.txt
-       sendy submit ID --template NAME [--set KEY=VALUE ... | --params-file PATH]
-  Child: record a result, then BLOCK until the parent replies or closes.
-  There is NO timeout. Run in the foreground in a harness that honors blocking
-  commands; backgrounding or returning control to the agent defeats waiting.
+	{"submit", `Usage: sendy submit ID [--timeout MINUTES] < result.txt
+       sendy submit ID [--timeout MINUTES] --template NAME [--set KEY=VALUE ... | --params-file PATH]
+  Child: record a result once, then BLOCK quietly for the parent's reply.
+  Without --timeout, wait indefinitely. MINUTES is a positive decimal integer;
+  the timeout begins after the result is recorded, not while reading stdin.
+  Run in the foreground in a harness that honors blocking commands.
   On reply: print the exact instruction bytes (no added newline), exit 0,
   perform that instruction, and submit the next result using the same ID.
   On closure: leave stdout empty, report closure on stderr, exit 2, and end
   the child session. Only one submission may be outstanding per conversation.
-  Do not resubmit after an interrupted submit: the result may already be
-  recorded. Ask the parent to check and recover the conversation.
+  On timeout: leave stdout empty, report timeout on stderr, exit 3. The result
+  remains recorded until reply or close; timeout does not cancel or close it.
+  After a timeout or interruption, use receive on the same ID, not submit.
+`},
+	{"receive", `Usage: sendy receive ID [--timeout MINUTES]
+  Child: BLOCK quietly for the reply to the latest submission on this ID.
+  Sends nothing, never reads stdin, and accepts no message/template options.
+  Without --timeout, wait indefinitely. MINUTES is a positive decimal integer;
+  the timeout begins after locating the submission. No submission is an error.
+  A reply already available is returned immediately as exact bytes, exit 0.
+  Replies are not consumed: receive can reread the same reply until the next
+  submit starts another round. Do not treat rereading as a new instruction.
+  Once waiting, the call stays attached to its selected round.
+  Closure without a reply exits 2; an accepted reply takes priority over close.
+  Timeout exits 3 with empty stdout and diagnostics on stderr. It does not
+  discard work or replies or close the conversation. Use receive again after
+  a timeout, interruption, or failed stdout delivery to resume or reread.
 `},
 	{"reply", `Usage: sendy reply ID < instruction.txt
        sendy reply ID --template NAME [--set KEY=VALUE ... | --params-file PATH]
@@ -72,7 +88,7 @@ var helpTopics = []helpTopic{
   Returns immediately with empty stdout; does not wait for the child.
   A result must be ready. There is no unsolicited-instruction queue.
   Reply retires the previous result from future waits, so save it first.
-  The instruction releases the particular submit call it answers.
+  The instruction releases submit/receive calls waiting on that submission.
 `},
 	{"wait", `Usage: sendy wait ID [ID ...] --timeout MINUTES
   Parent: wait until EVERY listed conversation has a result or is closed,
@@ -89,7 +105,7 @@ var helpTopics = []helpTopic{
 `},
 	{"close", `Usage: sendy close ID [ID ...]
   Parent: close distinct conversations and return immediately, stdout empty.
-  Releases blocked submissions with exit 2 and discards pending results.
+  Releases blocked submit/receive calls with exit 2 and discards pending results.
   An already accepted reply is still delivered; close cannot retract it.
   Does not kill an agent or interrupt work outside Sendy. A working child
   discovers closure at its next submit. Closing an already closed ID succeeds.
@@ -143,7 +159,7 @@ const messageHelp = `MESSAGE INPUT AND FILES
   redirection can truncate it on failure. Save and verify before replying.
   Compare sha256sum result.json received.json to check integrity.
   jq -r adds a newline; shell command substitution strips trailing newlines.
-  Replies on submit stdout are raw text and need no JSON decoding.
+  Replies on submit/receive stdout are raw text and need no JSON decoding.
 `
 
 const templateHelp = `TEMPLATES
@@ -197,7 +213,8 @@ const templateHelp = `TEMPLATES
 const commonHelp = `EXIT CODES AND LOCAL STATE
   0  Success, including wait timeout. Inspect wait's JSON status and pending.
   1  Error. Diagnostics go to stderr and explain effects and recovery.
-  2  submit observed closure. No instruction on stdout; end the child session.
+  2  submit/receive observed closure. No instruction; end the child session.
+  3  submit/receive timed out. No instruction; resume with receive on the same ID.
   Help prints to stdout and exits 0 without reading stdin, opening the database,
   looking up templates, or changing state. Unknown help topics exit 1.
   --version prints the installed version and exits without accessing storage.
@@ -206,11 +223,13 @@ const commonHelp = `EXIT CODES AND LOCAL STATE
   No database setup is required. Concurrent independent conversations are allowed.
   At first conversation use each UTC day, if more than half of the 234,000 IDs
   are stored, conversations unused for 14 days are deleted and IDs may be reused.
-  Active submit/wait calls keep their conversations alive. Create new IDs after
+  Active submit/receive/wait calls keep their conversations alive. Create new IDs after
   abandonment instead of addressing potentially reclaimed conversations.
-  An interrupted wait can be repeated. An interrupted submit/reply may already
-  have sent its message; check with the parent/child before retrying. Automatic
-  reconnection is not provided. Do not delete active data to recover storage.
+  An interrupted wait/receive can be repeated. An interrupted submit may have
+  sent its result; use receive to recover it. If interrupted before recording,
+  receive reports no submission (or an earlier round on a reused channel); check
+  with the parent when uncertain. An interrupted reply may have been accepted;
+  check with the child before retrying. Do not delete active data to recover storage.
 
 HELP
   sendy help and sendy --help show this full reference; -h is an alias.
@@ -237,7 +256,7 @@ func writeHelp(topic string, out io.Writer) error {
 		if !found {
 			return fmt.Errorf("unknown help topic %q. Run sendy help to list all commands. No command was executed; no message was sent", topic)
 		}
-		if topic == "submit" || topic == "reply" || topic == "wait" {
+		if topic == "submit" || topic == "receive" || topic == "reply" || topic == "wait" {
 			b.WriteString(messageHelp + "\n")
 		}
 		if topic == "submit" || topic == "reply" || strings.HasPrefix(topic, "template") {

@@ -15,6 +15,7 @@ import (
 )
 
 var errClosed = errors.New("conversation closed")
+var errReplyTimeout = errors.New("timed out waiting for reply")
 
 const idCapacity = 26 * 9000
 const retention = 14 * 24 * time.Hour
@@ -152,9 +153,13 @@ func state(tx *sql.Tx, id string) (c conversation, err error) {
 }
 
 func touch(tx *sql.Tx, id string) error {
+	return touchContext(context.Background(), tx, id)
+}
+
+func touchContext(ctx context.Context, tx *sql.Tx, id string) error {
 	// Explicit operations and heartbeat transactions record activity. At most
 	// one timestamp write per ID per second.
-	_, err := tx.Exec(`UPDATE conversations SET last_used=unixepoch() WHERE id=? AND last_used<unixepoch()`, id)
+	_, err := tx.ExecContext(ctx, `UPDATE conversations SET last_used=unixepoch() WHERE id=? AND last_used<unixepoch()`, id)
 	return err
 }
 
@@ -172,7 +177,7 @@ func (s *store) submit(id, message string) (submission, error) {
 		return submission{}, errClosed
 	}
 	if c.message.Valid {
-		return submission{}, advise(fmt.Errorf("conversation %s already has an outstanding submission; the earlier submission remains recorded", id), "Do not submit the same result again. Keep the original submit call running until the parent replies or closes. If that call was interrupted, ask the parent to read the earlier result with sendy wait "+id+" --timeout 5 and recover the conversation.")
+		return submission{}, advise(fmt.Errorf("conversation %s already has an outstanding submission; the earlier submission remains recorded", id), "Do not submit the same result again. Keep the original submit call running, or resume after a timeout or interruption with sendy receive "+id+" [--timeout MINUTES].")
 	}
 	c.round++
 	_, err = tx.Exec(`UPDATE conversations SET round=?,result=? WHERE id=?`, c.round, message, id)
@@ -208,12 +213,41 @@ func (s *store) reply(id, message string) error {
 }
 
 func (s *store) readReply(id string, round submission) (string, bool, error) {
+	return s.readReplyContext(context.Background(), id, round)
+}
+
+func (s *store) readReplyContext(ctx context.Context, id string, round submission) (text string, ready bool, err error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	defer conn.Close()
+	if _, timed := ctx.Deadline(); timed {
+		// SQLite's busy handler can outlast context cancellation. For timed
+		// polls, let awaitReply retry contention within the deadline instead.
+		// Pin and restore this connection so other operations keep their policy.
+		var busyTimeout int
+		if err := conn.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&busyTimeout); err != nil {
+			return "", false, err
+		}
+		defer func() {
+			_, restoreErr := conn.ExecContext(context.Background(), fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeout))
+			if err == nil && restoreErr != nil {
+				text, ready, err = "", false, restoreErr
+			}
+		}()
+		if _, err := conn.ExecContext(ctx, `PRAGMA busy_timeout=0`); err != nil {
+			return "", false, err
+		}
+	}
 	var closed bool
 	var generation string
 	var message sql.NullString
 	var heartbeatDue bool
-	read := func(q interface{ QueryRow(string, ...any) *sql.Row }) error {
-		err := q.QueryRow(`SELECT c.closed, c.generation, r.message, c.last_used<=unixepoch()-?
+	read := func(q interface {
+		QueryRowContext(context.Context, string, ...any) *sql.Row
+	}) error {
+		err := q.QueryRowContext(ctx, `SELECT c.closed, c.generation, r.message, c.last_used<=unixepoch()-?
 			FROM conversations c LEFT JOIN replies r ON r.id=c.id AND r.round=? WHERE c.id=?`,
 			int64(replyHeartbeatInterval/time.Second), round.round, id).Scan(&closed, &generation, &message, &heartbeatDue)
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && generation != round.generation) {
@@ -223,11 +257,11 @@ func (s *store) readReply(id string, round submission) (string, bool, error) {
 	}
 	// Most 20 ms polls are read-only. Share the heartbeat timestamp across
 	// processes so blocked submissions do not continually take the writer lock.
-	if err := read(s.db); err != nil {
+	if err := read(conn); err != nil {
 		return "", false, err
 	}
 	if heartbeatDue {
-		tx, err := s.db.Begin()
+		tx, err := conn.BeginTx(ctx, nil)
 		if err != nil {
 			return "", false, err
 		}
@@ -238,7 +272,7 @@ func (s *store) readReply(id string, round submission) (string, bool, error) {
 			return "", false, err
 		}
 		if heartbeatDue {
-			if err = touch(tx, id); err != nil {
+			if err = touchContext(ctx, tx, id); err != nil {
 				return "", false, err
 			}
 		}
@@ -260,13 +294,60 @@ func expired(id string) error {
 	return advise(fmt.Errorf("conversation %q expired or its ID was reused; this call cannot access the replacement conversation", id), "Do not retry with this old ID. Have the parent create a new conversation with sendy create 1 and give the returned ID to the participants.")
 }
 
-func (s *store) awaitReply(id string, round submission) (string, error) {
-	for {
-		message, ready, err := s.readReply(id, round)
-		if err != nil || ready {
-			return message, err
+// Pin receive to the latest submission at invocation, including an already
+// answered round. Reading a reply never consumes it, so interruption is safe.
+func (s *store) currentSubmission(id string) (submission, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return submission{}, err
+	}
+	defer tx.Rollback()
+	c, err := state(tx, id)
+	if err != nil {
+		return submission{}, err
+	}
+	if c.round == 0 {
+		if c.closed {
+			return submission{}, errClosed
 		}
-		time.Sleep(20 * time.Millisecond)
+		return submission{}, advise(fmt.Errorf("conversation %s has no submission to receive a reply for", id), "Submit the completed work first with sendy submit "+id+" < result.txt [--timeout MINUTES]. Receive only resumes an existing submission.")
+	}
+	return c.submission, tx.Commit()
+}
+
+func (s *store) awaitReply(id string, round submission, deadline time.Time) (string, error) {
+	ctx := context.Background()
+	if !deadline.IsZero() {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline)
+		defer cancel()
+	}
+	for {
+		message, ready, err := s.readReplyContext(ctx, id, round)
+		if err == nil && ready {
+			return message, nil
+		}
+		if ctx.Err() != nil {
+			return "", errReplyTimeout
+		}
+		if err != nil {
+			var sqliteErr *sqlite.Error
+			if deadline.IsZero() || !errors.As(err, &sqliteErr) ||
+				(sqliteErr.Code()&255 != sqlite3.SQLITE_BUSY && sqliteErr.Code()&255 != sqlite3.SQLITE_LOCKED) {
+				return "", err
+			}
+		}
+		delay := 20 * time.Millisecond
+		if !deadline.IsZero() {
+			remaining := time.Until(deadline)
+			if remaining <= 0 {
+				return "", errReplyTimeout
+			}
+			if remaining < delay {
+				delay = remaining
+			}
+		}
+		time.Sleep(delay)
 	}
 }
 

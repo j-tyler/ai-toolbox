@@ -30,7 +30,7 @@ func TestHelpDiscovery(t *testing.T) {
 			t.Fatalf("help aliases differ: %v", args)
 		}
 	}
-	for _, fragment := range []string{"sendy create COUNT", "sendy submit ID", "sendy reply ID", "sendy wait ID", "sendy close ID", "sendy template render NAME", "sendy template fields NAME", "sendy template validate", "sendy --version", "NO timeout", `"pending"`, "EXIT CODES", "jq -e -j", "--set KEY=VALUE", "--params-file PATH", "never mix", "dotenv", "any JSON values", "exact spelling and precision", "Null becomes literal null and counts as supplied"} {
+	for _, fragment := range []string{"sendy create COUNT", "sendy submit ID", "sendy reply ID", "sendy wait ID", "sendy close ID", "sendy template render NAME", "sendy template fields NAME", "sendy template validate", "sendy --version", "wait indefinitely", "sendy receive ID", "Timeout exits 3", `"pending"`, "EXIT CODES", "jq -e -j", "--set KEY=VALUE", "--params-file PATH", "never mix", "dotenv", "any JSON values", "exact spelling and precision", "Null becomes literal null and counts as supplied"} {
 		if !strings.Contains(reference, fragment) {
 			t.Errorf("full reference missing %q", fragment)
 		}
@@ -50,7 +50,7 @@ func TestHelpDiscovery(t *testing.T) {
 
 func TestHelpTopics(t *testing.T) {
 	isolated(t)
-	for _, topic := range []string{"create", "submit", "reply", "wait", "close", "template", "template render", "template fields", "template validate"} {
+	for _, topic := range []string{"create", "submit", "receive", "reply", "wait", "close", "template", "template render", "template fields", "template validate"} {
 		words := strings.Fields(topic)
 		want := mustCall(t, "", append([]string{"help"}, words...)...)
 		for _, flag := range []string{"--help", "-h"} {
