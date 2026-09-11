@@ -32,7 +32,7 @@ func TestRejectedCommandsExplainStateAndRecovery(t *testing.T) {
 		input string
 		want  []string
 	}{
-		{[]string{"submit", ids[0]}, "duplicate", []string{"outstanding submission", "No message was sent.", "earlier submission remains recorded", "original submit call", "sendy wait " + ids[0]}},
+		{[]string{"submit", ids[0]}, "duplicate", []string{"outstanding submission", "No message was sent.", "earlier submission remains recorded", "original submit call", "sendy receive " + ids[0]}},
 		{[]string{"reply", ids[1]}, "too soon", []string{"No message was sent.", "no child result is currently recorded", "require an outstanding submission", "earlier reply may already have been accepted", "Check whether the child received it"}},
 		{[]string{"close", ids[0], "z9999"}, "", []string{"unknown conversation", "operation was not performed", "No conversations were closed", "sendy create 1"}},
 		{[]string{"submit", "z9999"}, "result", []string{"unknown conversation", "No message was sent.", "sendy create 1"}},
@@ -117,9 +117,9 @@ func TestFailureAfterSubmitDoesNotClaimNothingWasSent(t *testing.T) {
 			}
 			requireText(t, text, "Your result was recorded", "Do not")
 			if outputFailure {
-				requireText(t, text, "reply was accepted and read", "stdout may be incomplete", "ask the parent")
+				requireText(t, text, "reply was accepted and read", "stdout may be incomplete", "sendy receive")
 			} else {
-				requireText(t, text, "before waiting stopped", "sendy wait "+ids[0], "no reply was returned")
+				requireText(t, text, "before waiting stopped", "sendy receive "+ids[0], "no reply was returned")
 				snap, err := s.snapshot(ids)
 				if err != nil || snap.Results[0].Message != "recorded result" {
 					t.Fatal(snap, err)

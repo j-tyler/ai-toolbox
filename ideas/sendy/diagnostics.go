@@ -36,7 +36,11 @@ func commandUsage(cmd string) string {
 	switch cmd {
 	case "create":
 		return "Usage: sendy create COUNT (for example: sendy create 1)."
-	case "submit", "reply":
+	case "submit":
+		return "Usage: sendy submit ID [--timeout MINUTES] < result.txt, or sendy submit ID [--timeout MINUTES] --template NAME [--set KEY=VALUE ... | --params-file PATH]."
+	case "receive":
+		return "Usage: sendy receive ID [--timeout MINUTES]."
+	case "reply":
 		return fmt.Sprintf("Usage: sendy %s ID < message.txt, or sendy %s ID --template NAME [--set KEY=VALUE ... | --params-file PATH].", cmd, cmd)
 	case "wait":
 		return "Usage: sendy wait ID [ID ...] --timeout MINUTES (for example: sendy wait a1000 --timeout 5)."
@@ -47,7 +51,7 @@ func commandUsage(cmd string) string {
 	case "--version":
 		return "Usage: sendy --version (no other arguments)."
 	default:
-		return "Choose a command: sendy create COUNT; sendy submit ID < result.txt; sendy reply ID < instruction.txt; sendy wait ID [ID ...] --timeout MINUTES; sendy close ID [ID ...]; sendy template render NAME [--set KEY=VALUE ... | --params-file PATH]; sendy template fields NAME; sendy template validate; sendy --version."
+		return "Choose a command: sendy create COUNT; sendy submit ID [--timeout MINUTES] < result.txt; sendy receive ID [--timeout MINUTES]; sendy reply ID < instruction.txt; sendy wait ID [ID ...] --timeout MINUTES; sendy close ID [ID ...]; sendy template render NAME [--set KEY=VALUE ... | --params-file PATH]; sendy template fields NAME; sendy template validate; sendy --version."
 	}
 }
 
@@ -61,6 +65,8 @@ func notApplied(cmd string) string {
 		return "No conversations were closed by this invocation."
 	case "wait":
 		return "Waiting stopped without returning results. This wait did not consume any results or send any messages."
+	case "receive":
+		return "No reply was returned. This receive did not submit work, discard a reply, or close the conversation."
 	case "template":
 		return "No output was produced. No message was sent; templates and conversations were not changed."
 	default:

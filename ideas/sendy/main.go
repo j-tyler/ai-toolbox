@@ -30,8 +30,11 @@ func run(args []string, in io.Reader, out, diagnostics io.Writer) int {
 		return 0
 	}
 	fmt.Fprintln(diagnostics, "sendy: "+err.Error())
-	if errors.Is(err, errClosed) && len(args) > 0 && args[0] == "submit" {
+	if errors.Is(err, errClosed) && len(args) > 0 && (args[0] == "submit" || args[0] == "receive") {
 		return 2
+	}
+	if errors.Is(err, errReplyTimeout) {
+		return 3
 	}
 	return 1
 }
@@ -72,13 +75,25 @@ type messageOptions struct {
 	name       string
 	sets       []string
 	paramsFile string
+	timeout    time.Duration
 }
 
-func options(args []string, render bool) (messageOptions, error) {
+func timeoutDuration(value string) (time.Duration, error) {
+	minutes, err := positive(value, "MINUTES")
+	if err != nil {
+		return 0, err
+	}
+	if uint64(minutes) > uint64((1<<63-1)/int64(time.Minute)) {
+		return 0, fmt.Errorf("MINUTES is too large: maximum is %d", (1<<63-1)/int64(time.Minute))
+	}
+	return time.Duration(minutes) * time.Minute, nil
+}
+
+func options(args []string, render, allowTimeout bool) (messageOptions, error) {
 	o := messageOptions{}
 	for len(args) > 0 {
 		flag := args[0]
-		if flag != "--template" && flag != "--set" && flag != "--params-file" {
+		if flag != "--template" && flag != "--set" && flag != "--params-file" && !(allowTimeout && flag == "--timeout") {
 			return o, fmt.Errorf("unexpected argument %q", flag)
 		}
 		if len(args) < 2 {
@@ -86,7 +101,16 @@ func options(args []string, render bool) (messageOptions, error) {
 		}
 		value := args[1]
 		args = args[2:]
-		if flag == "--template" {
+		if flag == "--timeout" {
+			if o.timeout != 0 {
+				return o, errors.New("--timeout must occur once")
+			}
+			var err error
+			o.timeout, err = timeoutDuration(value)
+			if err != nil {
+				return o, err
+			}
+		} else if flag == "--template" {
 			if render || o.name != "" {
 				return o, errors.New("--template must occur once, on submit or reply")
 			}
@@ -177,7 +201,7 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 			return json.NewEncoder(out).Encode(fields)
 		}
 		if len(args) >= 2 && args[0] == "render" {
-			o, err := options(args[2:], true)
+			o, err := options(args[2:], true, false)
 			if err != nil {
 				return err
 			}
@@ -196,6 +220,7 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 	var count int
 	var message string
 	var deadline time.Time
+	var replyTimeout time.Duration
 	switch cmd {
 	case "create":
 		if len(args) != 1 {
@@ -207,16 +232,17 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 		}
 	case "submit", "reply":
 		if len(args) < 1 {
-			return fmt.Errorf("usage: sendy %s ID [--template NAME [--set KEY=VALUE ... | --params-file PATH]]", cmd)
+			return errors.New(commandUsage(cmd))
 		}
 		ids = args[:1]
 		if err = identifiers(ids); err != nil {
 			return err
 		}
-		o, e := options(args[1:], false)
+		o, e := options(args[1:], false, cmd == "submit")
 		if e != nil {
 			return e
 		}
+		replyTimeout = o.timeout
 		if o.name != "" {
 			recovery = templateRecovery
 			message, err = renderTemplate(o.name, o.sets, o.paramsFile)
@@ -232,18 +258,26 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 		if err = validMessage(message); err != nil {
 			return err
 		}
+	case "receive":
+		if len(args) != 1 && (len(args) != 3 || args[1] != "--timeout") {
+			return errors.New("usage: sendy receive ID [--timeout MINUTES]")
+		}
+		ids = args[:1]
+		if len(args) == 3 {
+			replyTimeout, err = timeoutDuration(args[2])
+			if err != nil {
+				return err
+			}
+		}
 	case "wait":
 		if len(args) < 3 || args[len(args)-2] != "--timeout" {
 			return errors.New("usage: sendy wait ID [ID ...] --timeout MINUTES")
 		}
-		minutes, e := positive(args[len(args)-1], "MINUTES")
+		duration, e := timeoutDuration(args[len(args)-1])
 		if e != nil {
 			return e
 		}
-		if uint64(minutes) > uint64((1<<63-1)/int64(time.Minute)) {
-			return fmt.Errorf("MINUTES is too large: maximum is %d", (1<<63-1)/int64(time.Minute))
-		}
-		deadline = started.Add(time.Duration(minutes) * time.Minute)
+		deadline = started.Add(duration)
 		ids = args[:len(args)-2]
 	case "close":
 		ids = args
@@ -269,17 +303,33 @@ func execute(args []string, in io.Reader, out io.Writer) (err error) {
 			recovery = "Use the IDs listed above; do not repeat create to recover them. Fix the stdout destination or pipe before continuing."
 			_, err = fmt.Fprintln(out, strings.Join(ids, " "))
 		}
-	case "submit":
+	case "submit", "receive":
 		var round submission
-		round, err = s.submit(ids[0], message)
+		if cmd == "submit" {
+			round, err = s.submit(ids[0], message)
+			submitted = err == nil
+		} else {
+			round, err = s.currentSubmission(ids[0])
+		}
 		if err == nil {
-			submitted = true
-			effect = "Your result was recorded for " + ids[0] + " before waiting stopped. Its current state could not be confirmed; no reply was returned."
-			recovery = "Do not submit the same result again. Ask the parent to check it with sendy wait " + ids[0] + " --timeout 5 and recover the conversation before continuing. " + storageRecovery
-			message, err = s.awaitReply(ids[0], round)
+			effect = "Waiting stopped without returning a reply. This receive did not submit work, discard a reply, or close the conversation."
+			if submitted {
+				effect = "Your result was recorded for " + ids[0] + " before waiting stopped. This wait did not cancel it, discard a reply, or close the conversation; no reply was returned."
+			}
+			recovery = "Do not submit the same result again. Resume waiting with sendy receive " + ids[0] + " [--timeout MINUTES]. " + storageRecovery
+			if replyTimeout != 0 {
+				deadline = time.Now().Add(replyTimeout)
+			}
+			message, err = s.awaitReply(ids[0], round, deadline)
+			if errors.Is(err, errReplyTimeout) {
+				recovery = "Investigate the missing reply, then resume waiting with sendy receive " + ids[0] + " [--timeout MINUTES]. Do not resubmit the same result."
+			}
 			if err == nil {
-				effect = "Your result was recorded and the parent's reply was accepted and read, but stdout may be incomplete."
-				recovery = "Do not resubmit the completed work. Fix the stdout destination or pipe and ask the parent to provide the instruction again through your agent session system."
+				effect = "The parent's reply was accepted and read, but stdout may be incomplete. The reply remains recorded."
+				if submitted {
+					effect = "Your result was recorded. " + effect
+				}
+				recovery = "Do not resubmit the completed work. Fix the stdout destination or pipe, then use sendy receive " + ids[0] + " to read the reply again before submitting the next result."
 				_, err = io.WriteString(out, message)
 			}
 		}

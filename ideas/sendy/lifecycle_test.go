@@ -155,7 +155,7 @@ func TestActivityProtectsBlockedConversations(t *testing.T) {
 	if err := s.reply("a1000", "approved after weeks"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.awaitReply("a1000", round); err != nil || got != "approved after weeks" {
+	if got, err := s.awaitReply("a1000", round, time.Time{}); err != nil || got != "approved after weeks" {
 		t.Fatal(got, err)
 	}
 	if _, err := s.snapshot([]string{"a1001"}); err != nil {
@@ -178,7 +178,7 @@ func TestRecycledIDCannotDeliverUnrelatedReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	execSQL(t, s, `DELETE FROM conversations`)
-	_, err = s.awaitReply(ids[0], old)
+	_, err = s.awaitReply(ids[0], old, time.Time{})
 	checkError(t, err, "expired")
 	ids, err = s.create(1)
 	if err != nil {
@@ -191,9 +191,9 @@ func TestRecycledIDCannotDeliverUnrelatedReply(t *testing.T) {
 	if err := s.reply(ids[0], "unrelated instruction"); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.awaitReply(ids[0], old)
+	_, err = s.awaitReply(ids[0], old, time.Time{})
 	checkError(t, err, "expired")
-	if got, err := s.awaitReply(ids[0], current); err != nil || got != "unrelated instruction" {
+	if got, err := s.awaitReply(ids[0], current, time.Time{}); err != nil || got != "unrelated instruction" {
 		t.Fatal(got, err)
 	}
 }
@@ -350,14 +350,14 @@ func TestReplyActivityFailureDoesNotDeliverMessage(t *testing.T) {
 	}
 	execSQL(t, s, `UPDATE conversations SET last_used=0;
 		CREATE TRIGGER block_activity BEFORE UPDATE ON conversations BEGIN SELECT RAISE(ABORT,'blocked activity'); END;`)
-	_, err = s.awaitReply(ids[0], round)
+	_, err = s.awaitReply(ids[0], round, time.Time{})
 	checkError(t, err, "blocked activity")
 	execSQL(t, s, `DROP TRIGGER block_activity`)
-	if got, err := s.awaitReply(ids[0], round); err != nil || got != "instruction" {
+	if got, err := s.awaitReply(ids[0], round, time.Time{}); err != nil || got != "instruction" {
 		t.Fatal(got, err)
 	}
 	execSQL(t, s, `DROP TABLE replies`)
-	_, err = s.awaitReply(ids[0], round)
+	_, err = s.awaitReply(ids[0], round, time.Time{})
 	checkError(t, err, "no such table")
 }
 
