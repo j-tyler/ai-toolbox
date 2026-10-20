@@ -1,0 +1,8 @@
+# Overall reward: correctness dominates. `process` reports on the artifacts a process promises and is
+# kept light so a baseline without an intent is not penalised for honesty. Judge-based quality
+# dimensions (intent quality, reviewability) are the next thing to add here, as a sibling directory
+# with a judge TOML; see README.
+[[reward]]
+name = "reward"
+aggregation = "weighted-mean"
+weights = { correctness = 4.0, process = 1.0 }

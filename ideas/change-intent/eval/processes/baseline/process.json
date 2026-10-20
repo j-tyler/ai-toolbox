@@ -1,0 +1,7 @@
+{
+  "name": "baseline",
+  "description": "No intent. The implementing session receives the brief directly, with the same model, tools, and workspace.",
+  "stages": [
+    "implement"
+  ]
+}

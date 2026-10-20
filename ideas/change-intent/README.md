@@ -6,4 +6,6 @@ Start with [design.md](design.md). It is self-contained: the problem, the design
 
 The operational instruments a project installs to run the process — an agents-file block, the authoring skill, implementation guidance, and review guidance — are in [mechanics/](mechanics/README.md). Premises and direction that sit outside the design are in [notes.md](notes.md).
 
+A prototype evaluation harness for comparing change intent against other code-generation processes, built on Harbor, Reward Kit, and the GitHub Copilot SDK, is in [eval/](eval/README.md).
+
 Change intent is one instance of [working in public](../working-in-public/README.md): capturing the most valuable outputs of human-AI work in artifacts that persist beyond the session that produced them.

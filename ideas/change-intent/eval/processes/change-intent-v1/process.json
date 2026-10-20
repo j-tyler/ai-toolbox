@@ -1,0 +1,13 @@
+{
+  "name": "change-intent-v1",
+  "description": "Change intent as drafted in mechanics/: authoring skill with a stand-in author, then implementation against the approved intent.",
+  "stages": [
+    "author",
+    "implement"
+  ],
+  "agents_block": "AGENTS.block.md",
+  "skills_dir": "skills",
+  "authoring_skill": "change-intent-author",
+  "implementation_guidance": "implementation-guidance.md",
+  "intent_dir": "change-intent"
+}

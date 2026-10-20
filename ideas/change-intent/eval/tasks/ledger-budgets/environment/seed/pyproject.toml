@@ -1,0 +1,9 @@
+[project]
+name = "ledger"
+version = "0.1.0"
+description = "Track personal spending in a CSV file"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
