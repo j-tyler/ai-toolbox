@@ -1,4 +1,4 @@
-"""Fixed reviewer verdict (eval/reviewer/): identical reviewer for every process version."""
+"""Fixed reviewer verdict (eval/reviewer/): identical reviewer, custom instructions off, same inputs for every condition."""
 from rewardkit import criteria
 
 criteria.fixed_review_present(weight=1.0)

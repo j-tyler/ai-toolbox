@@ -1,4 +1,4 @@
-"""Existing behaviour and the agent's own suite."""
+"""Existing behaviour, the agent's own suite, and the stdlib constraint."""
 from rewardkit import criteria
 
 criteria.existing_tests_still_pass(weight=2.0)

@@ -14,6 +14,7 @@ def test_recur_add_prints_id_and_persists(workdir, run):
     assert code == 0, err
     assert out.strip().startswith("recurring #1")
     assert (workdir / "recurring.csv").exists()
+    assert not (workdir.parent / "recurring.csv").exists(), "recurring.csv must sit next to the ledger file, not in cwd"
     code, out, _ = run(["recur", "list"])
     assert code == 0
     assert out.strip().splitlines()[0].startswith("#1")

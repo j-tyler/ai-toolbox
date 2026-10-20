@@ -6,6 +6,19 @@ def test_set_default_budget_prints_and_persists(workdir, run):
     assert code == 0, err
     assert out.strip() == "budget groceries 300.00"
     assert (workdir / "budgets.csv").exists()
+    assert not (workdir.parent / "budgets.csv").exists(), "budgets.csv must sit next to the ledger file, not in cwd"
+
+
+def test_files_follow_the_file_flag(tmp_path, workdir, run):
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    ledger = other / "book.csv"
+    code, _, _ = run(["--file", str(ledger), "budget", "set", "fuel", "10"])
+    assert code == 0
+    code, _, _ = run(["--file", str(ledger), "recur", "add", "--amount", "1", "--category", "x", "--every", "weekly", "--start", "2026-01-01"])
+    assert code == 0
+    assert (other / "budgets.csv").exists() and (other / "recurring.csv").exists()
+    assert not (workdir / "budgets.csv").exists() and not (tmp_path / "budgets.csv").exists()
 
 
 def test_set_month_budget_prints_month(workdir, run):

@@ -1,4 +1,4 @@
-"""The process's own review pass (change-intent review guidance). Processes without a review stage score 0 here by design."""
+"""The process's own review pass. Absent for processes without one. Weight 0 in the headline."""
 from rewardkit import criteria
 
 criteria.process_review_present(weight=1.0)

@@ -1,8 +1,11 @@
-# Overall reward. Correctness (hidden tests) dominates. `review` is the fixed reviewer's verdict and
-# reviewability ratings, identical reviewer for every condition. `process` reports on the artifacts
-# a process promises (intent, its own review) and is kept light so a baseline without them is not
-# penalised for honesty. Every criterion's value is in reward-details.json.
+# Headline reward uses only criteria that apply identically to every condition:
+#   correctness  hidden tests, regression, stdlib constraint          weight 4
+#   review       the fixed reviewer's verdict and reviewability        weight 2
+#   handoff      committed cleanly, no stage errors                    weight 1
+# diagnostics (intent artifact, process review, tests added) are process-specific and are
+# reported with weight 0 so a process that produces no intent is not penalised for honesty.
+# Every criterion's value is in reward-details.json.
 [[reward]]
 name = "reward"
 aggregation = "weighted-mean"
-weights = { correctness = 4.0, review = 2.0, process = 1.0 }
+weights = { correctness = 4.0, review = 2.0, handoff = 1.0, diagnostics = 0.0 }

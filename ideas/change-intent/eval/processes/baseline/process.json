@@ -1,7 +1,29 @@
 {
   "name": "baseline",
-  "description": "No intent. The implementing session receives the brief directly, with the same model, tools, and workspace.",
-  "stages": [
-    "implement"
-  ]
+  "description": "No intent. The implementing session receives the brief with the neutral harness prompt, same model, tools, and workspace.",
+  "agents_block": null,
+  "author": {
+    "mode": "none"
+  },
+  "implement": {
+    "system_append": null,
+    "include_brief": true,
+    "custom_instructions": true
+  },
+  "review": null,
+  "intent": {
+    "dir": "change-intent",
+    "claim_sections": [
+      "Acceptance criteria",
+      "Invariants"
+    ],
+    "required_sections": [
+      "Outcomes",
+      "Why",
+      "Constraints",
+      "Acceptance criteria",
+      "Invariants",
+      "Out of scope"
+    ]
+  }
 }

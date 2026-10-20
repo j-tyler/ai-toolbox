@@ -12,5 +12,5 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY seed/ /app/
-RUN git init -q && git -c user.name=seed -c user.email=seed@example.invalid add -A \
-    && git -c user.name=seed -c user.email=seed@example.invalid commit -q -m "seed"
+RUN git config --system user.name eval && git config --system user.email eval@example.invalid \
+    && git init -q && git add -A && git commit -q -m "seed"

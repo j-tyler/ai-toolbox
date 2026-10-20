@@ -1,0 +1,32 @@
+{
+  "name": "change-intent-v1-frozen",
+  "description": "change-intent-v1 guidance with a pre-authored intent supplied by --intent-file (no authoring dialogue). Use to measure the intent artifact itself, and with include_brief=false to measure the intent alone.",
+  "agents_block": "AGENTS.block.md",
+  "author": {
+    "mode": "frozen"
+  },
+  "implement": {
+    "system_append": "implementation-guidance.md",
+    "include_brief": true,
+    "custom_instructions": true
+  },
+  "review": {
+    "system_append": "review-guidance.md",
+    "custom_instructions": true
+  },
+  "intent": {
+    "dir": "change-intent",
+    "claim_sections": [
+      "Acceptance criteria",
+      "Invariants"
+    ],
+    "required_sections": [
+      "Outcomes",
+      "Why",
+      "Constraints",
+      "Acceptance criteria",
+      "Invariants",
+      "Out of scope"
+    ]
+  }
+}

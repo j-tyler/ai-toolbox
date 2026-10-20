@@ -8,7 +8,7 @@ All of this must remain a pure standard-library Python tool. Everything it store
 
 The tool's acceptance tests drive these commands through `ledger.cli.main(argv)` and check exit codes, standard output, and the files written. Anything not stated here is yours to decide, as long as the paragraphs above still hold.
 
-Files, all in the same directory as the ledger file: `budgets.csv`, `recurring.csv`. The ledger file itself keeps its current format.
+Files, all in the same directory as the ledger file (not the current directory): `budgets.csv`, `recurring.csv`. The ledger file itself keeps its current format. Wherever a command offers `--format json`, lists in the JSON output use the same order as the text output.
 
 ### Budgets
 
@@ -17,7 +17,7 @@ Files, all in the same directory as the ledger file: `budgets.csv`, `recurring.c
 
 ### Recurring transactions
 
-- `ledger recur add --amount <amount> --category <category> --every monthly|weekly --start YYYY-MM-DD [--until YYYY-MM-DD] [--note <text>]` records a recurring rule and prints `recurring #<n> ...` where `<n>` is the rule's id, exit 0.
+- `ledger recur add --amount <amount> --category <category> --every monthly|weekly --start YYYY-MM-DD [--until YYYY-MM-DD] [--note <text>]` records a recurring rule and prints `recurring #<n> ...` where `<n>` is the rule's id, exit 0. Rule ids start at 1 and increase by one.
 - `ledger recur list` prints one line per rule, in id order, starting with `#<n>`.
 - `ledger recur apply --through YYYY-MM-DD` creates one ledger transaction for every occurrence of every rule that falls on or after the rule's start, on or before `--through`, and on or before the rule's `--until` if set, and that has not already been created by an earlier `apply`. Running `apply` again with the same or an earlier date creates nothing. A monthly rule that starts on the 31st falls on the last day of shorter months. The created transactions carry the rule's amount, category, and note. Prints `applied <count>` and exits 0.
 

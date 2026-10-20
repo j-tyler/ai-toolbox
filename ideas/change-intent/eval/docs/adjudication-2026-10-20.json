@@ -1,0 +1,404 @@
+{
+ "overall": "Neither review is ready to support a real comparison yet; both are largely correct. I checked every critical and major claim against the code or by running it, and none fail outright. I narrow the severity or the proposed remedy on a few.\n\nDefects (frame 1). The offline pipeline works and reproduces 0.934 vs 0.864, but the real paths are broken.\n- The uvx-run verifier grades with a python3 that has no pytest. Reproduced: the reference solution scores correctness 0.0625 and reward 0.398. Setting LEDGER_PYTHON restores 1.0 and 0.934.\n- get_events() is never awaited, so real stages record no events, transcripts or tokens.\n- A malformed review.json, or a pytest timeout, kills the whole verifier. Reproduced: no reward.json is written.\n- When the driver exits non-zero, Harbor skips the log copy.\n- The stand-in tells the author session to keep going after the intent is committed. Reproduced: \"Shall I proceed with the implementation?\" gets \"Yes, let's do that\".\n- analyze.py merges all Harbor trials into one row labelled \"verifier\".\n\nSwappability (frame 2). The process-directory abstraction is the right idea, but the harness still owns or leaks the things a comparison must vary or hold fixed.\n- The headline reward gives any process that leaves change-intent-shaped artifacts up to about 0.07 for free. Reproduced: correctness and review are identical, and the whole gap is in the process term.\n- The harness, not process.json, fixes the intent dir, the section names, the skill name and the implement prompt (which carries the would-fail mandate).\n- The \"identical\" fixed reviewer loads the change-intent AGENTS.md (custom instructions are on by default in copilot-cli mode, confirmed in _mode.py) and can read .eval/process_review.md. The implementer can read the author transcripts.\n- No frozen-intent mode and no intent-only implementer exist, so intent quality cannot be separated from authoring variance or from how well the implementer followed the guidance.\n\nBoth reviewers are mostly right. Where they overlap they agree: M2 and F5, M4 and F1, M5 and F8. Fix the critical defects and confounds below before spending any premium turns.",
+ "frame1_verdict": "Sound with fixes. The offline path runs (I reran both fake runs: 0.934 and 0.864). The real Harbor path has one critical blocker that I verified: C1, the uvx interpreter. Reward collapses to 0.398 for the oracle and is restored to 0.934 with LEDGER_PYTHON=$(command -v python3).\n\nDefects confirmed by reading the code:\n- C2: Harbor imports the module with importlib, and the harbor console script never puts the current directory on sys.path. This fails loudly, so I downgrade it to major, but it must still be fixed now because the fix is one line.\n- M1: get_events is `async def` at session.py:3692 and is never awaited.\n- M7: Harbor raises on a non-zero exit (base.py:990), so the copy exec never runs.\n- m3: create_session is outside the try block.\n\nDefects reproduced:\n- M3: the stand-in replies \"Yes, let's do that\" after the commit, and returns None for an unapproved draft.\n- M6: string findings in review.json crash the verifier, and no reward.json is written.\n\nAlso confirmed: M8 (the fixture sets cwd to the ledger directory), M9, M10 and m1, m2, m4, m5.\n\nOne addition to M10. Once a git identity exists, an implementer that commits its own work makes git_commit_all return None. \"eval: implementation\" never appears in the log, so implementation_committed scores 0. The identity fix must ship with a commit-detection fix.\n\nOne minor issue neither reviewer raised. The process-review stage excludes create/edit but is told to write .eval/process_review.md. It has to fall back to bash, or answer inline.",
+ "frame2_verdict": "Not yet sound for \"score difference => intent shape difference\", but fixable without a redesign.\n\nConfirmed problems:\n- F1: the process term is the entire fake-run gap.\n- F2: authoring_skill is never read. 'change-intent/' is hard-coded in criteria.py:99/106 and stand_in.py:89, and the section names are hard-coded too.\n- F3: the implement prompt carries the would-fail mandate and is chosen by whether an intent exists.\n- F5: in SDK copilot-cli mode, custom instructions are on unless skip_custom_instructions is set. The fixed_review session does not set it. .eval/ holds process_review.md and the transcripts at fixed-review time; confirmed by listing the fake run.\n- F7: a failed authoring stage silently becomes a third, hybrid condition.\n- F8: duplicate of M5.\n\nF4 is the central frame-2 gap. There is no frozen intent, no implementer that gets only the intent, and one AGENTS.md shared by all roles. It is not needed for baseline vs v1, but it is required before any claim about intent shape. The minimal schema change belongs in this round, before results pile up under the current schema.\n\nF6, F9, F10 and F12 are valid concerns about construct validity and statistics. Most of that work can wait. Two cheap parts should not: the neutral description heading and moving the measures that reward volume or brevity out of the headline.\n\nOne addition. The fixed reviewer's verdict standard is relative to the description (fixed_reviewer.md:37: correct \"when the change does what the description says\"). A sparser description is therefore easier to satisfy, which strengthens F6.\n\nOne more. The intent file sits inside diff.patch (the baseline commit comes before the author commit). The fixed reviewer's size rating and diff_shortstat therefore include the intent. This is part of the trade-off on whether the fixed reviewer sees the intent.",
+ "upheld": [
+  {
+   "finding_id": "C1",
+   "reviewer": "defects",
+   "reason": "Verified. Under uvx, shutil.which('python3') resolves to /root/.cache/uv/archive-v0/.../bin/python3. uvx-graded fake change-intent workspace: correctness 0.0625, reward 0.398. With LEDGER_PYTHON=$(command -v python3): correctness 1.0, reward 0.9337. Critical: breaks every Harbor trial."
+  },
+  {
+   "finding_id": "C2",
+   "reviewer": "defects",
+   "reason": "Verified by reading. harbor/utils/import_path.py uses importlib.import_module, and the harbor console script's sys.path[0] is its bin directory. Downgraded to major: it fails loudly at startup with a clear error and a one-line fix (PYTHONPATH=.). Still fix now."
+  },
+  {
+   "finding_id": "M1",
+   "reviewer": "defects",
+   "reason": "Verified. session.py:3692 is `async def get_events`, and backends.py:195 iterates it without await. The except swallows the error, so usage is {}. Major: no transcripts and no token cost in real runs."
+  },
+  {
+   "finding_id": "M2",
+   "reviewer": "defects",
+   "reason": "Verified. Merged with F5. Upgraded to critical: it breaks the 'identical fixed reviewer' premise, and the contamination favours one condition."
+  },
+  {
+   "finding_id": "F5",
+   "reviewer": "swappability",
+   "reason": "Verified. _mode.py turns custom instructions off only in 'empty' mode, and backends.py:158-175 never sets skip_custom_instructions for stages. The fake run's .eval/ holds process_review.md, transcript-author.md and author_dialogue.json before the fixed review, and author files exist before implement. Critical."
+  },
+  {
+   "finding_id": "M3",
+   "reviewer": "defects",
+   "reason": "Reproduced. A post-commit 'Shall I proceed with the implementation?' gets 'Yes, let's do that...'. 'Draft written... tell me what to change.' with the file present returns None, so an unapproved draft is accepted. Major."
+  },
+  {
+   "finding_id": "F7",
+   "reviewer": "swappability",
+   "reason": "Verified at run_process.py:309-314. With no intent, the implementer still gets the change-intent guidance and the AGENTS block under the v1 label. Upheld; the remedy is adjusted (see notes): label the trial and report it rather than abort by default. Merged with M3."
+  },
+  {
+   "finding_id": "M4",
+   "reviewer": "defects",
+   "reason": "Reproduced. Correctness is 1.0 for both conditions and review 0.854 for both; process is 0.342 vs 0.828 and reward 0.864 vs 0.934. The README and reward.toml claim the opposite. Merged with F1. Upgraded to critical."
+  },
+  {
+   "finding_id": "F1",
+   "reviewer": "swappability",
+   "reason": "Same as M4. Critical: the bias is built into the headline number."
+  },
+  {
+   "finding_id": "M5",
+   "reviewer": "defects",
+   "reason": "Verified by reading analyze.py:28. path.parent.rglob('summary.json') from verifier/ finds nothing in the Harbor layout, so the trial falls back to the 'verifier' name. Merged with F8."
+  },
+  {
+   "finding_id": "F8",
+   "reviewer": "swappability",
+   "reason": "Same as M5. The 'difference against first process' promised in the docstring has no code. Downgraded from critical to major: analysis only, the raw data survives and can be reanalysed. Still fix now."
+  },
+  {
+   "finding_id": "M6",
+   "reviewer": "defects",
+   "reason": "Reproduced. review.json findings=['Missing validation'] gives RuntimeError 'Criterion no_blocking_findings failed' and no reward.json. TimeoutExpired is uncaught, and the hidden suite runs twice (hidden_tests_pass_fraction and hidden_tests_all_pass). Major."
+  },
+  {
+   "finding_id": "M7",
+   "reviewer": "defects",
+   "reason": "Verified. Harbor base.py:990-999 raises on non-zero exit, so the cp exec at copilot_process.py:113-116 never runs. No abort() is called on exception, and 17 turns \u00d7 3600 s vastly exceeds the 7200 s agent timeout. Major. Merged with F11 and m3."
+  },
+  {
+   "finding_id": "F11",
+   "reviewer": "swappability",
+   "reason": "Verified. Merged with M7. The time budget is shared, so the longer process absorbs the timeout risk."
+  },
+  {
+   "finding_id": "M8",
+   "reviewer": "defects",
+   "reason": "Verified at conftest.py:14-17: cwd and the ledger directory are the same tmp_path. The --file flag exists (seed cli.py:28), so the proposed extra test is feasible. Major: it affects the primary metric."
+  },
+  {
+   "finding_id": "M9",
+   "reviewer": "defects",
+   "reason": "Verified by reading. The workspace is under the repo's runs/, so ../../../tasks/ledger-budgets/tests/__hidden is reachable. With pipefail plus set -e, a driver exit of 1 skips grading. \"${EXTRA[@]}\" on an empty array fails under set -u on bash 3.2. Major for local real runs only."
+  },
+  {
+   "finding_id": "M10",
+   "reviewer": "defects",
+   "reason": "Verified that the Dockerfile has no global identity, and that next_impl_turn nudges whenever the tree is clean. Extended: if the agent's own commit succeeds, git_commit_all returns None, 'eval: implementation' never appears, and implementation_committed scores 0. Major."
+  },
+  {
+   "finding_id": "F2",
+   "reviewer": "swappability",
+   "reason": "Verified with grep. authoring_skill appears only in build_processes.py. criteria.py:99/106/117/270 and stand_in.py:89 hard-code the dir, the sections and the path. Critical for comparing intent formats."
+  },
+  {
+   "finding_id": "F3",
+   "reviewer": "swappability",
+   "reason": "Verified at run_process.py:60-73 and 309-312. Critical for any guidance ablation; strongly advised before baseline vs v1, because the prompts differ in test mandate and summary framing."
+  },
+  {
+   "finding_id": "F4",
+   "reviewer": "swappability",
+   "reason": "Verified. prepare_workspace has no frozen-intent path, the brief is always given, one AGENTS.block covers all roles, and stage order is hard-coded. Critical for frame 2 ('isolate how good the intent itself is'); not needed for baseline vs v1. The minimal schema change goes in now; the full isolation protocol is later."
+  },
+  {
+   "finding_id": "F6",
+   "reviewer": "swappability",
+   "reason": "Upheld. few_unverifiable_claims subtracts a flat 0.25 per item, and fixed_reviewer.md:37 defines 'correct' relative to the description. Both favour sparse descriptions. The 'Approved change intent' heading is a cheap fix. Parts 1-2 now, 3-4 later. Major."
+  },
+  {
+   "finding_id": "F9",
+   "reviewer": "swappability",
+   "reason": "Upheld as a design concern. The brief carries the full interface contract, the implementer always gets the brief, and the stand-in defers everything. Major, but later: it needs new hidden probes and a preference sheet."
+  },
+  {
+   "finding_id": "F10",
+   "reviewer": "swappability",
+   "reason": "Upheld. agent_added_tests rewards volume and process_review_determinacy penalises honest 'cannot verify' answers. Taking them out of the headline is cheap and goes now. The new measures (intent grader, mutant kill rate, scope creep) are later."
+  },
+  {
+   "finding_id": "F12",
+   "reviewer": "swappability",
+   "reason": "Upheld. reviewer_model defaults to the implementer's model (run_process.py:250/372), and analyze prints pstdev only. Requiring a distinct reviewer model is cheap and goes now; k>=10, more tasks and CIs come before publication."
+  },
+  {
+   "finding_id": "F13",
+   "reviewer": "swappability",
+   "reason": "Upheld as minor. Pinning and recording a run manifest are cheap; do them now."
+  },
+  {
+   "finding_id": "m1",
+   "reviewer": "defects",
+   "reason": "Verified. The brief specifies sorted order for text output only (instruction.md:30), while test_report_json expects alphabetical order where insertion order would differ. Ids starting at 1 are unstated. Minor, but it touches the primary metric and is cheap to fix now."
+  },
+  {
+   "finding_id": "m2",
+   "reviewer": "defects",
+   "reason": "Verified. session_events.py serialises 'toolName' and 'requestId', and _usage_from_events matches any type containing 'usage'. Minor; fix together with M1."
+  },
+  {
+   "finding_id": "m3",
+   "reviewer": "defects",
+   "reason": "Verified. create_session is outside the try at backends.py:175, and HEAD movement during review is undetected. Minor. Merged into the driver robustness change."
+  },
+  {
+   "finding_id": "m4",
+   "reviewer": "defects",
+   "reason": "Verified. The client resolves an explicit CLI path, then COPILOT_CLI_PATH, then a downloaded runtime, so the CLI that Harbor installs is unused. The SDK is pinned only with >=. Minor. Merged with F13."
+  },
+  {
+   "finding_id": "m5",
+   "reviewer": "defects",
+   "reason": "Verified. criteria.py:83 matches only top-level ^def test_, and run_process.py:361 calls relative_to(ws). This becomes a must-fix once artifacts move out of the workspace (M2/F5)."
+  }
+ ],
+ "rejected": [
+  {
+   "finding_id": "F7 (remedy: 'do not run implementation on no_file')",
+   "reviewer": "swappability",
+   "reason": "The diagnosis stands. The proposed default does not: aborting removes those trials from an intention-to-treat analysis, and that analysis is the honest measure of what the process yields. Default instead: still implement, record author_outcome, and have analyze report intention-to-treat and per-protocol separately. Aborting stays an owner option."
+  },
+  {
+   "finding_id": "C2 (rename 'agents' because it clashes with openai-agents)",
+   "reviewer": "defects",
+   "reason": "Speculative: nothing in this environment installs openai-agents. PYTHONPATH=. plus documentation is enough. Renaming is optional."
+  },
+  {
+   "finding_id": "M1 (claim that assistant.usage is ephemeral and missing from get_events)",
+   "reviewer": "defects",
+   "reason": "Unverified: nothing in session_events.py marks assistant.usage as ephemeral. The live on_event capture is still recommended for robustness on timeouts and disconnects, but not on that basis."
+  }
+ ],
+ "changes_now": [
+  {
+   "priority": 1,
+   "title": "Make the verifier grade with the workspace python and survive bad workspaces",
+   "what": "tests/test.sh: add `export LEDGER_PYTHON=\"$(command -v python3)\"` before the uvx line. scripts/run_local.sh: the same before both rewardkit invocations. criteria._pytest:\n- catch subprocess.TimeoutExpired and return (0, 1, 'timeout');\n- raise if the output contains 'No module named pytest', so a missing pytest fails loudly instead of scoring 0;\n- cache results per (workspace, args) so the hidden suite runs once, not twice.\nAdd a per-test timeout in tests/__hidden/conftest.py (signal.alarm autouse fixture, about 20 s) and keep the four pytest invocations well under the 900 s verifier timeout. Guard the review criteria: `isinstance(f, dict)` in no_blocking_findings, `isinstance(..., list)` for cannot_verify, `isinstance(..., dict)` for reviewability. In the driver, validate review.json against REVIEW_SCHEMA (a minimal hand check is fine) and record parsed/valid in summary.json.",
+   "why": "As shipped, every Harbor trial, oracle included, scores correctness ~0.06 (verified 0.398 \u2192 0.934 with the fix). One hung test or one malformed reviewer output deletes a trial's reward entirely, which biases the aggregates. Nothing else matters until correctness is measured.",
+   "files": [
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/test.sh",
+    "ideas/change-intent/eval/scripts/run_local.sh",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/criteria.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__hidden/conftest.py",
+    "ideas/change-intent/eval/driver/run_process.py"
+   ],
+   "from_findings": [
+    "C1",
+    "M6"
+   ]
+  },
+  {
+   "priority": 2,
+   "title": "Headline reward = only criteria that apply identically to every condition",
+   "what": "Restructure the reward:\n- `reward` = correctness (4) + review (2) + a condition-invariant `handoff` group (implementation_committed, summary_recorded).\n- Move intent_file_present, intent_has_required_sections, the three process_review_* criteria and agent_added_tests into a `diagnostics` group with weight 0 in the top-level reward.toml, or into a separate top-level reward that is reported but never aggregated into `reward`.\n- Fix agent_added_tests to count `^\\s*def test_`.\n- Rewrite README lines 85-99 and the reward.toml comment to state this.\nAlso in review scoring (F6 part 2): replace few_unverifiable_claims' flat -0.25 per item with a ratio. Add `claims_checked` (integer) to REVIEW_SCHEMA and fixed_reviewer.md, and score 1 - len(cannot_verify)/max(claims_checked,1).",
+   "why": "Today the whole 0.070 fake-run gap is the process term: baseline is capped at process 0.5 and reward 0.929. Any process that leaves change-intent-shaped files wins by about 0.07 before doing anything better. The test-count criterion rewards volume, and the cannot_verify penalty rewards descriptions that claim less. Without this change, 'score difference => intent shape difference' is false by construction.",
+   "files": [
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/reward.toml",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/process/reward.toml",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/process/artifacts.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/process/intent.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/process/review.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/criteria.py",
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/reviewer/fixed_reviewer.md",
+    "ideas/change-intent/eval/README.md"
+   ],
+   "from_findings": [
+    "M4",
+    "F1",
+    "F10",
+    "F6",
+    "m5"
+   ]
+  },
+  {
+   "priority": 3,
+   "title": "Seal stage inputs: no AGENTS.md or prior-stage artifacts reach the fixed reviewer; no transcripts reach the implementer",
+   "what": "- backends.run_stage: accept a `custom_instructions: bool` and pass skip_custom_instructions=not custom_instructions. The fixed_review stage always passes False.\n- The driver writes all artifacts during the run to a directory outside the workspace (default: a sibling temp dir, or /logs/agent/eval in Harbor). Remove the .git/info/exclude trick.\n- Before the fixed review, copy only diff.patch and change_description.md into a neutral directory outside the workspace (e.g. <tmp>/review-input/). Point FIXED_REVIEW_PROMPT there with an absolute path.\n- After the last stage, copy everything into /app/.eval for the verifier.\n- Process review: stop asking it to write a file. It returns the table as its final message and the driver writes process_review.md. This fixes the read-only/create-tool contradiction and the relative_to(ws) crash at run_process.py:361.\n- FakeBackend writes to `out`, not ws/.eval.\n- change_description.md uses a neutral heading for every condition: '# Change description', with sections 'Description document (<path>)' and 'Implementer summary'. Drop the word 'Approved'.",
+   "why": "The review dimension (2/7 of reward) is supposed to come from a reviewer that never varies. Today, under change-intent only, it loads the change-intent AGENTS.md rules and can read a ready-made met/not-met table and the implementer's transcripts. The implementer can also read the author's dialogue, a channel outside the intent file, so 'intent quality' silently includes the transcript.",
+   "files": [
+    "ideas/change-intent/eval/driver/backends.py",
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/agents/copilot_process.py",
+    "ideas/change-intent/eval/scripts/run_local.sh"
+   ],
+   "from_findings": [
+    "M2",
+    "F5",
+    "F6",
+    "m5"
+   ]
+  },
+  {
+   "priority": 4,
+   "title": "Move process-specific content into process.json; add frozen-intent and brief-exposure switches",
+   "what": "Extend the process.json schema; the driver reads every field and the harness keeps only neutral defaults:\n- `author`: { mode: skill|frozen|none, skill, skills_dir, prompt_file, frozen_intent }\n- `implement`: { prompt_file?, system_append, custom_instructions: bool, include_brief: bool }\n- `review`: { system_append, custom_instructions } | null\n- `intent`: { dir, claim_sections, required_sections? }\n- `agents_block`\nThen:\n- Use one neutral default implement prompt for all conditions: 'Implement the change described in {source}. Run the test suite (python -m pytest -q) before you finish and summarise what you changed.' {source} is the intent path, or the brief when no intent exists. The brief is appended only when include_brief is true. Move the would-fail and per-criterion test mandate into implementation-guidance.md only.\n- AUTHOR_PROMPT: render from author.prompt_file, or by default with the declared skill name.\n- Stand-in: template the intent_dir into its approval text.\n- Driver: `--intent-file` (or author.mode=frozen) copies a supplied intent into intent.dir and commits it as 'eval: change intent' without an author stage.\n- Copy process.json into the artifacts. Diagnostic criteria read the intent dir and claim sections from it instead of hard-coded 'change-intent/'.\n- Update build_processes.py to emit the new schema, and baseline/process.json to match.",
+   "why": "The user's frame 2 needs each of these swappable on its own:\n- Today a renamed intent dir or skill loses 0.048 reward with identical content (reviewer 2 reproduced this).\n- The would-fail mandate cannot be removed, because it lives in the harness prompt.\n- Every trial re-runs authoring, so intent quality is always mixed with authoring variance.\n- The brief is always given, so the intent can only subtract information.\nThe frozen-intent and include_brief switches are the minimum needed to measure the intent alone. Changing the schema now is cheap; once results exist under the old schema it is not.",
+   "files": [
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/driver/stand_in.py",
+    "ideas/change-intent/eval/driver/backends.py",
+    "ideas/change-intent/eval/scripts/build_processes.py",
+    "ideas/change-intent/eval/processes/baseline/process.json",
+    "ideas/change-intent/eval/processes/change-intent-v1/process.json",
+    "ideas/change-intent/eval/processes/change-intent-v1/implementation-guidance.md",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/criteria.py",
+    "ideas/change-intent/eval/README.md"
+   ],
+   "from_findings": [
+    "F2",
+    "F3",
+    "F4"
+   ]
+  },
+  {
+   "priority": 5,
+   "title": "Stand-in: stop after commit, approve only what it has seen, record author outcome",
+   "what": "In ScriptedStandIn.reply_to_message and in ModelStandIn:\n- Once an intent file exists AND is committed (`git log --oneline -- <intent_dir>` is non-empty, or HEAD moved since the stage began), return None regardless of trailing questions.\n- If the file exists but approval was never given, reply once with: 'Show me the complete file for approval; do not implement.'\n- Track `approved` (set when the stand-in emitted approval text, or picked an approve choice).\nAfter the author stage:\n- Record author_outcome \u2208 {approved, unapproved_file, no_file}.\n- Record any paths outside intent.dir changed by the author stage. Default: revert those paths before the 'eval: change intent' commit, and flag `author_contamination` in summary.json.\n- When there is no file, still implement from the brief, but record the trial as author_outcome=no_file instead of a silent note.",
+   "why": "The most common closing question ('Shall I proceed with the implementation?') currently gets 'Yes, let's do that'. The author session then starts implementing with no implementation guidance, and the code is committed as part of the intent. The opposite path accepts unapproved drafts. Both make the measured 'intent' depend on how the skill happens to phrase things, and authoring failures get scored as change-intent outcomes.",
+   "files": [
+    "ideas/change-intent/eval/driver/stand_in.py",
+    "ideas/change-intent/eval/driver/run_process.py"
+   ],
+   "from_findings": [
+    "M3",
+    "F7"
+   ]
+  },
+  {
+   "priority": 6,
+   "title": "Driver real-path robustness: events, abort, deadlines, always summary, always copy",
+   "what": "backends.run_stage:\n- `await session.get_events()`, and also collect events live via on_event as a fallback.\n- Put create_session inside the try.\n- On any exception, `await session.abort()` before disconnect.\n- Match type == 'assistant.usage' exactly.\nwrite_transcript: read toolName/tool_name, and pair user_input.requested with user_input.completed by requestId.\nTiming: add per-stage wall-clock caps (author, implement, review, fixed_review) plus a driver `--deadline`. Make the implement cap identical across conditions and independent of how long authoring took. Reserve time for the fixed review. Set task.toml [agent] timeout_sec \u2265 the sum of the caps plus margin, and record per-stage timeout hits.\nExit and copy:\n- Wrap run() so summary.json is always written, with status per stage.\n- Exit 0 and report status in summary.json; or, in copilot_process.py, chain the copy into the same command (`...; rc=$?; cp -r ...; exit $rc`).\n- Record the implementation HEAD before each review. Afterwards, `git reset --hard` to it if it moved, and record that.",
+   "why": "Real runs currently record no events, transcripts or token usage. A timeout leaves the turn editing the tree while the next stage starts. Any stage error makes Harbor skip the log copy. The longer change-intent process is more exposed to all of this, so these failures show up as asymmetric process and review penalties.",
+   "files": [
+    "ideas/change-intent/eval/driver/backends.py",
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/agents/copilot_process.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/task.toml"
+   ],
+   "from_findings": [
+    "M1",
+    "M7",
+    "F11",
+    "m2",
+    "m3"
+   ]
+  },
+  {
+   "priority": 7,
+   "title": "Git identity everywhere, and commit-robust stage detection",
+   "what": "- Set GIT_AUTHOR_NAME/EMAIL and GIT_COMMITTER_NAME/EMAIL in os.environ at driver start, so SDK sessions inherit them both locally and in Harbor. Optionally also `git config --global` in the Dockerfile.\n- next_impl_turn: treat work as done when the tree is dirty OR HEAD differs from the pre-stage commit.\n- git_commit_all for the implementation: use `--allow-empty` so the 'eval: implementation' marker always exists. Also record impl_commit in summary.json.\n- implementation_committed: check HEAD against the recorded commit rather than the message alone.",
+   "why": "Without an identity, the author's instructed commit fails and wastes turns, mostly in change-intent. With an identity, an implementer that commits its own work is nudged twice and then scores implementation_committed=0. Either way, commit behaviour becomes a condition-dependent artifact of the environment.",
+   "files": [
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/environment/Dockerfile",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/criteria.py"
+   ],
+   "from_findings": [
+    "M10"
+   ]
+  },
+  {
+   "priority": 8,
+   "title": "analyze.py: group Harbor trials by process, report differences with CIs, cost and author outcome",
+   "what": "Find the process from the trial root:\n- for Harbor, <trial>/agent/eval/summary.json, falling back to <trial>/config.json or result.json agent import path / name;\n- for local runs, keep the current lookup.\nFail loudly when the process is unknown. Report:\n- n, and the number of trials missing a reward;\n- mean \u00b1 sd and a bootstrap 95% CI per dimension;\n- the promised difference vs a reference process, with a bootstrap CI;\n- per-stage tokens and seconds as separate outcomes;\n- an intention-to-treat vs per-protocol split by author_outcome;\n- diagnostics separately from the headline reward.",
+   "why": "The documented `analyze.py ~/jobs/<job>` merges every condition into one 'verifier' row, so a real comparison reads as no difference. Cost and authoring failures are invisible.",
+   "files": [
+    "ideas/change-intent/eval/scripts/analyze.py"
+   ],
+   "from_findings": [
+    "M5",
+    "F8",
+    "F11",
+    "F12",
+    "F7"
+   ]
+  },
+  {
+   "priority": 9,
+   "title": "Tighten the hidden tests and brief so they match the contract",
+   "what": "- In the hidden conftest workdir fixture, put the ledger at tmp_path/'data'/'ledger.csv' while cwd stays tmp_path. Assert that budgets.csv and recurring.csv land in data/ and not in cwd.\n- Add one test that uses `--file` with a different directory.\n- In instruction.md, state that JSON lists use the same order as text output (sorted by category) and that recurring ids start at 1.\n- Re-run the seed check (expect most hidden tests to fail) and the oracle check (31/31 plus the new test).",
+   "why": "A realistic contract violation, Path('budgets.csv') resolving to cwd, gets full correctness credit. Meanwhile a contract-compliant JSON order loses a test. Either one adds noise or bias to the primary metric that a better intent could be credited or blamed for.",
+   "files": [
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__hidden/conftest.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__hidden/test_budgets.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/instruction.md"
+   ],
+   "from_findings": [
+    "M8",
+    "m1"
+   ]
+  },
+  {
+   "priority": 10,
+   "title": "Harbor invocation, pinning, run manifest, and reviewer-model guard",
+   "what": "- README and copilot_process.py docstring: run `PYTHONPATH=. harbor run ...` from eval/.\n- Pin github-copilot-sdk==1.0.23 (install() and requirements.txt) and harbor-rewardkit to an exact 0.2.x. In install(), pre-download the SDK runtime and drop or document the unused CLI install.\n- summary.json records: harness git SHA, SDK version, runtime version, sha256 of every process file, fixed_reviewer.md and the brief, sha256 of each rendered stage prompt, stand-in mode, resolved model from session.start.\n- In copilot mode, warn loudly (or refuse unless --allow-same-reviewer) when --reviewer-model is unset or equals --model.",
+   "why": "Without PYTHONPATH the first documented command fails. Unpinned runtimes and an incomplete run record mean a number cannot be tied to the exact process files and prompts that produced it, and that link is the whole point of comparing process versions. A same-model reviewer adds self-preference that interacts with intent style.",
+   "files": [
+    "ideas/change-intent/eval/agents/copilot_process.py",
+    "ideas/change-intent/eval/requirements.txt",
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/README.md",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/test.sh"
+   ],
+   "from_findings": [
+    "C2",
+    "m4",
+    "F13",
+    "F12"
+   ]
+  },
+  {
+   "priority": 11,
+   "title": "run_local.sh: isolate the workspace and always grade",
+   "what": "- Create the workspace with mktemp -d outside the repository, and copy results back to runs/<ts>-<process>/.\n- Run the driver with `|| status=$?` so grading always runs.\n- Use `${EXTRA[@]+\"${EXTRA[@]}\"}` for bash 3.2.\n- Export LEDGER_PYTHON (see change 1).",
+   "why": "A real local run can read the hidden tests and the reference solution through ../../../tasks. A run with a stage error goes ungraded, unlike in Harbor. On macOS the script fails outright.",
+   "files": [
+    "ideas/change-intent/eval/scripts/run_local.sh"
+   ],
+   "from_findings": [
+    "M9"
+   ]
+  }
+ ],
+ "changes_later": [
+  {
+   "title": "Full intent-isolation protocol on top of the frozen-intent switch",
+   "what": "1. Run authoring only, N\u22485 per authoring variant, and freeze the intents.\n2. Implement each frozen intent M\u22483 times with guidance held fixed, to get between-intent vs within-intent variance.\n3. Add an intent-only arm (include_brief=false).\n4. Add controls: brief-as-intent (the brief pasted into the template) and a hand-written gold intent as the ceiling.",
+   "why": "This separates intent quality from authoring luck and from implementer compliance. Not needed for baseline vs v1; required before any claim about intent shape."
+  },
+  {
+   "title": "Give authoring something to discover: hidden author preferences plus latitude-probe tests",
+   "what": "Give the stand-in a hidden sheet of about 10 latitude forks the brief leaves open, answered only when asked. Examples: invalid import amounts, negative budgets, --until before --start, duplicate keys without a note, report rows for budgeted categories with no spend. Add hidden tests for those forks. Report the scripted and model stand-ins as separate factors.",
+   "why": "Today the brief holds the whole contract and the stand-in defers everything. An authoring skill that asks good questions gains nothing, and an intent can only register as harm, never as benefit."
+  },
+  {
+   "title": "Direct intent and test-strength measures",
+   "what": "- An intent grader (pinned judge from another vendor, fixed rubric) against a hidden decision checklist: each decision stated falsifiably / consciously excluded / missing / contradicts the brief.\n- Test strength: kill rate of the agent's tests against 6-10 contract mutants of the reference.\n- Amendment count and eligibility.\n- Scope creep: subcommands, flags and files not in the brief.\nKeep all of these in diagnostics until validated.",
+   "why": "The current rubric mostly measures 'implemented the brief'. design.md's claims (falsifiable claims, tests that can fail, scope discipline) are unmeasured."
+  },
+  {
+   "title": "Blinded and mutant-injection reviewer arms",
+   "what": "Run the same fixed reviewer on the diff only (description effect = with minus without). Inject a known contract-breaking mutant (e.g. drop the month-end clamp) into a copy of the final tree, and measure the detection rate with vs without the intent.",
+   "why": "This is the most direct test of whether an intent improves reviewability, and it is robust to LLM preference for spec-shaped text."
+  },
+  {
+   "title": "Statistical power and breadth",
+   "what": "k\u226510 per cell; 3-5 tasks of varying brief precision, paired by task; paired bootstrap CIs; agreement of the fixed reviewer's verdict with hidden_tests_all_pass as a calibration check.",
+   "why": "One task at k=3 cannot detect effects of the size that matters."
+  },
+  {
+   "title": "Pin the model stand-in separately",
+   "what": "Give ModelStandIn its own --stand-in-model. Today it uses backend.ask_once with the implementer's model, despite its docstring saying 'pinned'.",
+   "why": "It is constant across processes for a fixed model, so it does not confound baseline vs v1, but the stand-in becomes a hidden factor when comparing models or reporting."
+  },
+  {
+   "title": "Pin images by digest",
+   "what": "Pin the python base image and the ghcr.io/astral-sh/uv image by digest in the Dockerfile.",
+   "why": "Reproducibility over weeks; a small effect on the inference."
+  }
+ ],
+ "notes": "Trade-offs the owner must decide, with my recommended default for each:\n\n1. Should the fixed reviewer see the intent? Default: yes, as the primary arm. 'Reviewable with the artifact the process actually leaves' is the claim under test, and withholding the intent measures nothing about it. Add the neutral heading and ratio scoring now, and the blinded arm and mutant injection later. Note that the intent file is also inside diff.patch (the baseline commit comes before the author commit), so it affects size_appropriateness and diff_shortstat. Default: leave it in, since it ships in the PR, but record a code-only shortstat as well.\n\n2. Should the implementer receive the brief alongside the intent? Default: include_brief=true for baseline vs v1, which is realistic. The intent-isolation arm uses include_brief=false.\n\n3. What happens when authoring fails? Default: still implement from the brief, label the trial author_outcome=no_file or unapproved_file, and report intention-to-treat and per-protocol separately. Option: abort to save cost.\n\n4. Files the author touched outside the intent dir. Default: revert them before the intent commit and flag author_contamination. Option: keep them and only flag, which treats leakage as part of the process.\n\n5. Reviewer model. Default: require a different model, preferably another vendor, for the fixed reviewer, with an explicit override flag. The process's own review stays on the implementer model because it is process-owned.\n\n6. Diagnostics weight. Default: 0 in the headline reward; report them alongside.\n\n7. Driver exit code. Default: exit 0 and record per-stage status in summary.json. analyze then treats harness errors as flagged or excluded rather than as low scores.\n\n8. AGENTS.md as the delivery channel. A real deployment puts the process in AGENTS.md, so keep it for process stages. But expose a per-stage custom_instructions switch, so a guidance ablation is not contaminated by role rules in the shared block.\n\nVerification I ran:\n- Both fake runs on a scratch copy at /tmp/claude-0/-home-user-ai-toolbox/c4033a8d-daef-5188-afd2-caaffe52687e/scratchpad/review-adjudicator/eval: 0.934 and 0.864; process 0.828 vs 0.342; correctness and review identical.\n- uvx grading of the change-intent workspace: correctness 0.0625, reward 0.398. With LEDGER_PYTHON: 1.0 and 0.9337.\n- uvx PATH probe: python3 resolves to the uv archive venv.\n- Malformed review.json: the verifier crashes and no reward.json is written.\n- Stand-in replies reproduced: 'Yes, let's do that' after the commit; None for an unapproved draft.\n- SDK source read: get_events is async; custom instructions are skipped only in empty mode; abort() exists; the client resolves an explicit CLI path, then COPILOT_CLI_PATH, then a downloaded runtime.\n- Harbor source read: import_path uses importlib with no sys.path change; base.py raises on non-zero exit.\n- Reward Kit source read: a criterion exception becomes a RuntimeError inside a TaskGroup.\n- diff.patch for change-intent includes the intent file.\n\nI did not modify the repository. The two pre-existing run dirs under eval/runs/ (gitignored) were left untouched."
+}

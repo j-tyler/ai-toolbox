@@ -19,6 +19,24 @@ UserInputFn = Callable[[str, list[str] | None], Awaitable[tuple[str, bool]]]
 
 
 @dataclass
+class StageSpec:
+    """Everything a stage needs from the backend, with harness-neutral defaults."""
+
+    name: str
+    prompt: str
+    system_append: str | None = None
+    skill_dirs: list[str] = field(default_factory=list)
+    custom_instructions: bool = True  # load AGENTS.md etc. from the workspace
+    read_only: bool = False
+    response_schema: dict[str, Any] | None = None
+    model: str | None = None
+    extra_dirs: list[str] = field(default_factory=list)  # readable directories outside the workspace
+    max_turns: int = 1
+    turn_timeout_sec: float = 3600.0
+    deadline: float | None = None  # absolute time.time() after which no new turn starts
+
+
+@dataclass
 class StageResult:
     stage: str
     final_message: str
@@ -28,6 +46,8 @@ class StageResult:
     started: float = 0.0
     finished: float = 0.0
     error: str | None = None
+    timed_out: bool = False
+    resolved_model: str | None = None
 
     @property
     def seconds(self) -> float:
@@ -37,27 +57,22 @@ class StageResult:
 class Backend:
     async def run_stage(
         self,
-        stage: str,
+        spec: StageSpec,
         workspace: Path,
-        prompt: str,
         *,
-        system_append: str | None,
-        skill_dirs: list[str],
         on_user_input: UserInputFn,
         next_turn: Callable[[str], Awaitable[str | None]],
-        max_turns: int,
-        timeout_sec: float,
-        response_schema: dict[str, Any] | None = None,
-        read_only: bool = False,
-        model: str | None = None,
     ) -> StageResult:
         raise NotImplementedError
 
-    async def ask_once(self, system_prompt: str, user_prompt: str) -> str:
+    async def ask_once(self, system_prompt: str, user_prompt: str, model: str | None = None) -> str:
         raise NotImplementedError
 
     async def close(self) -> None:
         pass
+
+    def versions(self) -> dict[str, str]:
+        return {}
 
 
 def _event_to_dict(ev: Any) -> dict[str, Any]:
@@ -79,27 +94,50 @@ def _event_to_dict(ev: Any) -> dict[str, Any]:
 USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens")
 
 
+def _camel(key: str) -> str:
+    head, *rest = key.split("_")
+    return head + "".join(w.capitalize() for w in rest)
+
+
 def _usage_from_events(events: list[dict[str, Any]]) -> dict[str, int]:
     """Sum the per-call usage counters from ``assistant.usage`` events (not the limit fields)."""
     totals: dict[str, int] = {}
     calls = 0
     for ev in events:
-        t = str(ev.get("type", ""))
-        if "usage" not in t:
+        if str(ev.get("type", "")) != "assistant.usage":
             continue
         data = ev.get("data") or {}
         if not isinstance(data, dict):
             continue
         calls += 1
         for key in USAGE_KEYS:
-            v = data.get(key)
-            if v is None:
-                v = data.get("".join(w.capitalize() if i else w for i, w in enumerate(key.split("_"))))  # camelCase from to_dict
+            v = data.get(key, data.get(_camel(key)))
             if isinstance(v, (int, float)):
                 totals[key] = totals.get(key, 0) + int(v)
     if calls:
         totals["model_calls"] = calls
     return totals
+
+
+def _resolved_model(events: list[dict[str, Any]]) -> str | None:
+    for ev in events:
+        t = str(ev.get("type", ""))
+        data = ev.get("data") if isinstance(ev.get("data"), dict) else {}
+        if t in ("session.start", "session.model_change", "assistant.usage") and data.get("model"):
+            return str(data["model"])
+    return None
+
+
+def _message_text(ev: Any) -> str:
+    if ev is None:
+        return ""
+    data = getattr(ev, "data", None)
+    content = getattr(data, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(ev, dict):
+        return str((ev.get("data") or {}).get("content", ""))
+    return str(ev)
 
 
 class CopilotBackend(Backend):
@@ -117,6 +155,16 @@ class CopilotBackend(Backend):
         self._client = CopilotClient(**kwargs)
         self._started = False
 
+    def versions(self) -> dict[str, str]:
+        out: dict[str, str] = {}
+        try:
+            from importlib.metadata import version
+
+            out["github-copilot-sdk"] = version("github-copilot-sdk")
+        except Exception:
+            pass
+        return out
+
     async def _ensure(self) -> None:
         if not self._started:
             await self._client.start()
@@ -127,13 +175,13 @@ class CopilotBackend(Backend):
             await self._client.stop()
             self._started = False
 
-    async def ask_once(self, system_prompt: str, user_prompt: str) -> str:
+    async def ask_once(self, system_prompt: str, user_prompt: str, model: str | None = None) -> str:
         from copilot.session import PermissionHandler
 
         await self._ensure()
         session = await self._client.create_session(
             on_permission_request=PermissionHandler.approve_all,
-            model=self.model,
+            model=model or self.model,
             provider=self.provider,
             system_message={"mode": "replace", "content": system_prompt},
             available_tools=[],
@@ -145,44 +193,73 @@ class CopilotBackend(Backend):
         finally:
             await session.disconnect()
 
-    async def run_stage(self, stage, workspace, prompt, *, system_append, skill_dirs, on_user_input, next_turn, max_turns, timeout_sec, response_schema=None, read_only=False, model=None) -> StageResult:
+    async def run_stage(self, spec: StageSpec, workspace: Path, *, on_user_input, next_turn) -> StageResult:
         from copilot.session import PermissionHandler
 
-        await self._ensure()
-        result = StageResult(stage=stage, final_message="", turns=0, started=time.time())
+        result = StageResult(stage=spec.name, final_message="", turns=0, started=time.time())
+        live_events: list[dict[str, Any]] = []
 
         async def user_input_handler(request: dict, _invocation: dict) -> dict:
             answer, freeform = await on_user_input(request.get("question", ""), request.get("choices"))
             return {"answer": answer, "wasFreeform": freeform}
 
-        session_kwargs: dict[str, Any] = dict(
-            on_permission_request=PermissionHandler.approve_all,
-            model=model or self.model,
-            provider=self.provider,
-            working_directory=str(workspace),
-            on_user_input_request=user_input_handler,
-            enable_file_change_tracking=True,
-        )
-        if system_append:
-            session_kwargs["system_message"] = {"mode": "append", "content": system_append}
-        if skill_dirs:
-            session_kwargs["skill_directories"] = skill_dirs
-        if read_only:
-            # Reviewer sessions: no edit/create tools. Tool names follow the Copilot SDK custom-agent
-            # docs (view, grep, glob, bash); bash stays so the reviewer can run the tests. The driver
-            # also resets the working tree after a read-only stage as a belt-and-braces measure.
-            session_kwargs["excluded_tools"] = ["edit", "create", "write", "apply_patch", "multi_edit"]
-        session = await self._client.create_session(**session_kwargs)
+        def on_event(ev: Any) -> None:
+            try:
+                live_events.append(_event_to_dict(ev))
+            except Exception:
+                pass
+
+        session = None
         try:
-            message = prompt
+            await self._ensure()
+            session_kwargs: dict[str, Any] = dict(
+                on_permission_request=PermissionHandler.approve_all,
+                model=spec.model or self.model,
+                provider=self.provider,
+                working_directory=str(workspace),
+                on_user_input_request=user_input_handler,
+                enable_file_change_tracking=True,
+                skip_custom_instructions=not spec.custom_instructions,
+                on_event=on_event,
+            )
+            if spec.system_append:
+                session_kwargs["system_message"] = {"mode": "append", "content": spec.system_append}
+            if spec.skill_dirs:
+                session_kwargs["skill_directories"] = spec.skill_dirs
+            if spec.extra_dirs:
+                session_kwargs["additional_directories"] = spec.extra_dirs
+            if spec.read_only:
+                # Reviewer sessions: no edit/create tools. Names follow the Copilot SDK custom-agent docs
+                # (view, grep, glob, bash); bash stays so the reviewer can run tests. The driver also
+                # resets the working tree after a read-only stage and records anything that changed.
+                session_kwargs["excluded_tools"] = ["edit", "create", "write", "apply_patch", "multi_edit"]
+            session = await self._client.create_session(**session_kwargs)
+
+            message = spec.prompt
             while True:
+                if spec.deadline is not None and time.time() >= spec.deadline:
+                    result.timed_out = True
+                    result.error = "stage deadline reached before turn"
+                    break
+                timeout = spec.turn_timeout_sec
+                if spec.deadline is not None:
+                    timeout = max(1.0, min(timeout, spec.deadline - time.time()))
                 result.turns += 1
-                send_kwargs: dict[str, Any] = {"timeout": timeout_sec}
-                if response_schema is not None:
-                    send_kwargs["response_schema"] = response_schema
-                ev = await session.send_and_wait(message, **send_kwargs)
+                send_kwargs: dict[str, Any] = {"timeout": timeout}
+                if spec.response_schema is not None:
+                    send_kwargs["response_schema"] = spec.response_schema
+                try:
+                    ev = await session.send_and_wait(message, **send_kwargs)
+                except (asyncio.TimeoutError, TimeoutError) as exc:
+                    result.timed_out = True
+                    result.error = f"turn timeout after {timeout:.0f}s: {exc}"
+                    try:
+                        await session.abort()
+                    except Exception:
+                        pass
+                    break
                 result.final_message = _message_text(ev)
-                if result.turns >= max_turns:
+                if result.turns >= spec.max_turns:
                     break
                 follow_up = await next_turn(result.final_message)
                 if follow_up is None:
@@ -190,27 +267,28 @@ class CopilotBackend(Backend):
                 message = follow_up
         except Exception as exc:  # keep partial artifacts
             result.error = f"{type(exc).__name__}: {exc}"
+            if session is not None:
+                try:
+                    await session.abort()
+                except Exception:
+                    pass
         finally:
-            try:
-                result.events = [_event_to_dict(e) for e in session.get_events()]
-            except Exception as exc:
-                result.events = [{"type": "harness.error", "data": f"get_events failed: {exc}"}]
+            events: list[dict[str, Any]] = []
+            if session is not None:
+                try:
+                    events = [_event_to_dict(e) for e in await session.get_events()]
+                except Exception as exc:
+                    events = [{"type": "harness.error", "data": {"message": f"get_events failed: {exc}"}}]
+                try:
+                    await session.disconnect()
+                except Exception:
+                    pass
+            # Prefer the full history; fall back to what we captured live (covers timeouts/disconnects).
+            result.events = events if len(events) >= len(live_events) else live_events
             result.usage = _usage_from_events(result.events)
-            await session.disconnect()
+            result.resolved_model = _resolved_model(result.events)
             result.finished = time.time()
         return result
-
-
-def _message_text(ev: Any) -> str:
-    if ev is None:
-        return ""
-    data = getattr(ev, "data", None)
-    content = getattr(data, "content", None)
-    if isinstance(content, str):
-        return content
-    if isinstance(ev, dict):
-        return str((ev.get("data") or {}).get("content", ""))
-    return str(ev)
 
 
 class FakeBackend(Backend):
@@ -221,22 +299,23 @@ class FakeBackend(Backend):
         self.reference_dir = reference_dir
         self.intent_dir = intent_dir
 
-    async def ask_once(self, system_prompt: str, user_prompt: str) -> str:
+    def versions(self) -> dict[str, str]:
+        return {"backend": "fake"}
+
+    async def ask_once(self, system_prompt: str, user_prompt: str, model: str | None = None) -> str:
         return "Yes, let's do that."
 
-    async def run_stage(self, stage, workspace, prompt, *, system_append, skill_dirs, on_user_input, next_turn, max_turns, timeout_sec, response_schema=None, read_only=False, model=None) -> StageResult:
-        result = StageResult(stage=stage, final_message="", turns=0, started=time.time())
-        events: list[dict[str, Any]] = [{"type": "fake.prompt", "data": {"content": prompt[:500]}}]
-        if stage == "review":
+    async def run_stage(self, spec: StageSpec, workspace: Path, *, on_user_input, next_turn) -> StageResult:
+        result = StageResult(stage=spec.name, final_message="", turns=0, started=time.time())
+        events: list[dict[str, Any]] = [{"type": "fake.prompt", "data": {"content": spec.prompt[:500]}}]
+        if spec.name == "review":
             result.turns += 1
-            (workspace / ".eval").mkdir(exist_ok=True)
-            (workspace / ".eval" / "process_review.md").write_text(FAKE_PROCESS_REVIEW, encoding="utf-8")
-            result.final_message = "Review written to .eval/process_review.md"
-        elif stage == "fixed_review":
+            result.final_message = FAKE_PROCESS_REVIEW
+        elif spec.name == "fixed_review":
             result.turns += 1
             has_tests = any((workspace / "tests").glob("test_*.py"))
             result.final_message = json.dumps(FAKE_REVIEW if has_tests else {**FAKE_REVIEW, "overall_correctness": "uncertain"})
-        elif stage == "author":
+        elif spec.name == "author":
             result.turns += 1
             ans, _ = await on_user_input("Is this brief accurate?", ["Yes, proceed", "No, let me restate"])
             events.append({"type": "fake.ask_user", "data": {"answer": ans}})
@@ -247,7 +326,7 @@ class FakeBackend(Backend):
             target = workspace / self.intent_dir
             target.mkdir(parents=True, exist_ok=True)
             (target / f"{time.strftime('%Y-%m-%d')}-ledger-budgets.md").write_text(FAKE_INTENT, encoding="utf-8")
-            result.final_message = "Approved intent written to change-intent/ and committed."
+            result.final_message = "Approved intent written and committed."
         else:
             result.turns += 1
             if self.reference_dir and self.reference_dir.exists():
@@ -293,6 +372,7 @@ FAKE_REVIEW = {
     "overall_confidence": 0.9,
     "reviewability": {"description_adequacy": 4, "coherence": 4, "verifiability": 5, "size_appropriateness": 3, "clarity": 4},
     "effort_to_review": 3,
+    "claims_checked": 8,
     "cannot_verify": ["Behaviour when budgets.csv is edited by hand with an invalid row"],
 }
 

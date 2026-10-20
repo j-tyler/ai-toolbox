@@ -6,8 +6,9 @@ process the agent follows: no intent at all, change intent as drafted in
 [`../mechanics`](../mechanics/README.md), or any variant you add. The output is graded by
 third-party, inspectable tooling so the comparison is defensible to people who did not build it.
 
-Status: **prototype**. The pipeline runs end to end offline (fake backend) through all four
-stages, and the grader discriminates correctly. Real Copilot runs and Harbor container runs are
+Status: **prototype, reviewed**. The pipeline runs end to end offline (fake backend) through all
+four stages. A two-reviewer, one-adjudicator pass over the code found and fixed a set of defects
+and confounds (see "What the review changed"). Real Copilot runs and Harbor container runs are
 wired up but were not executed in the authoring environment, which has no Copilot-entitled token
 and no Docker daemon.
 
@@ -19,7 +20,7 @@ and no Docker daemon.
 | Grader: multi-dimension verifier with audit details | [Reward Kit](https://docs.harborframework.com/rewardkit/quick-start), part of Harbor | yes |
 | Agent runtime | [GitHub Copilot SDK](https://github.com/github/copilot-sdk), MIT, Python | yes |
 | The exercise: seed project, brief, hidden tests, reference solution | `tasks/ledger-budgets/` | ours |
-| Process versions, generated from `../mechanics` | `processes/` | ours |
+| Process versions, generated from `../mechanics`; schema in `processes/README.md` | `processes/` | ours |
 | Driver: author → implement → review → fixed review, with a stand-in author | `driver/` | ours |
 | Fixed reviewer instructions, assembled from published sources | `reviewer/` | ours, cited |
 | Harbor agent classes, one per condition | `agents/copilot_process.py` | ours |
@@ -37,66 +38,78 @@ interface contract precise enough to test and open enough to leave real decision
 solution is about 500 lines of implementation; with the tests the brief demands, a complete
 answer lands in the 1,000 to 2,000 line range.
 
-Hidden acceptance tests (31, under `tests/__hidden/`) are never visible to the agent. On the
-untouched seed they fail 27 of 31; on the reference solution all pass, and the seed's own 17 tests
-still pass.
+Hidden acceptance tests (32, under `tests/__hidden/`) are never visible to the agent. On the
+untouched seed they fail 28 of 32; on the reference solution all pass, and the seed's own 17 tests
+still pass. The tests keep the ledger in a `data/` subdirectory with a different working directory,
+so "files next to the ledger file" is checked, not assumed.
 
 ## How a run works
 
-1. Harbor builds the task image (seed repo, Python, pytest, uv) and installs the Copilot CLI and
-   SDK in it, then uploads `driver/` and the chosen `processes/<name>/`.
+1. Harbor builds the task image (seed repo, Python, pytest, uv, a git identity) and installs the
+   Copilot CLI and pinned SDK in it, then uploads `driver/`, `reviewer/`, and the chosen
+   `processes/<name>/`.
 2. `driver/run_process.py` turns the workspace into a git repo, installs the process files
-   (appends the agents-file block to `AGENTS.md`, creates `change-intent/`), and commits a baseline.
-3. **Author stage** (change-intent processes only): one Copilot SDK session with the
-   `change-intent-author` skill loaded. The skill's questions reach a **stand-in author**
-   (`driver/stand_in.py`): `ask_user` tool calls arrive through the SDK's `on_user_input_request`
-   handler, and prose questions at the end of a turn get a scripted reply on the next turn. The
-   scripted policy is: confirm the brief, take the recommended or first option, keep scope
-   minimal, approve. A model-backed stand-in exists for skills that ask open questions. Either
-   way the stand-in is identical across conditions and every exchange is logged. The approved
-   intent is committed.
-4. **Implement stage**: a fresh session with the implementation guidance appended to its system
-   prompt and a prompt that points at the committed intent file by path, with the brief attached
-   as context. The baseline gets the brief alone. The result is committed.
+   (appends the agents-file block to `AGENTS.md`, creates the intent directory), and commits a
+   baseline. Every artifact it produces lives **outside the workspace** until the end, so no stage
+   can read another stage's output unless the harness hands it over.
+3. **Author stage**, by `author.mode`. `skill`: one SDK session with the process's authoring skill
+   loaded; its questions reach a **stand-in author** (`driver/stand_in.py`) through the SDK's
+   `on_user_input_request` handler for `ask_user` calls and through scripted replies for prose
+   questions. The dialogue ends when the intent file exists and is committed, whatever the agent
+   asks next; an existing but unapproved file gets one request to show it for approval. The stage
+   records `author_outcome` (approved, unapproved_file, no_file) and reverts and flags anything the
+   author touched outside the intent directory. `frozen`: a supplied intent is committed with no
+   dialogue, which removes authoring variance. `none`: no intent.
+4. **Implement stage**: a fresh session. The prompt is the same neutral text for every condition
+   ("implement the change described in {source}", where source is the intent path or the brief),
+   with the brief attached when `implement.include_brief` is true. Everything process-specific
+   arrives through `implement.system_append` and the agents-file block, never through the harness
+   prompt. The result is committed as `eval: implementation` (an empty marker commit if the agent
+   already committed), and that commit is recorded.
 5. The driver writes `diff.patch` and `change_description.md`, which holds whatever the process
    produced to describe the change: the approved intent plus the implementer's summary for
    change-intent processes, the summary alone for the baseline.
-6. **Review stage** (process versions that list it): the change-intent review guidance is
-   appended to a read-only session that assesses the diff against the intent and writes
-   `.eval/process_review.md` with a met / not met / cannot verify table per claim.
+6. **Review stage** (processes with a `review` section): the process's review guidance is
+   appended to a read-only session that assesses the diff against the intent and returns a met /
+   not met / cannot verify table per claim as its final message; the driver saves it.
 7. **Fixed review** (every condition): a second read-only session runs
-   [`reviewer/fixed_reviewer.md`](reviewer/fixed_reviewer.md), the same instructions for every
-   process version, given the repository and `change_description.md`. It returns JSON against
-   `REVIEW_SCHEMA` (findings with location, severity, and confidence; an overall verdict; five
-   reviewability ratings; effort to review; what it could not verify). The reviewer model is
-   pinned separately (`--reviewer-model`, `EVAL_REVIEWER_MODEL` under Harbor) so it can come from
-   another vendor than the implementer. The working tree is reset after each review stage, and any
-   path a reviewer touched is recorded in the summary.
+   [`reviewer/fixed_reviewer.md`](reviewer/fixed_reviewer.md) with workspace custom instructions
+   **off**, so the change-intent `AGENTS.md` block cannot reach it, and with exactly two inputs
+   copied into a sealed directory outside the workspace: `diff.patch` and `change_description.md`.
+   It returns JSON against `REVIEW_SCHEMA` (findings with location, severity, and confidence; an
+   overall verdict; five reviewability ratings; effort to review; how many claims it checked and
+   which it could not verify). The driver validates the JSON and keeps the raw message. The
+   reviewer model must differ from the implementer's (`--reviewer-model`, or `EVAL_REVIEWER_MODEL`
+   under Harbor); the driver refuses a same-model reviewer unless `--allow-same-reviewer`. After
+   each review the tree is reset to the implementation commit and anything that moved is recorded.
 8. The driver writes `.eval/` (summary, dialogue log, SDK events and transcripts per stage,
    `review.json`, `process_review.md`), and Harbor runs `tests/test.sh`, which is Reward Kit.
 
 ### Grading dimensions
 
 ```
-reward            weighted mean: correctness 4, review 2, process 1
-  correctness     acceptance (hidden tests pass fraction, all-pass) 3 : regression (seed tests, agent's suite, stdlib-only) 1
-  review          fixed_reviewer (present, verdict correct, no blocking findings) 1
-                  : reviewability (mean of five ratings 3, description adequacy 1, low effort 1, few unverifiable claims 1) 1
-  process         artifacts (committed, summary clean, tests added) 2 : intent (present, sections) 1
-                  : review (process review present, claims assessed, determinacy) 1
+reward            weighted mean: correctness 4, review 2, handoff 1   (diagnostics weight 0)
+  correctness     acceptance (hidden tests pass fraction 3, all-pass 1) 3 : regression (seed tests 2, agent's suite 1, stdlib-only 1) 1
+  review          fixed_reviewer (present 1, verdict correct 2, no blocking findings 2) 1
+                  : reviewability (mean of five ratings 3, description adequacy 1, low effort 1, verified-claims ratio 1) 1
+  handoff         implementation committed and tree clean 1, no stage errors or timeouts 1
+  diagnostics     intent (present, sections, author approved), process_review (present, claims
+                  assessed, determinacy), tests_added   -- reported, never in the headline
 ```
 
-`review` is the fixed reviewer's structured verdict turned into numbers; the criteria do not
-re-judge the code. `process` reports on the artifacts a process promises, including its own
-review pass, and is weighted low so a baseline without them is not penalised for honesty.
-`reward-details.json` lists every criterion's value.
+The headline uses only criteria every condition can satisfy identically. `review` is the fixed
+reviewer's structured verdict turned into numbers; the criteria do not re-judge the code.
+Process-specific artifacts are diagnostics with weight zero, so a process that produces no intent
+is not penalised for honesty and a process that produces change-intent-shaped files gains
+nothing for the shape alone. `reward-details.json` lists every criterion's value.
 
-Offline check, fake backend, same grader: change-intent-v1 0.934, baseline 0.864, where the fake
-reviewer returns the same verdict for both. In real runs the two reviews are where the
-conditions are expected to separate: the fixed reviewer rates description adequacy and
-verifiability from the artifacts each process leaves behind, and the process review's
-determinacy (how many claims it can decide rather than mark `cannot verify`) is a direct measure
-of how reviewable the implementation made its own intent.
+Offline check, fake backend, same grader, same fake output for every condition: baseline,
+change-intent-v1, and change-intent-v1-frozen all score 0.961 on the headline, and differ only in
+diagnostics (0.017 vs 0.665). That parity is the property that makes a real difference
+attributable to the process. In real runs the review dimension is where conditions are expected
+to separate: the fixed reviewer rates description adequacy and verifiability from the artifacts
+each process leaves behind, and `verified_claims_ratio` is a ratio so a description that claims
+less cannot win by claiming less.
 
 ## Running
 
@@ -114,9 +127,13 @@ scripts/analyze.py runs/
 
 ```bash
 export COPILOT_GITHUB_TOKEN=...            # a token for a user with Copilot access
-scripts/run_local.sh change-intent-v1 --model gpt-5.4
-scripts/run_local.sh baseline --model gpt-5.4
+scripts/run_local.sh change-intent-v1 --model gpt-5.4 --reviewer-model claude-sonnet-4.5
+scripts/run_local.sh baseline         --model gpt-5.4 --reviewer-model claude-sonnet-4.5
+scripts/run_local.sh change-intent-v1-frozen --intent-file path/to/intent.md --model gpt-5.4 --reviewer-model claude-sonnet-4.5
+scripts/analyze.py runs/ --ref baseline
 ```
+
+The workspace is created outside the repository so a real run cannot read the hidden tests.
 
 BYOK instead of Copilot entitlement: pass `--provider-json '{"type":"anthropic","base_url":"...","api_key":"..."}'`
 (the SDK's `ProviderConfig`). Note that without BYOK each SDK prompt counts against the Copilot
@@ -127,11 +144,16 @@ premium-request quota.
 ```bash
 cd ideas/change-intent/eval
 uv tool install harbor                      # or pip install harbor
-export COPILOT_GITHUB_TOKEN=...
-harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1 -m gpt-5.4 -k 3
-harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline        -m gpt-5.4 -k 3
+export COPILOT_GITHUB_TOKEN=... EVAL_REVIEWER_MODEL=claude-sonnet-4.5
+PYTHONPATH=. harbor run -p tasks/ledger-budgets -a oracle -k 1                                    # task sanity check: correctness 1.0
+PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1 -m gpt-5.4 -k 3
+PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline        -m gpt-5.4 -k 3
 harbor view jobs
+scripts/analyze.py ~/jobs/<job> --ref baseline
 ```
+
+`PYTHONPATH=.` is required: Harbor imports `module:Class` with importlib and does not add the
+current directory to `sys.path`.
 
 `-k` is attempts per task; three is the floor for seeing past run-to-run variance on a change
 this size. Harbor keeps every trial's trajectory, the verifier output, and the `.eval/` artifacts
@@ -140,17 +162,12 @@ the reference solution and should score 1.0 on correctness.
 
 ## Adding a process version
 
-Process versions are directories under `processes/` with a `process.json`:
-
-```json
-{ "name": "...", "stages": ["author", "implement"],
-  "agents_block": "AGENTS.block.md", "skills_dir": "skills", "authoring_skill": "change-intent-author",
-  "implementation_guidance": "implementation-guidance.md", "intent_dir": "change-intent" }
-```
-
-`change-intent-v1` is generated from `../mechanics` by `scripts/build_processes.py`; re-run it
-after editing the mechanics. To try a variant, copy the generated directory to a new name, edit
-the copy, add a two-line subclass in `agents/copilot_process.py`, and run it with `-a`.
+See [`processes/README.md`](processes/README.md) for the `process.json` schema and a table of
+which field to vary for which question (whole process, intent artifact, guidance, authoring
+skill, intent alone). `change-intent-v1` and `change-intent-v1-frozen` are generated from
+`../mechanics` by `scripts/build_processes.py`; re-run it after editing the mechanics. To try a
+variant, copy a generated directory to a new name, edit the copy, add a two-line subclass in
+`agents/copilot_process.py`, and run it with `-a`.
 
 ## Decisions worth knowing
 
@@ -171,19 +188,74 @@ the copy, add a two-line subclass in `agents/copilot_process.py`, and run it wit
   feeds the `review` dimension. Its instructions quote published sources (Google's review guide,
   the published Anthropic reviewer threshold, OpenAI's review schema shape, the TU Delft
   reviewability factors) so nobody in the experiment wrote the reviewer for their own process.
+- **The fixed reviewer sees the intent.** This is a deliberate choice: "reviewable with the
+  artifact the process actually leaves behind" is the claim under test. Its verdict standard is
+  relative to the description, which favours sparser descriptions a little; the ratio scoring and
+  the neutral heading reduce that, and a blinded diff-only arm is listed under future work. The
+  intent file is also inside `diff.patch`; `summary.json` records a code-only shortstat as well.
 - **Reviewers are read-only by construction and by cleanup.** Edit tools are excluded from review
-  sessions, and the driver resets the tree afterwards and records anything that changed.
+  sessions, and the driver resets the tree to the implementation commit afterwards and records
+  anything that moved.
 - **Structured output.** The fixed reviewer returns JSON through the SDK's `response_schema`; the
-  driver also tolerates a fenced block or surrounding prose and keeps the raw message.
+  driver validates it, tolerates a fenced block or surrounding prose, and keeps the raw message.
+- **Every run is pinned and manifested.** `summary.json` carries the harness git SHA, SDK
+  version, the hash of every process file, the brief, the reviewer instructions, the schema, and
+  each rendered prompt, plus the resolved model per stage when the SDK reports it.
+- **Time caps are per stage and identical across conditions.** The implement cap does not shrink
+  because authoring took long; `task.toml`'s agent timeout covers the sum.
+
+## What the review changed
+
+A workflow of two independent Opus reviewers (defects; swappability of intent and guidance) and
+one adjudicator reviewed the harness. The adjudicator verified each finding against the code or by
+running it. Changes made as a result, in its priority order:
+
+1. The uvx-run verifier graded with an interpreter that had no pytest, so every Harbor trial would
+   have scored near zero on correctness. `test.sh` now resolves the workspace python first; a
+   missing pytest fails loudly; pytest runs are cached, time-boxed, and the hidden tests carry a
+   per-test alarm; malformed reviewer output scores zero instead of crashing the verifier.
+2. The headline reward now contains only condition-invariant criteria; process-specific artifacts
+   moved to a weight-zero diagnostics group. Before, the process term alone explained the entire
+   offline gap between conditions.
+3. Stage inputs are sealed: artifacts live outside the workspace during the run, the fixed reviewer
+   gets custom instructions off and only two files in a sealed directory, the process review
+   returns text instead of writing into the workspace, and the change description has a neutral
+   heading.
+4. `process.json` grew into a real schema (author mode, implement, review, intent sections) so
+   intent construction and implementation guidance can be varied independently; the harness
+   prompts are neutral; a frozen-intent mode isolates the intent artifact.
+5. The stand-in stops once the intent is committed, asks once for an unapproved file, records the
+   author outcome, and reverts and flags files the author touched outside the intent directory.
+6. Real-path robustness: `get_events()` is awaited (it was not, so real runs would have lost every
+   transcript and token count); events are also captured live; sessions are aborted on error or
+   timeout; per-stage wall-clock caps; `summary.json` is always written; the Harbor command copies
+   artifacts even when the driver fails; the tree is reset to the recorded implementation commit.
+7. A git identity everywhere, an always-present implementation marker commit, and commit detection
+   that survives an implementer committing its own work.
+8. `analyze.py` groups by the process recorded in `summary.json`, reports bootstrap intervals and
+   differences against a reference, cost per stage, and author outcomes.
+9. Hidden tests distinguish "next to the ledger file" from "in the working directory"; the brief
+   states JSON ordering and id numbering.
+10. `PYTHONPATH=.` documented for Harbor; SDK and Reward Kit pinned; run manifest; same-model
+    reviewer refused by default.
+11. `run_local.sh` builds the workspace outside the repository and always grades.
+
+Deferred, from the same review: the full intent-isolation protocol (author N times, freeze, implement
+M times each), hidden author preferences for the stand-in so authoring can gain as well as lose, a
+direct intent grader and test-strength (mutant) measures, a blinded diff-only reviewer arm, more
+tasks and attempts, a separately pinned model for the model stand-in, and digest-pinned images.
 
 ## What was and was not verified here
 
 Verified in the authoring environment: hidden tests versus seed and reference; the driver end to
-end in fake mode for both processes through author, implement, process review, and fixed review;
-Reward Kit grading of the resulting workspaces across all three dimensions; the Harbor agent
-classes import against Harbor 0.24 and `task.toml` validates against its schema; the Copilot SDK
-runtime downloads, starts, and creates a session; the SDK's `create_session` accepts
-`excluded_tools`, per-session `model`, and `send_and_wait` accepts `response_schema`.
+end in fake mode for baseline, change-intent-v1, and change-intent-v1-frozen through every stage;
+Reward Kit grading of the resulting workspaces, including through `uvx` exactly as `test.sh`
+runs it; headline parity across conditions with identical outputs; the stand-in stopping rules;
+verifier survival on malformed reviewer output; the Harbor agent classes import against Harbor
+0.24 and `task.toml` validates against its schema; the Copilot SDK runtime downloads, starts, and
+creates a session; `create_session` accepts `excluded_tools`, `skip_custom_instructions`,
+`additional_directories`, `on_event`, per-session `model`; `send_and_wait` accepts
+`response_schema`; `get_events` is a coroutine and is awaited.
 
 Not verified: a real model turn through the SDK (the environment's GitHub token has no Copilot
 entitlement, the failure is `Session was not created with authentication info or custom
