@@ -13,7 +13,7 @@ Files, all in the same directory as the ledger file (not the current directory):
 ### Budgets
 
 - `ledger budget set <category> <amount> [--month YYYY-MM]` sets the limit for a category. Without `--month` it sets the default limit that applies to every month; with `--month` it sets a limit for that month only, which overrides the default for that month. Setting again replaces the previous value. Prints `budget <category> <amount> [for YYYY-MM]`, with the amount formatted as the tool already formats amounts, and exits 0.
-- `ledger budget status --month YYYY-MM [--format text|json]` shows each budgeted category for that month. Text output is one line per category, sorted by category name: `<category> <spent>/<limit> remaining <remaining>`, with ` OVER` appended when spent exceeds limit. Spent is the sum of the month's transactions in that category. JSON output is a list of objects with keys `category`, `limit_cents`, `spent_cents`, `remaining_cents`, `over` (boolean). Exit code is 0.
+- `ledger budget status --month YYYY-MM [--format text|json]` shows each budgeted category for that month. Text output is one line per category, sorted by category name: `<category> <spent>/<limit> remaining <remaining>`, with ` OVER` appended when spent exceeds limit. Spent is the sum of the month's transactions in that category; `remaining` is limit minus spent, negative when over. With no budgets set the output is empty. JSON output is a list of objects with keys `category`, `limit_cents`, `spent_cents`, `remaining_cents`, `over` (boolean). Exit code is 0.
 
 ### Recurring transactions
 

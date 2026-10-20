@@ -5,19 +5,27 @@
     scripts/analyze.py ~/jobs/<job> [--ref baseline]
 
 A trial is a summary.json; it has a reward when a reward.json resolves to the same summary. The
-condition is (process, labels, frozen-intent hash): different frozen artifacts are never pooled.
-Trials with a harness error, a driver that never finished, or no model calls in the implement stage
-are INVALID and excluded from outcome tables (counted per condition). Trials whose fixed review is
-missing are reported both ways: scored as 0 in `review` (as the verifier does) and excluded.
+condition is (process, labels, frozen-intent hash, model, reviewer model, brief hash): trials that
+differ in any of these are never pooled. Within a condition the process files, harness commit,
+stand-in and dirty flag must agree; a mixed condition stops the analysis unless --allow-mixed.
 
-Differences against --ref come with a permutation p-value and a Welch t interval, and a warning
-below 10 trials per arm: with one task and a handful of attempts, a bootstrap interval on the mean
-is far too narrow (about one in five null comparisons would look significant at k=3).
+Trials with a harness error, a driver that never finished, no model calls in the implement stage,
+or a model mismatch (a stage served by a model other than the one requested; --keep-model-mismatch
+keeps them) are INVALID and excluded from outcome tables (counted per condition). Trials whose
+fixed review is missing are reported both ways: scored as 0 in `review` (as the verifier does, ITT)
+and excluded (XR).
+
+Primary endpoint: correctness (hidden tests). The headline reward, review and handoff are
+secondary or exploratory. Differences against --ref come with a permutation p-value, a Welch t
+interval, the smallest p the arm sizes can attain, and the minimum detectable effect. With one task
+and a handful of attempts these are pilot estimates: at k=3 the smallest two-sided permutation p is
+0.10 and the detectable effect is about three standard deviations.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import itertools
 import json
 import math
@@ -27,11 +35,15 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-DIMS_HEADLINE = ["reward", "correctness", "review", "handoff"]
+PRIMARY = "correctness"
+DIMS_HEADLINE = ["correctness", "reward", "review", "handoff"]
+DIM_ROLE = {"correctness": "primary", "reward": "secondary", "review": "exploratory", "handoff": "exploratory"}
 CRITERIA_OF_INTEREST = [
     "hidden_tests_pass_fraction", "hidden_tests_all_pass", "existing_tests_still_pass", "agent_tests_pass",
     "reviewer_verdict_correct", "no_blocking_findings", "reviewability_score", "description_adequacy", "verified_claims_ratio",
 ]
+# Fields that must agree inside one condition for the pooled trials to be comparable.
+HOMOGENEITY_FIELDS = ("process_files_digest", "harness_git_sha", "stand_in", "stand_in_model", "harness_dirty")
 
 
 def find_summary(reward_path: Path) -> Path | None:
@@ -71,16 +83,50 @@ def flatten_criteria(details: dict | None) -> dict[str, float]:
 
 
 def condition_of(summary: dict) -> str:
+    """Everything that defines an experimental condition; two trials pool only if this matches."""
+    manifest = summary.get("manifest") or {}
     process = summary.get("process") or "?"
     labels = summary.get("labels") or {}
     parts = [process] + [f"{k}={v}" for k, v in sorted(labels.items())]
-    src = ((summary.get("manifest") or {}).get("intent_source") or {}).get("sha256")
+    src = (manifest.get("intent_source") or {}).get("sha256")
     if src:
-        parts.append(f"intent={src[:8]}")
+        parts.append(f"artifact={src[:8]}")
+    if manifest.get("model"):
+        parts.append(f"model={manifest['model']}")
+    if manifest.get("reviewer_model") and manifest.get("reviewer_model") != manifest.get("model"):
+        parts.append(f"reviewer={manifest['reviewer_model']}")
+    if manifest.get("brief_sha256"):
+        parts.append(f"brief={manifest['brief_sha256'][:8]}")
     return " ".join(parts)
 
 
-def invalid_reason(summary: dict) -> str | None:
+def homogeneity_key(summary: dict) -> dict:
+    manifest = summary.get("manifest") or {}
+    files = manifest.get("process_files") or {}
+    digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()[:12] if files else None
+    return {
+        "process_files_digest": digest,
+        "harness_git_sha": (manifest.get("harness_git_sha") or "")[:12] or None,
+        "stand_in": manifest.get("stand_in"),
+        "stand_in_model": manifest.get("stand_in_model"),
+        "harness_dirty": manifest.get("harness_dirty"),
+    }
+
+
+def heterogeneity(trials: list[dict]) -> list[str]:
+    """Human-readable reasons a set of same-condition trials should not be pooled."""
+    problems = []
+    for field in HOMOGENEITY_FIELDS:
+        values = {json.dumps(t["homogeneity"].get(field)) for t in trials}
+        if field == "harness_dirty":
+            if any(t["homogeneity"].get(field) for t in trials):
+                problems.append("harness_dirty=true in some trial (uncommitted harness changes)")
+        elif len(values) > 1:
+            problems.append(f"{field} varies: {sorted(values)}")
+    return problems
+
+
+def invalid_reason(summary: dict, keep_model_mismatch: bool = False) -> str | None:
     if summary.get("harness_error"):
         return "harness_error"
     if summary.get("status") == "running":
@@ -90,10 +136,12 @@ def invalid_reason(summary: dict) -> str | None:
         return "no_implement_stage"
     if summary.get("backend") == "copilot" and not (impl.get("usage") or {}).get("model_calls"):
         return "no_model_calls"
+    if summary.get("model_mismatch_any") and not keep_model_mismatch:
+        return "model_mismatch"
     return None
 
 
-def load_trials(root: Path) -> tuple[list[dict], list[str]]:
+def load_trials(root: Path, keep_model_mismatch: bool = False) -> tuple[list[dict], list[str]]:
     trials, unknown = [], []
     rewarded: dict[Path, tuple[dict, dict | None]] = {}
     for reward_path in sorted(root.rglob("reward.json")):
@@ -116,7 +164,8 @@ def load_trials(root: Path) -> tuple[list[dict], list[str]]:
         trials.append({
             "condition": condition_of(summary), "process": summary["process"], "reward": reward,
             "criteria": flatten_criteria(details), "summary": summary, "path": str(summary_path),
-            "invalid": invalid_reason(summary),
+            "invalid": invalid_reason(summary, keep_model_mismatch),
+            "homogeneity": homogeneity_key(summary),
             "review_missing": bool(fixed.get("missing")) or (reward is not None and fixed.get("status") == "missing"),
         })
     return trials, unknown
@@ -125,6 +174,25 @@ def load_trials(root: Path) -> tuple[list[dict], list[str]]:
 def is_per_protocol(summary: dict) -> bool:
     author = (summary.get("stages") or {}).get("author")
     return author is None or author.get("author_outcome") == "approved"
+
+
+# Two-sided 97.5% Student t quantiles. _t_quantile picks the entry for the largest tabulated df at or
+# below the actual df, so the interval is never narrower than the exact one.
+_T_TABLE = [(1, 12.706), (2, 4.303), (3, 3.182), (4, 2.776), (5, 2.571), (6, 2.447), (7, 2.365), (8, 2.306),
+            (9, 2.262), (10, 2.228), (12, 2.179), (15, 2.131), (20, 2.086), (25, 2.060), (30, 2.042),
+            (40, 2.021), (60, 2.000), (120, 1.980), (1e9, 1.960)]
+
+
+def _t_quantile(df: float) -> float:
+    if df < 1:
+        return _T_TABLE[0][1]
+    q = _T_TABLE[0][1]
+    for d, val in _T_TABLE:
+        if d <= df:
+            q = val
+        else:
+            break
+    return q
 
 
 def welch(a: list[float], b: list[float]) -> tuple[float, float, float]:
@@ -139,15 +207,6 @@ def welch(a: list[float], b: list[float]) -> tuple[float, float, float]:
     df = (va / len(a) + vb / len(b)) ** 2 / ((va / len(a)) ** 2 / (len(a) - 1) + (vb / len(b)) ** 2 / (len(b) - 1))
     t = _t_quantile(df)
     return ma - mb, ma - mb - t * se, ma - mb + t * se
-
-
-def _t_quantile(df: float) -> float:
-    table = [(1, 12.706), (2, 4.303), (3, 3.182), (4, 2.776), (5, 2.571), (6, 2.447), (8, 2.306), (10, 2.228),
-             (15, 2.131), (20, 2.086), (30, 2.042), (60, 2.000), (1e9, 1.960)]
-    for d, q in table:
-        if df <= d:
-            return q
-    return 1.96
 
 
 def permutation_p(a: list[float], b: list[float], n: int = 5000, seed: int = 0) -> float:
@@ -172,6 +231,22 @@ def permutation_p(a: list[float], b: list[float], n: int = 5000, seed: int = 0) 
     return hits / n
 
 
+def min_permutation_p(na: int, nb: int) -> float:
+    """Smallest two-sided p an exact permutation test can report for these arm sizes."""
+    if na == 0 or nb == 0:
+        return float("nan")
+    total = math.comb(na + nb, na)
+    return 2 / total if total else float("nan")  # the extreme split and its mirror
+
+
+def minimum_detectable_effect(a: list[float], b: list[float]) -> float:
+    """Approximate MDE for 80% power at two-sided 5%: (t_crit + 0.84) * pooled_sd * sqrt(1/na + 1/nb)."""
+    if len(a) < 2 or len(b) < 2:
+        return float("nan")
+    pooled = math.sqrt(((len(a) - 1) * statistics.variance(a) + (len(b) - 1) * statistics.variance(b)) / (len(a) + len(b) - 2))
+    return (_t_quantile(len(a) + len(b) - 2) + 0.84) * pooled * math.sqrt(1 / len(a) + 1 / len(b))
+
+
 def fmt(x: float) -> str:
     return "  nan " if x != x else f"{x:6.3f}"
 
@@ -180,8 +255,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("root", nargs="?", default="runs")
     ap.add_argument("--ref", help="reference process for differences (default: alphabetically first condition)")
+    ap.add_argument("--allow-mixed", action="store_true", help="report even when a condition pools trials from different harness/process versions")
+    ap.add_argument("--keep-model-mismatch", action="store_true", help="keep trials where a stage was served by a model other than the one requested")
     args = ap.parse_args()
-    trials, unknown = load_trials(Path(args.root))
+    trials, unknown = load_trials(Path(args.root), keep_model_mismatch=args.keep_model_mismatch)
     if not trials:
         print(f"no trials under {args.root}")
         for u in unknown:
@@ -193,6 +270,18 @@ def main() -> int:
         by_cond[t["condition"]].append(t)
     conds = sorted(by_cond)
     ref = next((c for c in conds if c == args.ref or c.split(" ")[0] == args.ref), None) or conds[0]
+    width = max(44, min(96, max(len(c) for c in conds) + 8))
+
+    mixed = {c: heterogeneity(by_cond[c]) for c in conds if heterogeneity(by_cond[c])}
+    if mixed:
+        print("== HETEROGENEOUS CONDITIONS: these trials were not produced by one harness/process version and must not be pooled")
+        for c, problems in mixed.items():
+            for p in problems:
+                print(f"   {c}: {p}")
+        if not args.allow_mixed:
+            print("   stopping; rerun with --allow-mixed to report anyway, or split the runs by version with --label")
+            return 2
+        print("   --allow-mixed given; the tables below pool them anyway\n")
 
     def valid(c: str, pp: bool = False, drop_missing_review: bool = False) -> list[dict]:
         return [t for t in by_cond[c] if not t["invalid"] and t["reward"]
@@ -201,59 +290,84 @@ def main() -> int:
     def vals(ts: list[dict], dim: str) -> list[float]:
         return [float(t["reward"][dim]) for t in ts if isinstance(t["reward"].get(dim), (int, float))]
 
+    print(f"primary endpoint: {PRIMARY} (hidden tests). reward is secondary; review and handoff are exploratory.\n")
     print("== trials per condition")
-    print(f"{'condition':44} {'n':>3} {'valid':>5} {'invalid':>7} {'no_reward':>9} {'review_missing':>14}  invalid reasons")
+    print(f"{'condition':{width}} {'n':>3} {'valid':>5} {'invalid':>7} {'no_reward':>9} {'review_missing':>14}  invalid reasons")
     for c in conds:
         ts = by_cond[c]
         inv = [t["invalid"] for t in ts if t["invalid"]]
-        print(f"{c:44} {len(ts):>3} {len(valid(c)):>5} {len(inv):>7} {sum(1 for t in ts if not t['invalid'] and not t['reward']):>9} "
-              f"{sum(1 for t in valid(c) if t['review_missing']):>14}  {dict((r, inv.count(r)) for r in set(inv))}")
+        n_valid = len(valid(c))
+        missing = sum(1 for t in valid(c) if t["review_missing"])
+        rate = f"{missing}/{n_valid}" if n_valid else "-"
+        print(f"{c:{width}} {len(ts):>3} {n_valid:>5} {len(inv):>7} {sum(1 for t in ts if not t['invalid'] and not t['reward']):>9} "
+              f"{rate:>14}  {dict((r, inv.count(r)) for r in set(inv))}")
 
     small = any(len(valid(c)) < 10 for c in conds)
-    print("\n== headline (mean ± sd), valid trials only. ITT = every valid trial; PP = author approved or absent; XR = missing fixed review excluded")
+    print("\n== headline (mean ± sd), valid trials only.")
+    print("   ITT = every valid trial (missing fixed review scored 0, as the verifier does)")
+    print("   XR  = missing fixed review excluded")
+    print("   PP  = biased: selects on post-treatment authoring success in one arm; sensitivity only")
     if small:
         print("   WARNING: fewer than 10 valid trials in some arm; treat every difference below as a pilot estimate, not a result.")
-    print(f"{'condition':44} {'n':>3}  " + "  ".join(f"{d:>16}" for d in DIMS_HEADLINE))
+    print(f"{'condition':{width}} {'n':>3}  " + "  ".join(f"{d + ' (' + DIM_ROLE[d][:4] + ')':>18}" for d in DIMS_HEADLINE))
     for c in conds:
-        for tag, ts in (("ITT", valid(c)), ("PP", valid(c, pp=True)), ("XR", valid(c, drop_missing_review=True))):
+        for tag, ts in (("ITT", valid(c)), ("XR", valid(c, drop_missing_review=True)), ("PP", valid(c, pp=True))):
             cells = []
             for d in DIMS_HEADLINE:
                 v = vals(ts, d)
-                cells.append(f"{statistics.mean(v):6.3f} ±{(statistics.pstdev(v) if len(v) > 1 else 0.0):5.3f}" if v else f"{'-':>16}")
-            print(f"{c + '  [' + tag + ']':44} {len(ts):>3}  " + "  ".join(cells))
+                cells.append(f"{statistics.mean(v):8.3f} ±{(statistics.pstdev(v) if len(v) > 1 else 0.0):5.3f}" if v else f"{'-':>18}")
+            print(f"{c + '  [' + tag + ']':{width}} {len(ts):>3}  " + "  ".join(cells))
 
     print(f"\n== differences vs {ref} (valid, ITT): mean diff, Welch 95% interval, permutation p")
+    print("   min p = smallest two-sided p attainable for these arm sizes; MDE = effect detectable with 80% power at 5%")
     for c in conds:
         if c == ref:
             continue
-        cells = []
+        na, nb = len(valid(c)), len(valid(ref))
+        print(f"{c:{width}} n={na} vs {nb}; min p={min_permutation_p(na, nb):.3f}")
         for d in DIMS_HEADLINE:
             a, b = vals(valid(c), d), vals(valid(ref), d)
             diff, lo, hi = welch(a, b)
-            cells.append(f"{d}: {fmt(diff)} [{fmt(lo)},{fmt(hi)}] p={permutation_p(a, b):.3f}")
-        print(f"{c:44} " + "  ".join(cells))
+            print(f"{'':{width}}   {d:12} ({DIM_ROLE[d]:11}) {fmt(diff)} [{fmt(lo)},{fmt(hi)}] p={permutation_p(a, b):.3f}  MDE={fmt(minimum_detectable_effect(a, b))}")
 
     print("\n== decomposition: mean of individual criteria (valid, ITT), so a review win and a code win can be told apart")
     present = [k for k in CRITERIA_OF_INTEREST if any(k in t["criteria"] for ts in by_cond.values() for t in ts)]
     if present:
-        print(f"{'condition':44} " + " ".join(f"{k[:14]:>14}" for k in present))
+        print(f"{'condition':{width}} " + " ".join(f"{k[:14]:>14}" for k in present))
         for c in conds:
             ts = valid(c)
             cells = []
             for k in present:
                 v = [t["criteria"][k] for t in ts if k in t["criteria"]]
                 cells.append(f"{statistics.mean(v):14.3f}" if v else f"{'-':>14}")
-            print(f"{c:44} " + " ".join(cells))
+            print(f"{c:{width}} " + " ".join(cells))
     else:
         print("   (no reward-details.json found next to the rewards)")
 
-    print("\n== code-only diff size, cost per stage (mean per valid trial), author outcomes, model mismatches")
+    print("\n== reviewer calibration (valid, XR): does the fixed reviewer's verdict track the hidden tests?")
+    print("   P(verdict correct) and P(no blocking findings) split by whether every hidden test passed; mean(review - correctness)")
+    print(f"{'condition':{width}} {'all_pass':>8} {'n':>3} {'P(verdict ok)':>13} {'P(no block)':>11}   {'mean(rev-corr)':>14}")
+    for c in conds:
+        ts = [t for t in valid(c, drop_missing_review=True) if "hidden_tests_all_pass" in t["criteria"]]
+        for flag in (1.0, 0.0):
+            grp = [t for t in ts if t["criteria"]["hidden_tests_all_pass"] == flag]
+            if not grp:
+                continue
+            pv = [t["criteria"].get("reviewer_verdict_correct") for t in grp if "reviewer_verdict_correct" in t["criteria"]]
+            pb = [t["criteria"].get("no_blocking_findings") for t in grp if "no_blocking_findings" in t["criteria"]]
+            gap = [float(t["reward"]["review"]) - float(t["reward"]["correctness"]) for t in grp
+                   if isinstance(t["reward"].get("review"), (int, float)) and isinstance(t["reward"].get("correctness"), (int, float))]
+            print(f"{c:{width}} {('yes' if flag else 'no'):>8} {len(grp):>3} {fmt(statistics.mean(pv)) if pv else '-':>13} "
+                  f"{fmt(statistics.mean(pb)) if pb else '-':>11}   {fmt(statistics.mean(gap)) if gap else '-':>14}")
+
+    print("\n== code-only diff size, cost per stage (mean per valid trial), author outcomes and end reasons, model mismatches")
     for c in conds:
         ts = valid(c)
         if not ts:
             continue
         per_stage: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
         outcomes: dict[str, int] = defaultdict(int)
+        end_reasons: dict[str, int] = defaultdict(int)
         mism: set[str] = set()
         sizes = []
         for t in ts:
@@ -261,15 +375,21 @@ def main() -> int:
                 u = st.get("usage") or {}
                 acc = per_stage[name]
                 acc[0] += u.get("input_tokens", 0) or 0; acc[1] += u.get("output_tokens", 0) or 0; acc[2] += st.get("seconds", 0) or 0
-            a = (t["summary"].get("stages") or {}).get("author") or {}
-            outcomes[a.get("author_outcome", "n/a")] += 1
+            a = (t["summary"].get("stages") or {}).get("author")
+            if a is not None:
+                outcomes[a.get("author_outcome", "n/a")] += 1
+                end_reasons[a.get("end_reason", "n/a")] += 1
             mism |= set(t["summary"].get("model_mismatch_any") or [])
             sizes.append(t["summary"].get("diff_shortstat_code_only", ""))
         n = len(ts)
         for name, (tin, tout, secs) in per_stage.items():
-            print(f"{c:44} {name:14} in={tin / n:9.0f} out={tout / n:9.0f} s={secs / n:7.0f}")
-        print(f"{c:44} author outcomes {dict(outcomes)}; model mismatches {sorted(mism) or 'none'}; e.g. diff: {sizes[0]}")
+            print(f"{c:{width}} {name:14} in={tin / n:9.0f} out={tout / n:9.0f} s={secs / n:7.0f}")
+        print(f"{c:{width}} author outcomes {dict(outcomes) or 'n/a'}; end reasons {dict(end_reasons) or 'n/a'}; "
+              f"model mismatches {sorted(mism) or 'none'}; e.g. diff: {sizes[0]}")
 
+    excluded_mismatch = [t for t in trials if t["invalid"] == "model_mismatch"]
+    if excluded_mismatch:
+        print(f"\n== {len(excluded_mismatch)} trial(s) excluded for model mismatch (a stage ran on a model other than the one requested); --keep-model-mismatch keeps them")
     if unknown:
         print("\n== skipped")
         for u in unknown:

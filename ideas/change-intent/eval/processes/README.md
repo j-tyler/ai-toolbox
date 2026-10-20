@@ -46,13 +46,24 @@ process-specific wording enters only through `process.json` fields (the files it
 
 What the headline reward can attribute depends on what you hold constant:
 
-| Question | Vary | Hold constant |
-| --- | --- | --- |
-| Does the whole process help? | process version | model, brief, stand-in |
-| Is this intent *artifact* better than that one? | `--intent-file` under the frozen process | guidance, model, brief |
+| Question | Vary | Hold constant | What the answer can and cannot say |
+| --- | --- | --- | --- |
+| Does the whole process help? | process version | model, brief, stand-in | Bundles the guidance (about 60 KB), an extra authoring session, the artifact and a process review pass against a baseline with none of them. A win is not attributable to the artifact alone. |
+| Is this intent *artifact* better than that one? | `--intent-file` under the frozen process | guidance, model, brief | Compares two specific documents, one per condition, under change-intent-specific guidance. It says nothing about artifact *shape*. |
 | Does the *guidance* help, given the same intent? | `implement.system_append` (copy the frozen process) | the frozen intent |
 | Does the authoring *skill* produce better intents? | `author.skill` (run authoring only, then freeze) | everything downstream |
 | Does the intent carry the information alone? | `implement.include_brief: false` | the intent |
+
+Comparing artifact **shapes** (change intent versus spec versus plan) needs two things this
+directory does not yet hold: a process per shape whose guidance is shape-neutral, so that
+`intent.noun` and the artifact are the only differences, and at least five artifacts per shape,
+produced by the same skill and stand-in, or by authors who have not seen `tests/__hidden`, analysed
+by artifact cluster rather than pooled as trials. One document per shape is an anecdote.
+
+Run order for any comparison: a baseline pilot at about five attempts first. If its mean
+correctness is at least 0.95, or nine in ten trials pass every hidden test, this task cannot
+discriminate on the primary endpoint; add a task or a lighter-brief variant before the full run.
+Put every arm in one Harbor job so trials interleave (the agent docstring shows the config).
 
 Regenerate the generated versions after editing the mechanics; copy a directory to make a variant;
 add a two-line subclass in `agents/copilot_process.py` to run it under Harbor.

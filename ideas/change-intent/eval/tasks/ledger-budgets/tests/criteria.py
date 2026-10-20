@@ -15,18 +15,22 @@ Groups (see the reward.toml files):
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from rewardkit import criterion
 
 HIDDEN = Path(__file__).resolve().parent / "__hidden"  # "__" prefix: Reward Kit skips it as a criteria group
+SEED = Path(__file__).resolve().parent / "__seed"  # pristine copies of the seed's own tests
 SEED_TESTS = ("tests/test_money.py", "tests/test_cli.py")
 SEED_TEST_COUNT = 17
 PYTEST_TIMEOUT_SEC = 240
@@ -56,22 +60,59 @@ def _pytest_cached(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
         return _PYTEST_RESULTS[key]
 
 
+_COPIES: dict[str, str] = {}
+_COPY_GUARD = threading.Lock()
+
+
+def _throwaway_copy(workspace: str) -> str:
+    """Suites run in a copy of the workspace so a test that writes files cannot dirty the tree the
+    handoff criteria inspect, and so concurrent criteria never race on the same files."""
+    with _COPY_GUARD:
+        if workspace not in _COPIES:
+            dst = tempfile.mkdtemp(prefix="ledger-grade-")
+            shutil.copytree(workspace, dst, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(".git", ".eval", "__pycache__", ".pytest_cache"))
+            _COPIES[workspace] = dst
+        return _COPIES[workspace]
+
+
 def _pytest_run(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
-    env = dict(os.environ, LEDGER_WORKSPACE=cwd, PYTHONDONTWRITEBYTECODE="1")
+    """Run pytest and count outcomes from its JUnit XML (never from the free-text output, which a failing
+    assertion message such as '1 skipped' can corrupt). Falls back to the final summary line only."""
+    copy = _throwaway_copy(cwd)
+    env = dict(os.environ, LEDGER_WORKSPACE=copy, PYTHONDONTWRITEBYTECODE="1")
+    with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as fh:
+        junit = fh.name
     try:
         proc = subprocess.run(
-            [_python(), "-m", "pytest", "-q", "-p", "no:cacheprovider", "--no-header", *args],
-            cwd=cwd, env=env, text=True, capture_output=True, timeout=PYTEST_TIMEOUT_SEC,
+            [_python(), "-m", "pytest", "-q", "-p", "no:cacheprovider", "--no-header", "--continue-on-collection-errors",
+             f"--junit-xml={junit}", *args],
+            cwd=copy, env=env, text=True, capture_output=True, timeout=PYTEST_TIMEOUT_SEC,
         )
     except subprocess.TimeoutExpired:
         return 0, 1, "timeout"
     out = proc.stdout + proc.stderr
     if "No module named pytest" in out:
         raise RuntimeError(f"pytest is not installed for {_python()}; set LEDGER_PYTHON to the workspace interpreter")
-    passed = sum(int(n) for n in re.findall(r"(\d+) passed", out))
-    failed = sum(int(n) for n in re.findall(r"(\d+) (?:failed|error)", out))
-    # skipped, xfailed, deselected: not passing, so a suite cannot be made green by marking tests
-    dodged = sum(int(n) for n in re.findall(r"(\d+) (?:skipped|xfailed|deselected)", out))
+    try:
+        root = ET.parse(junit).getroot()
+        suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+        total = sum(int(su.get("tests", 0)) for su in suites)
+        bad = sum(int(su.get("failures", 0)) + int(su.get("errors", 0)) + int(su.get("skipped", 0)) for su in suites)
+        if total:
+            return total - bad, total, out[-2000:]
+    except (ET.ParseError, OSError, ValueError):
+        pass
+    finally:
+        try:
+            os.unlink(junit)
+        except OSError:
+            pass
+    # fallback: the last line only ("3 failed, 28 passed, 1 skipped in 0.5s")
+    last = out.strip().splitlines()[-1] if out.strip() else ""
+    passed = sum(int(n) for n in re.findall(r"(\d+) passed", last))
+    failed = sum(int(n) for n in re.findall(r"(\d+) (?:failed|error)", last))
+    dodged = sum(int(n) for n in re.findall(r"(\d+) (?:skipped|xfailed|deselected)", last))
     return passed, passed + failed + dodged, out[-2000:]
 
 
@@ -97,11 +138,26 @@ def hidden_tests_all_pass(workspace: Path) -> bool:
 
 @criterion(shared=True)
 def existing_tests_still_pass(workspace: Path) -> bool:
-    """The seed project's own tests must still pass unmodified."""
+    """The seed project's own tests, run from PRISTINE copies (tests/__seed), must still pass. The agent's
+    copies may have been edited to match changed behaviour; those edits are reported by seed_tests_modified."""
     if not all((workspace / t).exists() for t in SEED_TESTS):
         return False
-    passed, total, _ = _pytest(list(SEED_TESTS), workspace)
+    copy = Path(_throwaway_copy(str(workspace)))
+    # Staged OUTSIDE tests/ so `pytest tests` (agent_tests_pass) never collects a second test_money.py.
+    staged = copy / ".seed_pristine"
+    staged.mkdir(exist_ok=True)
+    for src in SEED.glob("test_*.py"):
+        shutil.copy2(src, staged / src.name)
+    passed, total, _ = _pytest([str(staged)], workspace)
     return total >= SEED_TEST_COUNT and passed == total
+
+
+@criterion(shared=True)
+def seed_tests_modified(workspace: Path) -> bool:
+    """Diagnostic: did the agent edit the seed's own test files?"""
+    out = _git(workspace, "log", "--format=%H", "--", *SEED_TESTS)
+    commits = [c for c in out.splitlines() if c.strip()]
+    return len(commits) > 1  # more than the seed commit touched them
 
 
 @criterion(shared=True)
@@ -113,11 +169,21 @@ def agent_tests_pass(workspace: Path) -> bool:
 
 @criterion(shared=True)
 def stdlib_only(workspace: Path) -> bool:
-    """No third-party imports anywhere under ledger/ (a stated constraint of the brief)."""
+    """No third-party imports anywhere under ledger/ (a stated constraint of the brief). Parsed with ast, so
+    docstrings and comments cannot trip it; a file that does not parse fails the constraint."""
     stdlib = set(sys.stdlib_module_names) | {"ledger"}
     for path in (workspace / "ledger").rglob("*.py"):
-        for m in re.finditer(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_]*)", path.read_text(encoding="utf-8", errors="replace"), re.M):
-            if m.group(1) not in stdlib:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            return False
+        for node in ast.walk(tree):
+            names: list[str] = []
+            if isinstance(node, ast.Import):
+                names = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                names = [node.module.split(".")[0]]
+            if any(n not in stdlib for n in names):
                 return False
     return True
 
@@ -169,6 +235,7 @@ def implementation_committed(workspace: Path) -> bool:
 
 
 HEADLINE_STAGES = ("implement",)  # handoff counts only this; a reviewer failure is a measurement failure, not a score
+SHARED_STAGES = ("implement", "fixed_review")  # stages every condition runs; the rest belong to the process
 
 
 @criterion(shared=True)
@@ -190,7 +257,7 @@ def process_stages_clean(workspace: Path) -> float:
     """Diagnostic: share of the process's own stages (author, review) that finished ok; 1.0 when it has none."""
     summary = _json(workspace, "summary.json") or {}
     stages = summary.get("stages", {})
-    own = [s for name, s in stages.items() if name not in HEADLINE_STAGES]
+    own = [s for name, s in stages.items() if name not in SHARED_STAGES]
     if not own:
         return 1.0
     return sum(1 for s in own if s.get("status") == "ok" and not s.get("timed_out")) / len(own)

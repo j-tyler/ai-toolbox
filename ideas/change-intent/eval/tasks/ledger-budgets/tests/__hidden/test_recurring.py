@@ -78,3 +78,11 @@ def test_apply_does_not_touch_manual_entries(workdir, run):
     _, out, _ = run(["recur", "apply", "--through", "2026-01-31"])
     assert out.strip() == "applied 1"
     assert len(ledger_rows(workdir)) == 2
+
+
+def test_apply_ignores_identical_manual_entry(workdir, run):
+    """apply tracks its own occurrences; a manual entry with the same fields is not 'already created'."""
+    add(run, "2026-01-01", "10", "sub")
+    run(["recur", "add", "--amount", "10", "--category", "sub", "--every", "monthly", "--start", "2026-01-01"])
+    _, out, _ = run(["recur", "apply", "--through", "2026-01-31"])
+    assert out.strip() == "applied 1"

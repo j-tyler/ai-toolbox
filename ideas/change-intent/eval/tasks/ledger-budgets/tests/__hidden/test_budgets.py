@@ -78,3 +78,10 @@ def test_status_without_budgets_is_empty(workdir, run):
     code, out, _ = run(["budget", "status", "--month", "2026-10"])
     assert code == 0
     assert out.strip() == ""
+
+
+def test_status_at_limit_is_not_over(workdir, run):
+    run(["budget", "set", "fun", "50"])
+    add(run, "2026-10-10", "50", "fun")
+    _, out, _ = run(["budget", "status", "--month", "2026-10"])
+    assert out.strip() == "fun 50.00/50.00 remaining 0.00"

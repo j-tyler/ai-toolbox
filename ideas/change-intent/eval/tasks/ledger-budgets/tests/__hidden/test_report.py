@@ -42,3 +42,10 @@ def test_report_includes_applied_recurring(workdir, run):
     run(["recur", "apply", "--through", "2026-10-31"])
     _, out, _ = run(["report", "--month", "2026-10"])
     assert out.strip().splitlines() == ["sub 10.00", "total 10.00"]
+
+
+def test_report_omits_budgeted_categories_without_spending(workdir, run):
+    run(["budget", "set", "rent", "500"])
+    add(run, "2026-10-01", "3", "food")
+    _, out, _ = run(["report", "--month", "2026-10"])
+    assert out.strip().splitlines() == ["food 3.00", "total 3.00"]

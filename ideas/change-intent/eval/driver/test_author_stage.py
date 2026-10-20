@@ -154,7 +154,7 @@ def test_fixed_review_inputs_are_sealed(tmp_path: Path):
     assert s["stages"]["implement"]["agent_committed"] is False  # fake implementer never commits
     assert "change-intent/" not in (Path(s["work_dir"]) / "diff.patch").read_text()  # code-only diff
     assert "change-intent/" in (Path(s["work_dir"]) / "diff-with-artifact.patch").read_text()
-    assert s["stages"]["fixed_review"]["agents_md_hidden"] is True
+    assert s["stages"]["fixed_review"]["review_repo"] is True
 
 
 def test_missing_fixed_review_is_recorded_not_scored(tmp_path: Path):
@@ -200,7 +200,36 @@ def test_stand_in_probes():
     assert s.approved
     r = s.reply_to_message("I'll strip the scaffolding tags and commit now.", True, False, backends.FAKE_INTENT)
     assert r and "commit it now" in r
+    r = s.reply_to_message("Done?", True, False, backends.FAKE_INTENT)
+    assert r and "commit it now" in r  # second and last nudge
     assert s.reply_to_message("Done?", True, False, backends.FAKE_INTENT) is None
+    assert s.end_reason == "stand_in_stopped"
+    # 4b. Re-presenting after approval is approved again, not treated as a new question.
+    s = ScriptedStandIn("brief", "change-intent", noun="change intent", required_sections=sections)
+    s.reply_to_message(backends.FAKE_INTENT, True, False, backends.FAKE_INTENT)
+    r = s.reply_to_message("Final version before I write it:\n\n" + backends.FAKE_INTENT, True, False, backends.FAKE_INTENT)
+    assert r and r.startswith("Approved as presented") and s.exchanges[-1].cue == "reapprove"
+    assert s.reply_to_message("Written and committed.", True, True, backends.FAKE_INTENT) is None and s.end_reason == "committed"
+    # 6. A proposal that happens to carry an "Intent brief" heading is still a presentation when the sections are there.
+    s = ScriptedStandIn("brief", "change-intent", noun="change intent", required_sections=sections)
+    s.reply_to_message("## Intent brief\n- budgets\n\n" + backends.FAKE_INTENT, True, False, backends.FAKE_INTENT)
+    assert s.presented and s.approved
+    # 7. Headings at level 4 and bold labels count as section headings.
+    s = ScriptedStandIn("brief", "change-intent", noun="change intent", required_sections=sections)
+    h4 = "\n".join(f"#### {sec}\n- something" for sec in sections)
+    assert s.presents_artifact(h4, None)
+    bold = "\n".join(f"**{sec}**\n- something" for sec in sections)
+    assert s.presents_artifact(bold, None)
+    assert not s.presents_artifact("## Outcomes\n- only one section", None)
+    # 8. The proposal shown in ask_user's context plus an approve choice is a ruling, not a stray yes.
+    s = ScriptedStandIn("brief", "change-intent", noun="change intent", required_sections=sections)
+    pick, _ = s.answer_question("Approve this change intent?", ["Approve", "Revise"], backends.FAKE_INTENT,
+                                context="Here is the proposed file:\n\n" + backends.FAKE_INTENT)
+    assert pick == "Approve" and s.approved and s.exchanges[-1].cue == "ask_user:approve-after-presentation"
+    # 9. Before any presentation, the Intent-brief preview is confirmed, not approved, and only once per preview.
+    s = ScriptedStandIn("brief", "change-intent", noun="change intent", required_sections=sections)
+    r = s.reply_to_message("## Intent brief\n- budgets. Correct?", False, False, None)
+    assert s.exchanges[-1].cue == "confirm-brief" and not s.approved
     # 5. The default reply adds no scope direction beyond the brief.
     s = ScriptedStandIn("brief", "change-intent", noun="change intent", required_sections=sections)
     r = s.reply_to_message("Should I add caching?", False, False, None)
@@ -258,3 +287,99 @@ def test_implement_continuation_rule_is_objective(tmp_path: Path):
     assert [d["end_reason"] for d in detail] == ["no_code_change", "suite_red", "complete"]
     desc = (Path(s["work_dir"]) / "change_description.md").read_text()
     assert "### Turn 1" in desc and "### Turn 3" in desc  # every turn's summary is kept
+
+
+def test_ask_user_ruling_then_reemit_is_approved(tmp_path: Path):
+    """A skill that shows the file inside ask_user, takes the ruling, re-emits the file as prose and commits."""
+    class AskUserFlow(backends.FakeBackend):
+        async def run_stage(self, spec, workspace, *, on_user_input, next_turn):
+            if spec.name != "author":
+                return await super().run_stage(spec, workspace, on_user_input=on_user_input, next_turn=next_turn)
+            res = backends.StageResult(stage="author", final_message="", turns=1)
+            ans, _ = await on_user_input("Approve this change intent as written?", ["Approve", "Revise"],
+                                         "Here is the complete proposed file:\n\n" + backends.FAKE_INTENT)
+            assert ans == "Approve"
+            d = workspace / self.intent_dir; d.mkdir(exist_ok=True)
+            (d / "2026-01-01-x.md").write_text(backends.FAKE_INTENT)
+            follow = await next_turn("Final file as approved:\n\n" + backends.FAKE_INTENT + "\n\nWriting it now.")
+            assert follow is not None and follow.startswith("Approved as presented")  # re-presentation is re-approved
+            subprocess.run(["git", "add", "-A"], cwd=workspace, check=True, capture_output=True)
+            subprocess.run(["git", "commit", "-q", "-m", "intent"], cwd=workspace, check=True, capture_output=True)
+            assert await next_turn("Committed change-intent/2026-01-01-x.md.") is None
+            return res
+
+    s = _run(tmp_path, AskUserFlow)
+    a = s["stages"]["author"]
+    assert a["author_outcome"] == "approved" and a["end_reason"] == "committed"
+    assert "ask_user:approve-after-presentation" in a["approval_cues"]
+
+
+def test_author_that_never_writes_ends_after_two_nudges(tmp_path: Path):
+    class Talker(backends.FakeBackend):
+        async def run_stage(self, spec, workspace, *, on_user_input, next_turn):
+            if spec.name != "author":
+                return await super().run_stage(spec, workspace, on_user_input=on_user_input, next_turn=next_turn)
+            res = backends.StageResult(stage="author", final_message="", turns=1)
+            msg = "Proposed:\n\n" + backends.FAKE_INTENT
+            replies = []
+            while True:
+                follow = await next_turn(msg)
+                res.turns += 1
+                if follow is None:
+                    break
+                replies.append(follow)
+                msg = "Understood. Anything else before I write it?"  # never writes, never commits
+            res.final_message = msg
+            assert len(replies) == 3  # approve, then two nudges
+            return res
+
+    s = _run(tmp_path, Talker)
+    a = s["stages"]["author"]
+    assert a["end_reason"] == "stand_in_stopped" and a["author_outcome"] == "no_file"
+    assert a["turns"] < 12  # the stage ended well before the turn cap
+
+
+def test_data_file_alone_is_not_a_code_change(tmp_path: Path):
+    """ledger.csv at the repo root starts with "ledger" but is data; creating it must not count as progress."""
+    class CsvOnly(backends.FakeBackend):
+        async def run_stage(self, spec, workspace, *, on_user_input, next_turn):
+            if spec.name != "implement":
+                return await super().run_stage(spec, workspace, on_user_input=on_user_input, next_turn=next_turn)
+            res = backends.StageResult(stage="implement", final_message="", turns=0)
+            (workspace / "ledger.csv").write_text("date,amount,category,note\n")
+            res.turns += 1; res.messages.append("Ran the CLI once to look at the data format.")
+            follow = await next_turn(res.messages[-1]); assert follow is not None
+            for src in (self.reference_dir / "ledger").rglob("*.py"):
+                (workspace / "ledger" / src.name).write_text(src.read_text())
+            res.turns += 1; res.messages.append("Implemented.")
+            follow = await next_turn(res.messages[-1]); assert follow is None
+            res.final_message = res.messages[-1]
+            return res
+
+    s = _run(tmp_path, CsvOnly, process="baseline")
+    assert [d["end_reason"] for d in s["stages"]["implement"]["turns_detail"]] == ["no_code_change", "complete"]
+
+
+def test_review_repo_is_neutral_and_matches_the_code_diff(tmp_path: Path):
+    s = _run(tmp_path)
+    ws = s["_ws"]
+    repo, tree = run_process.build_review_repo(ws, s["seed_commit"], s["impl_commit"], "change-intent")
+    try:
+        assert tree == s["review_repo_tree_sha"]
+        log = _git(repo, "log", "--format=%s|%an").splitlines()
+        assert log == ["change|review", "base|review"]
+        assert not (repo / ".eval").exists() and not (repo / "change-intent").exists()
+        seed_agents = (SEED / "AGENTS.md").read_text() if (SEED / "AGENTS.md").exists() else None
+        if seed_agents is None:
+            assert not (repo / "AGENTS.md").exists()
+        else:
+            assert (repo / "AGENTS.md").read_text() == seed_agents  # the process's agents block is gone
+        changed = set(_git(repo, "diff", "--name-only", "HEAD~1").split())
+        patch = (Path(s["work_dir"]) / "diff.patch").read_text()
+        in_patch = {line.split(" b/")[-1] for line in patch.splitlines() if line.startswith("diff --git ")}
+        assert changed == in_patch and changed
+        plus = sum(1 for l in _git(repo, "diff", "HEAD~1").splitlines() if l.startswith("+") and not l.startswith("+++"))
+        plus_patch = sum(1 for l in patch.splitlines() if l.startswith("+") and not l.startswith("+++"))
+        assert plus == plus_patch
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)

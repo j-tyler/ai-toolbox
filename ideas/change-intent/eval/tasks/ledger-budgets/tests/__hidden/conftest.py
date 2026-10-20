@@ -44,7 +44,14 @@ def run(capsys):
     from ledger.cli import main
 
     def _run(argv):
-        code = main(argv)
+        try:
+            code = main(argv)
+        except SystemExit as exc:  # an implementation that calls sys.exit is observed by its exit code
+            code = exc.code
+            if code is None:
+                code = 0
+            elif not isinstance(code, int):
+                code = 1
         captured = capsys.readouterr()
         return code, captured.out, captured.err
 

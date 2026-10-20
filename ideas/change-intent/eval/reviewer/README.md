@@ -25,9 +25,14 @@ runs); the driver refuses a same-model reviewer unless told otherwise.
 
 What the reviewer sees, and only this:
 
-- the repository, checked out at the implementation commit, with workspace custom instructions
-  (`AGENTS.md` and the like) turned off for the session and a read-only tool set (grep, glob,
-  view, bash for running tests, no edit or create tools);
+- a **synthetic review repository**: a fresh git repository with two commits by a neutral author,
+  `base` (the seed tree) and `change` (the implementation tree with the intent directory removed
+  and `AGENTS.md` as it was at the seed, or absent). It contains no `.eval`, no harness commit
+  messages and no process files, so nothing in the checkout or its history identifies the arm.
+  Workspace custom instructions are off for the session, built-in sub-agents, session store and
+  memory are off, and the tool set is read-only (grep, glob, view, bash for running tests, no
+  edit or create tools); edits the reviewer makes anyway are recorded as `reviewer_edits` and
+  discarded;
 - a sealed temporary directory, outside the harness work directory, holding exactly three files:
   `requirements.md` (the brief, the same for every condition, and the standard for correctness),
   `diff.patch` (the code change, with the artifact file excluded), and `change_description.md`
@@ -35,12 +40,20 @@ What the reviewer sees, and only this:
   there is one, and every turn of the implementer's summary). The description is rated for
   adequacy; correctness is never judged against it.
 
-It is not given the dialogue log, the transcripts, or the process's own review. During the review
-the workspace `AGENTS.md` is restored to its seed content and the process directory is renamed out
-of reach, so the process's instructions cannot be read from the checkout; the harness's git commit
-messages are condition-neutral (`eval: setup`, `eval: description document`, `eval: implementation`).
-Tool calls that mention paths outside the workspace and the sealed directory are recorded as
-`out_of_bounds_reads`. After the stage the working tree is reset to the implementation commit.
+It is not given the dialogue log, the transcripts, the process's own review, or the real
+workspace. The process directory is renamed out of reach for the duration, and tool calls that
+mention paths outside the review repository and the sealed directory are recorded as
+`out_of_bounds_reads`. The review repository is deleted after the stage; `summary.json` records
+its tree hash so it can be rebuilt (`build_review_repo` in the driver) for a re-review.
+
+What this blinding does **not** remove: the content of `change_description.md`. A change-intent
+arm's description is the intent plus the implementer's turn summaries; the baseline's is the
+summaries alone. A reviewer that reads a change-intent-shaped document knows it is reading one, and
+its adequacy rating is meant to respond to that content. Correctness is judged against
+`requirements.md` so that this content-level difference cannot move the verdict standard, and
+`verified_claims_ratio` is a ratio so a sparser description does not win by claiming less. The
+remaining influence of description content on the review dimension is the thing under test, and
+the reason the review dimension is exploratory rather than primary.
 
 An answer that does not parse or validate gets one "JSON only" follow-up, then up to two fresh
 sessions; if it is still missing, `review.json` records a missing review and the verifier scores

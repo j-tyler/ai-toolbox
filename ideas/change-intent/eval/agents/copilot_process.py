@@ -11,10 +11,26 @@ otherwise). Harbor imports `module:Class` with importlib and does not add the cu
 sys.path, so PYTHONPATH=. is required:
 
     export COPILOT_GITHUB_TOKEN=... EVAL_REVIEWER_MODEL=claude-sonnet-4.5
-    PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1 -m gpt-5.4 -k 3
-    PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline        -m gpt-5.4 -k 3
+    # plumbing pilot, one arm (k=3 cannot show a difference: the minimum permutation p is 0.10)
+    PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline -m gpt-5.4 -k 3
 
--k 3 is a pilot to check the plumbing. A comparison needs k >= 20 per arm (see scripts/analyze.py).
+    # a comparison: every arm in ONE job so trials interleave (Harbor nests agents innermost in its plan),
+    # rather than one arm per run where server-side drift between runs would be confounded with the arm
+    cat > job.yaml <<'YAML'
+    agents:
+      - import_path: agents.copilot_process:Baseline
+        model_name: gpt-5.4
+      - import_path: agents.copilot_process:ChangeIntentV1
+        model_name: gpt-5.4
+    datasets:
+      - path: tasks/ledger-budgets
+    n_attempts: 20
+    YAML
+    PYTHONPATH=. harbor run -c job.yaml
+
+Run order: a baseline pilot at k of about 5 first. If its mean correctness is at least 0.95 (or the
+all-pass rate at least 0.9) the task cannot discriminate on the primary endpoint; add a task or a
+lighter-brief variant before spending on the full run.
 
 Optional environment forwarded to the driver: EVAL_CAP_AUTHOR, EVAL_CAP_IMPLEMENT, EVAL_CAP_REVIEW,
 EVAL_CAP_FIXED_REVIEW (seconds), EVAL_STAND_IN_MODEL, EVAL_ALLOW_SAME_REVIEWER=1.
@@ -48,7 +64,7 @@ class CopilotProcessAgent(CopilotCli):
     STAND_IN: str = "scripted"
     FROZEN_INTENT: str | None = None  # local path to an intent file for author.mode = frozen
     REMOTE_INTENT: str | None = None
-    DRIVER_BUDGET_SEC: int = 7800
+    DRIVER_BUDGET_SEC: int = 9600  # caps 1800+3600+900+3x900 = 9000 plus overhead; task.toml agent timeout is 10500
 
     @staticmethod
     def name() -> str:
@@ -123,8 +139,8 @@ class CopilotProcessAgent(CopilotCli):
         if self.model_name:
             # Copilot uses bare model ids; strip a Harbor-style provider prefix ("openai/gpt-5.4" -> "gpt-5.4").
             model_flag = f"--model {shlex.quote(self.model_name.rsplit('/', 1)[-1])}"
-        provider_flag = ""
-        if env.get("COPILOT_PROVIDER_BASE_URL"):
+        provider_flag = ""  # providers travel in the environment, never on the command line (the key would land in logs)
+        if env.get("COPILOT_PROVIDER_BASE_URL") and "EVAL_PROVIDER_JSON" not in env:
             provider = {
                 "type": env.get("COPILOT_PROVIDER_TYPE", "openai"),
                 "base_url": env["COPILOT_PROVIDER_BASE_URL"],
@@ -132,7 +148,10 @@ class CopilotProcessAgent(CopilotCli):
             }
             if env.get("COPILOT_PROVIDER_WIRE_API"):
                 provider["wire_api"] = env["COPILOT_PROVIDER_WIRE_API"]
-            provider_flag = f"--provider-json {shlex.quote(json.dumps(provider))}"
+            env["EVAL_PROVIDER_JSON"] = json.dumps(provider)
+        for key in ("EVAL_PROVIDER_JSON", "EVAL_REVIEWER_PROVIDER_JSON", "EVAL_STAND_IN_PROVIDER_JSON"):
+            if key in os.environ and key not in env:
+                env[key] = os.environ[key]
 
         same_reviewer_flag = "--allow-same-reviewer" if os.environ.get("EVAL_ALLOW_SAME_REVIEWER") == "1" else ""
         intent_flag = f"--intent-file {shlex.quote(self.REMOTE_INTENT)}" if self.REMOTE_INTENT else ""
@@ -143,6 +162,7 @@ class CopilotProcessAgent(CopilotCli):
             environment,
             command=(
                 'export PATH="$HOME/.local/bin:$PATH"; mkdir -p /logs/agent/eval; start=$(date +%s); cd /app && '
+                f"timeout --kill-after=60 {self.DRIVER_BUDGET_SEC + 600} "
                 f"python3 {REMOTE_EVAL}/driver/run_process.py --workspace /app "
                 f"--process {REMOTE_EVAL}/processes/{self.PROCESS} --brief {REMOTE_BRIEF} --out {REMOTE_OUT} "
                 f"--work-dir /logs/agent/eval-work --backend copilot --stand-in {self.STAND_IN} {model_flag} {provider_flag} "

@@ -68,7 +68,7 @@
       <rect x="784" y="342" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="899" y="361" text-anchor="middle">review-guidance.md</text>
       <!-- row 10 -->
       <rect x="24" y="372" width="300" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="36" y="391">Fixed review: instructions, inputs, model</text>
-      <rect x="324" y="372" width="690" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="669" y="391" text-anchor="middle" fill="#6b7280">harness-owned: fixed_reviewer.md, diff.patch + change_description.md, --reviewer-model, AGENTS.md off</text>
+      <rect x="324" y="372" width="690" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="669" y="391" text-anchor="middle" fill="#6b7280">harness-owned: fixed_reviewer.md, neutral 2-commit repo copy, brief + diff + description, other-vendor model</text>
       <!-- row 11 -->
       <rect x="24" y="402" width="300" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="36" y="421">Model, brief, seed repo, hidden tests, caps</text>
       <rect x="324" y="402" width="690" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="669" y="421" text-anchor="middle" fill="#6b7280">harness-owned: identical</text>

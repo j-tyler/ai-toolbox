@@ -1,0 +1,579 @@
+{
+ "overall": "Verdict: sound with fixes. Do not start a real comparison yet. The harness design is careful: the brief, model, caps and continuation rule are the same for every arm, process diagnostics carry weight 0, the fixed review is held constant, and frozen artifacts are kept apart by hash. But four things would currently make a score difference reflect the harness rather than the process.\n\n1. The scripted stand-in can loop to the 12-turn cap. The author stage then ends with no_file, so the change-intent arm runs without its intent. The cause is a set of realistic skill behaviours:\n   - re-showing the file after approval;\n   - showing the proposal and then calling ask_user;\n   - mentioning \"intent brief\" in the Phase 3 proposal.\n   I reproduced the post-approval and \"intent brief\" loops at unit level.\n2. The grader has verified defects that land unevenly:\n   - Pytest outcomes are counted with a regex over the whole output. A failing assertion that contains \"1 skipped\" scored 1/12 instead of 1/2 in my repro.\n   - The seed tests are run from the agent's own, possibly edited, copies.\n   - The stdlib check flags docstring lines that start with \"from\" or \"import\".\n   - Agent tests can dirty the tree while git status is being checked.\n   - The CLI's own ./ledger.csv counts as a code change in the continuation rule, which swings correctness by about 0.7.\n3. The global deadline only takes away fixed-review retries in arms that have author or process-review stages.\n4. The fixed reviewer works inside /app. There, .eval/summary.json names the process, and the git history and change-intent/ folder reveal the condition.\n\nSeveral cheap integration and statistics fixes also belong before the first run:\n- Turn off the cross-session store and memory explicitly.\n- Route the fixed reviewer to its own provider.\n- Fall back to a prompt-only JSON review when the provider rejects the schema.\n- Compute usage from live events.\n- Fix the Welch interval (it rounds degrees of freedom up, so it is too narrow).\n- Stop analyze.py from pooling trials across models, reviewers or briefs.\n\nThe deeper validity limits cannot be coded away and must be stated: one fully specified task, likely correctness ceiling, a stand-in that adds no information, an LLM judge worth 2/7 that can be moved by the description, an n=1 artifact per shape, and no guidance-matched control. The first publishable claim is narrow: on one task with one model, process A versus B changed the hidden-test pass rate by X, with an interval. Review differences are exploratory, and nothing about artifact shape can be claimed yet.",
+ "lens_verdicts": {
+  "integration_contract": "Upheld in substance. Every SDK and Harbor call does what the harness assumes. The real gaps are runtime defaults that are left implicit and never recorded. The runtime ships a session-search sidekick whose stated job is to bring prior-session context into a new session (definitions/sidekick/session-search.yaml), so turning off the session store and memory explicitly is cheap insurance against an asymmetric channel. I confirmed _resolved_model reads keys that do not exist (SessionModelChangeData has new_model, not model). I confirmed assistant.usage is ephemeral, which makes the usage-list choice fragile, and that matters because invalid_reason relies on model_calls. The BYOK provider is applied to the cross-vendor reviewer, and the BYOK API key is put on the command line. I do not recommend enable_config_discovery=False: it is not clearly separate from skill and instruction discovery, and it is identical across arms in a fresh container.",
+  "realistic_agent_behaviour": "Mostly upheld, and the most important lens. I reproduced A1 (after approval, a re-shown proposal gets 'show me the complete file for approval' forever), A3 (any 'intent brief' substring vetoes a complete proposal, and the skill's mandated last line contains 'correct', which triggers confirm-brief), and the h4-heading miss. I confirmed A2 in the SDK: send_and_wait keeps only the last root AssistantMessageData (session.py:2286-2290, 2351). A4 confirmed: 'ledger.csv'.startswith(('ledger',)) is True. A5 confirmed by arithmetic: the caps sum to 9000 s against a 7800 s epoch, while baseline needs only 6300 s. A7 and M12 confirmed by reading the code. I rejected one part of A3: requiring 80% of the sections would miss valid files, because the skill omits empty sections.",
+  "exercise_and_grader": "Upheld. I reproduced G1 with a stronger effect than reported (1 failing assertion out of 2 tests scored 1/12) and G9 ('from a bank...' is flagged). I ran the five proposed hidden tests: the reference passes 5/5, and variants C, F, G and M each fail exactly one. I confirmed G2 by reading the code (workspace copies are run). G6 is a real design limitation that needs a pilot gate, not a code fix. G11 can wait until a second task exists.",
+  "measurement_validity": "Upheld as the framing for the write-up. M7 confirmed: _t_quantile picks the first tabulated df at or above the actual df, so the interval is too narrow. M5 confirmed: condition_of keys only on process, labels and intent sha. M4 confirmed, merged with I7 and A6. Harbor's JobPlan nests agents innermost (job_plan.py), so one job that lists every arm interleaves them; documenting that is cheap. M1, M2 and M11 are critical or major for the claims the owner wants to make. They are fixed by adding experimental design (more artifacts, tasks and arms) and by stating limitations, not by editing the harness now. M8: keep scoring a missing review as 0 in the verifier, but make correctness the primary endpoint and report missing-review rates per arm."
+ },
+ "upheld": [
+  {
+   "finding_id": "A1",
+   "reason": "Critical, reproduced. After approval, reply_to_message falls through to default:defer-to-brief, which asks again for 'the complete file for approval'. A re-shown proposal therefore loops until the 12-turn cap. Phase 4 of SKILL.md explicitly requires re-emitting the assembled file and taking approval on it when rulings change the draft."
+  },
+  {
+   "finding_id": "A2",
+   "reason": "Upgraded to critical jointly with A1, since they share a fix. SDK send_and_wait keeps only the last root assistant.message. The ask_user handler forwards only the question, so a proposal printed alongside an ask_user call is invisible. Outcomes are either a loop to no_file or a real approval mislabelled unapproved_file. Only author-skill arms are affected."
+  },
+  {
+   "finding_id": "A3",
+   "reason": "Major, partly upheld. Reproduced: an 'intent brief' substring vetoes a complete Phase 3 proposal, and the mandated closing line ('...or correct an item') then triggers confirm-brief, so the dialogue loops. '####' headings are also missed. Rejected the 80%-of-sections tightening (see rejected)."
+  },
+  {
+   "finding_id": "A4",
+   "reason": "Major, confirmed. CODE_DIRS prefix matching counts ./ledger.csv as a code change, so a stop decision is taken while no code has changed. The fix is one line."
+  },
+  {
+   "finding_id": "A5",
+   "reason": "Major, confirmed by arithmetic. Stage caps sum to 9000 s against a 7800 s epoch, so only arms with author or process-review stages lose fixed-review retries. The missing review then scores 0 in ITT, which makes measurement failure correlated with condition."
+  },
+  {
+   "finding_id": "A6",
+   "reason": "Major, merged with I7 and M4. During the fixed review the reviewer's working directory contains .eval/summary.json naming the process, the change-intent/ folder, and git history with the AGENTS block and the agent's commit messages. Fixed by a synthetic review repository rather than by patching each leak."
+  },
+  {
+   "finding_id": "I7",
+   "reason": "Merged into A6/M4. Probe result confirmed by reading the code: write_summary(out) at start, with out=/app/.eval."
+  },
+  {
+   "finding_id": "M4",
+   "reason": "Major, merged with A6. The README overstates the blinding. Content-level unblinding (the description itself differs) is inherent and must be stated."
+  },
+  {
+   "finding_id": "G1",
+   "reason": "Major, high confidence. My repro was worse than reported: a 2-test file with one failing 'imported 1 skipped 2' assertion parsed as 1/12. The penalty depends on the wording of the failing assertion, which makes it a process-dependent bias inside the 4/7 dimension."
+  },
+  {
+   "finding_id": "G2",
+   "reason": "Major. existing_tests_still_pass runs the workspace copies, so an agent that changes behaviour and edits the seed test to match keeps full credit, against an explicit brief requirement."
+  },
+  {
+   "finding_id": "G3",
+   "reason": "Major. Verified: the five proposed tests pass on the reference, and each targets wrong-but-plausible variant fails exactly one. Each follows from contract wording already in instruction.md. It raises sensitivity exactly where authored acceptance criteria could matter."
+  },
+  {
+   "finding_id": "G8",
+   "reason": "Minor-to-major. Reward Kit runs criteria concurrently. An agent test that writes ./ledger.csv (the seed CLI default when LEDGER_FILE is unset) races with git status in implementation_committed, so the handoff score is nondeterministic. Running suites in a copy is cheap."
+  },
+  {
+   "finding_id": "G9",
+   "reason": "Minor, reproduced. The regex matched 'from a' in a docstring. An ast-based check is trivial."
+  },
+  {
+   "finding_id": "G4",
+   "reason": "Minor. Penalises a style choice (sys.exit(2) versus return 2) that the brief does not state. A cheap conftest fix."
+  },
+  {
+   "finding_id": "G5",
+   "reason": "Minor. 'remaining' is never defined. One sentence in the brief removes the ambiguity. Do it now, because changing the brief later breaks comparability."
+  },
+  {
+   "finding_id": "A7",
+   "reason": "Minor, confirmed. process_stages_clean counts fixed_review as a process stage, so baseline can score 0."
+  },
+  {
+   "finding_id": "A8",
+   "reason": "Minor. 'Keep it minimal' conflicts with 'add tests' and reaches arms in proportion to how often they ask. Neutral wording is a free change."
+  },
+  {
+   "finding_id": "M12",
+   "reason": "Minor, confirmed. ModelStandIn.answer_question_async has no stage check, so implement-stage questions get in-character answers only in the model-author arm."
+  },
+  {
+   "finding_id": "I1",
+   "reason": "Major as a precaution, confidence moderate. The runtime ships a session-search sidekick for prior-session context, and the store and memory defaults are 'runtime decides'. Disabling them explicitly costs a few kwargs and removes a possible asymmetric channel from the author dialogue into implement. A per-run base_directory also removes the developer's own ~/.copilot from local runs."
+  },
+  {
+   "finding_id": "I2",
+   "reason": "Major, but only for BYOK runs. The documented path uses a Copilot token. In BYOK runs the cross-vendor reviewer silently goes to the implementer's endpoint."
+  },
+  {
+   "finding_id": "I3",
+   "reason": "Major if it occurs, confidence low. Cannot be verified without a model, and the pilot will reveal it. A prompt-only JSON fallback is cheap and applies to all arms alike."
+  },
+  {
+   "finding_id": "I5",
+   "reason": "Minor, confirmed. The fields are selectedModel and newModel, not model. Fix in the same pass and also record reasoning-effort fields (part of M10)."
+  },
+  {
+   "finding_id": "I6",
+   "reason": "Minor but cheap. usage feeds invalid_reason('no_model_calls'), so a silent loss would invalidate trials. Compute it from live events."
+  },
+  {
+   "finding_id": "I8",
+   "reason": "Minor. A coreutils timeout wrapper is one line and guarantees the artifact copy and exit happen before Harbor's kill."
+  },
+  {
+   "finding_id": "I10",
+   "reason": "Minor, but results are meant to be shared. Move the key to the environment."
+  },
+  {
+   "finding_id": "I11",
+   "reason": "Minor, merged with A9 and G12. Local runs expose repo paths and rename the repo's process directory. Fixed by copying the eval tree into $WORK."
+  },
+  {
+   "finding_id": "A9",
+   "reason": "Merged into I11."
+  },
+  {
+   "finding_id": "G12",
+   "reason": "Merged into I11. State that headline numbers come only from Harbor runs."
+  },
+  {
+   "finding_id": "I4",
+   "reason": "Minor. Record the effective tool list. Can wait for the pilot checklist."
+  },
+  {
+   "finding_id": "I9",
+   "reason": "Minor. The Harbor-reported version is misleading. Can wait."
+  },
+  {
+   "finding_id": "M1",
+   "reason": "Critical for any claim about artifact shape, not for the first whole-process comparison. Fixed by design plus a statement in the write-up, not by a code change now."
+  },
+  {
+   "finding_id": "M2",
+   "reason": "Critical limitation. It needs a baseline pilot gate before the full comparison and more tasks later."
+  },
+  {
+   "finding_id": "G6",
+   "reason": "Major. The same issue as M2, seen from the grader side. A pilot gate is required."
+  },
+  {
+   "finding_id": "M3",
+   "reason": "Major. Add a calibration table now and pre-register correctness as primary. A description-matched control arm can wait."
+  },
+  {
+   "finding_id": "M5",
+   "reason": "Major, confirmed. Pooling across model, reviewer or brief must be refused or split."
+  },
+  {
+   "finding_id": "M6",
+   "reason": "Major for interpretation. Print the permutation-p floor and the detectable effect, and pre-register one primary comparison."
+  },
+  {
+   "finding_id": "M7",
+   "reason": "Major, confirmed by reading _t_quantile (it returns the first tabulated df >= actual)."
+  },
+  {
+   "finding_id": "M8",
+   "reason": "Upheld for reporting only. Keep scoring 0 in the verifier and report missing-review rate per arm and the XR view. Make correctness primary so the verdict on processes does not hinge on judge reliability. Re-measurement can wait for M9."
+  },
+  {
+   "finding_id": "M9",
+   "reason": "Major, but can wait. Test-retest of the judge needs rebuild-from-patch tooling. Review differences are exploratory until it exists."
+  },
+  {
+   "finding_id": "M10",
+   "reason": "Major. Harbor nests agents innermost, so one job config interleaves the arms. Document it now and record the effort fields now. Explicit reasoning_effort can wait, since it is model-dependent."
+  },
+  {
+   "finding_id": "M11",
+   "reason": "Major limitation. Build the artifact-only arm and the guidance-matched arm later, and state the bundle now."
+  },
+  {
+   "finding_id": "M13",
+   "reason": "Minor. Label PP as a biased sensitivity view now. The construct map goes in the write-up."
+  },
+  {
+   "finding_id": "M14",
+   "reason": "Minor. Pins and manifest hashes can wait, but do them before publishing."
+  },
+  {
+   "finding_id": "G10",
+   "reason": "Minor diagnostic. Can wait."
+  },
+  {
+   "finding_id": "G11",
+   "reason": "Minor until a second task exists."
+  },
+  {
+   "finding_id": "M15",
+   "reason": "Same as G11. Can wait."
+  },
+  {
+   "finding_id": "G7",
+   "reason": "Minor. State it as a limitation."
+  },
+  {
+   "finding_id": "G13",
+   "reason": "Minor. Pin before publishing."
+  }
+ ],
+ "rejected": [
+  {
+   "finding_id": "A3 (sub-fix: require ceil(0.8*n) sections)",
+   "reason": "Rejected. SKILL.md says empty sections are omitted from the final file, so a valid intent can carry 4 of 6 sections, and an 80% threshold would turn real presentations into loops. Keep max(3, ceil(n/2)) and widen only the heading levels and bold labels."
+  },
+  {
+   "finding_id": "A6 / I7 (sub-fix: write the provisional summary only to --work-dir)",
+   "reason": "Rejected as specified. In Harbor the work dir is /logs/agent/eval-work. A summary.json left there would be found by analyze.py's rglob as a second trial with status 'running' and counted invalid (driver_never_finished). The synthetic review repository removes the leak without moving the provisional record."
+  },
+  {
+   "finding_id": "A1 (sub-fix: do not latch approval from an item ruling with '(Recommended)')",
+   "reason": "Not needed once post-approval replies are fixed. Telling an item ruling from a whole approval in free text is brittle. The harm came from the loop, not from the latch."
+  },
+  {
+   "finding_id": "I1 (sub-fix: enable_config_discovery=False)",
+   "reason": "Rejected. Its effect on skill and instruction discovery is not documented clearly, and the authoring skill and AGENTS.md block rely on discovery-adjacent features. It is identical across arms in a fresh container anyway."
+  },
+  {
+   "finding_id": "M8 (sub-fix: make re-measured/XR the primary scoring in the verifier)",
+   "reason": "Rejected for the verifier. A per-trial headline must be computable without post-hoc reruns. Handle it through the choice of primary endpoint (correctness) and through reporting instead."
+  },
+  {
+   "finding_id": "G4 (alternative: state in instruction.md that main returns the code)",
+   "reason": "Prefer the conftest fix. It makes the test observe behaviour (the exit code) and adds no more spec to an already over-specified brief."
+  },
+  {
+   "finding_id": "M5 (sub-fix: add harness_git_sha to the condition key)",
+   "reason": "Splitting arms by harness sha would silently break the --ref matching. Refuse or warn on heterogeneity within a condition instead, with an --allow-mixed override."
+  }
+ ],
+ "do_not_change": [
+  {
+   "what": "session.abort() after a TimeoutError from send_and_wait",
+   "why": "The SDK timeout only stops waiting. Without abort the turn keeps editing the workspace."
+  },
+  {
+   "what": "available_tools=[] and system_message mode 'replace' in ask_once",
+   "why": "Valid. It gives a tool-less, prompt-controlled stand-in."
+  },
+  {
+   "what": "Bare tool names in READ_ONLY_TOOLS",
+   "why": "Accepted as an allowlist. Only verifying the effective list is worth doing (I4, later)."
+  },
+  {
+   "what": "Excluding all built-in sub-agents in every stage",
+   "why": "Some are pinned to other models. Excluding them everywhere keeps the same-model premise symmetric."
+  },
+  {
+   "what": "Cross-vendor reviewer requirement",
+   "why": "Reduces self-preference equally for all arms. Only the provider routing (I2) needs fixing."
+  },
+  {
+   "what": "Driver exits 0 on stage errors",
+   "why": "Deliberate. The verifier must grade every trial, and status is recorded in summary.json."
+  },
+  {
+   "what": "git clean -fd without -x in git_reset_to",
+   "why": "Must keep the excluded .eval directory and the ignored caches."
+  },
+  {
+   "what": "tests/__hidden '__' prefix and diagnostics weight 0",
+   "why": "Reward Kit skips '__' directories as groups, and weighted-mean divides by total weight, so weight-0 diagnostics are excluded. Use '__seed' for the pristine seed tests for the same reason."
+  },
+  {
+   "what": "hidden_tests_all_pass bonus, SEED_TEST_COUNT guard, skipped/xfailed/deselected counted as not passing, 'No module named pytest' fail-loud",
+   "why": "Deliberate anti-gaming and fail-loud design. Keep all of them when switching to junit or summary-line parsing and pristine seed tests."
+  },
+  {
+   "what": "test_apply_monthly_clamps_to_month_end expecting 03-31 after 02-28, and the reference's high-water-mark idempotency",
+   "why": "Faithful to the contract wording."
+  },
+  {
+   "what": "Interface contract spelled out in the brief",
+   "why": "Exact strings are needed for deterministic hidden tests. Address the ceiling with a separate brief variant or new tasks, not by loosening this one."
+  },
+  {
+   "what": "Intent arms also receive the brief (include_brief true)",
+   "why": "Keeps information parity with baseline. include_brief=false is a separate, labelled question."
+  },
+  {
+   "what": "Same implement cap and nudge rule for every arm",
+   "why": "Time cost is part of the process. Giving heavier processes more time would be the confound. A5 must be fixed by raising the overall budget, not by shrinking implement's time."
+  },
+  {
+   "what": "diff.patch excludes the intent dir while change_description.md includes the artifact",
+   "why": "The artifact is counted once, as description, so code-size ratings are not inflated."
+  },
+  {
+   "what": "Fixed reviewer judges correctness against requirements.md",
+   "why": "One standard for every arm. M3 calls for calibration, not a different standard."
+  },
+  {
+   "what": "Process review stage is read-only with a tree reset afterwards",
+   "why": "The process's own review cannot repair code, so it cannot affect correctness."
+  },
+  {
+   "what": "Scripted stand-in as the default; it defers to the brief",
+   "why": "Deterministic and identical across arms. Its lack of information is a limitation to state (M2), not a reason to make the default stochastic."
+  },
+  {
+   "what": "Exact permutation enumeration for small pools",
+   "why": "Correct. Report the floor (0.10 at k=3) rather than switching tests."
+  },
+  {
+   "what": "verified_claims_ratio as a ratio",
+   "why": "A count would reward claiming more."
+  },
+  {
+   "what": "Contamination reverted by a new harness commit, not a history rewrite",
+   "why": "Safer, and the synthetic review repository removes the history-visibility concern."
+  },
+  {
+   "what": "validate_review ignores extra keys",
+   "why": "Rejecting them would turn usable reviews into missing ones (scored 0) for no gain."
+  },
+  {
+   "what": "The dialogue ends at the first commit touching the intent dir, even before approval",
+   "why": "An eager commit is correctly labelled unapproved_file. Continuing after a commit would let the stand-in steer later edits."
+  },
+  {
+   "what": "Agent-left junk (ledger.csv and so on) is committed into the implementation and visible to the reviewer",
+   "why": "This is the agent's own hygiene, applied equally. Only the continuation-rule misread (A4) needs fixing."
+  },
+  {
+   "what": "Stash dropped and recorded, not applied",
+   "why": "Applying it would mean guessing the agent's intent."
+  },
+  {
+   "what": "Reviewer sessions keep bash",
+   "why": "Needed to run pytest. Writes are undone and recorded."
+  },
+  {
+   "what": "Fixed-review next_turn parsing only the final message",
+   "why": "When A2 makes the author stage see the whole turn's text, do not extend that to fixed_review. Earlier assistant prose with braces would break parse_review_json."
+  },
+  {
+   "what": "The process-dir rename during the fixed review",
+   "why": "Still useful in Harbor (/eval/processes is reachable by absolute path). After run_local.sh copies the eval tree into $WORK, it only touches a temp copy."
+  },
+  {
+   "what": "Presentation threshold max(3, ceil(n/2)) required sections",
+   "why": "The skill omits empty sections, so a stricter threshold would miss valid files."
+  }
+ ],
+ "changes_now": [
+  {
+   "priority": 1,
+   "title": "Stop the author-stage loops and make presentation detection see what the author would see",
+   "what": "(a) stand_in.ScriptedStandIn: when approved and no intent file exists, stop returning default:defer-to-brief. If the message presents the artifact or asks for approval or confirmation, reply 'Approved as presented. Write the <noun> file under <dir>/ exactly as shown, commit it, tell me the path, and stop. Do not start implementation.' (cue 'reapprove'). Otherwise reply 'Write the approved <noun> under <dir>/ and commit it now. Then stop.' (cue 'write-nudge'). Bound both at 2, then return None so the stage ends, instead of burning 12 turns. In _freeform, approve whenever presented is true and the current message presents the artifact, even if already approved. (b) presents_artifact: run the required-section check first, with headings at levels 1-6 or bold labels ('**Outcomes**'). Veto only when a heading matches ^#{1,6}\\s*intent brief and the required-section test fails. Keep the threshold max(3, ceil(n/2)). Return confirm-brief only before the first presentation and only when an Intent-brief heading is present. (c) backends.CopilotBackend.run_stage: build the turn text by joining every root assistant.message (no agentId) since the current send began, using live_events, and pass it to next_turn when a new StageSpec flag next_turn_sees_full_turn=True. Set that flag only for the author stage. In user_input_handler, pass context = root assistant text since the last user.message or user_input.completed. Extend on_user_input to (question, choices, context) and have both stand-ins run presents_artifact on context + question. (d) run_process: record summary.stages.author.end_reason (committed / stand_in_stopped / turn_cap / deadline / error) and have analyze.py print it next to author outcomes. (e) Add FakeBackend-subclass tests to driver/test_author_stage.py: ruling via ask_user then re-emit (expect approved), re-show the final file before writing (expect approved), proposal mentioning 'intent brief' (expect approved), proposal in context plus ask_user approve (expect approved, not unapproved_file), and an h4-heading proposal.",
+   "why": "Without this, a realistic share of change-intent trials implement without their intent, under an AGENTS block that tells the implementer to stop and offer the skill. ITT then charges a harness failure to the process, and PP becomes a selected subset. These are the largest threats to 'score difference means process difference', and they affect only author-skill arms.",
+   "files": [
+    "ideas/change-intent/eval/driver/stand_in.py",
+    "ideas/change-intent/eval/driver/backends.py",
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/driver/test_author_stage.py",
+    "ideas/change-intent/eval/scripts/analyze.py"
+   ],
+   "from_findings": [
+    "A1",
+    "A2",
+    "A3"
+   ]
+  },
+  {
+   "priority": 2,
+   "title": "Make the driver's per-turn rules condition-neutral",
+   "what": "(a) run_process.next_impl_turn: replace p.startswith(CODE_DIRS) with p.startswith(tuple(d.rstrip('/') + '/' for d in CODE_DIRS)), and add a regression test where turn 1 only runs the CLI, which creates ./ledger.csv. (b) stand_in._freeform non-author reply: 'The brief is everything I have decided; anything it does not state is your call. Continue without waiting for me.' (cue non-author:defer). (c) ModelStandIn.answer_question_async: when self.stage != 'author', return ScriptedStandIn.answer_question(self, question, choices), so every arm gets the same non-author answers.",
+   "why": "A4 swings correctness by about 0.7 for an agent that merely smoke-tested the CLI, and that is more likely in some arms. A8 and M12 inject condition-correlated guidance outside the process files.",
+   "files": [
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/driver/stand_in.py",
+    "ideas/change-intent/eval/driver/test_author_stage.py"
+   ],
+   "from_findings": [
+    "A4",
+    "A8",
+    "M12"
+   ]
+  },
+  {
+   "priority": 3,
+   "title": "Fix the grader's measurement defects",
+   "what": "In tests/criteria.py: (a) _pytest_run: run with '--junit-xml=<tmp>' and '--continue-on-collection-errors', then sum tests, failures, errors and skipped over the <testsuite> elements. If the XML is missing, fall back to parsing only the final summary line. Keep the 'No module named pytest' check, and keep counting skipped, xfailed and deselected as not passing. (b) Run every suite in a throwaway copy: shutil.copytree(workspace, tmp, ignore=ignore_patterns('.git', '.eval', '__pycache__')), with LEDGER_WORKSPACE=tmp and cwd=tmp, keeping the cache key on the original path. (c) existing_tests_still_pass: copy the seed's test_money.py and test_cli.py into tests/__seed/ and run those pristine copies against the workspace copy, keeping the SEED_TEST_COUNT>=17 check. Add a diagnostic seed_tests_modified, computed from git diff <root>..HEAD -- tests/test_money.py tests/test_cli.py. (d) stdlib_only: parse with ast. Check each Import alias and each ImportFrom with level==0 by name.split('.')[0]. Return False on SyntaxError. Keep 'ledger' allowed. (e) process_stages_clean: exclude both 'implement' and 'fixed_review'. (f) tests/__hidden/conftest.py run fixture: catch SystemExit and map e.code to int (None means 0, a non-int means 1).",
+   "why": "Correctness is 4/7 of the headline. Each of these defects can move it for reasons unrelated to the code's behaviour (assertion wording, thread scheduling, docstring phrasing, sys.exit style), or lets a stated brief requirement go unchecked (seed tests edited to match changed behaviour). G1 alone turned 1 failure out of 2 into a score of 1/12 in my repro.",
+   "files": [
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/criteria.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__hidden/conftest.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__seed/test_cli.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__seed/test_money.py"
+   ],
+   "from_findings": [
+    "G1",
+    "G2",
+    "G4",
+    "G8",
+    "G9",
+    "A7"
+   ]
+  },
+  {
+   "priority": 4,
+   "title": "Add the five contract-derived hidden tests and define 'remaining' in the brief",
+   "what": "Copy the five tests from /tmp/claude-0/-home-user-ai-toolbox/c4033a8d-daef-5188-afd2-caaffe52687e/scratchpad/review4-grader/hidden_plus/test_proposed.py into the matching files in tests/__hidden/: import dedup ignores category, import amounts are exact cents (1.15/4.35/0.29), report omits budgeted categories with no spending, apply ignores an identical manual entry, and spent==limit is not OVER. Verified: the reference passes 5/5, and variants C, F, G and M each fail exactly one. In instruction.md's budget-status bullet, add: '`remaining` is limit minus spent, negative when over; with no budgets set the output is empty.' Rerun the reference (expect 37/37) and the seed.",
+   "why": "This raises the instrument's sensitivity on stated contract items, which is where an artifact that enumerates acceptance criteria could show a difference. It also removes an unstated-definition penalty. The brief has to change before the first real run, because changing it afterwards breaks comparability (brief_sha256).",
+   "files": [
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__hidden/test_import.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__hidden/test_report.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__hidden/test_recurring.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/__hidden/test_budgets.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/instruction.md"
+   ],
+   "from_findings": [
+    "G3",
+    "G5"
+   ]
+  },
+  {
+   "priority": 5,
+   "title": "Run the fixed reviewer in a synthetic, condition-neutral repository; stop leaking repository paths in local runs",
+   "what": "(a) run_process: add build_review_repo(ws, seed_commit, impl_commit, intent_dir) -> Path. It does git init in a temp dir and makes commit 'base' from git archive seed_commit. It then makes commit 'change' from git archive impl_commit, with intent_dir removed and AGENTS.md restored to its seed content (or deleted if absent at seed), using a neutral author and messages. There is no .eval. Run the fixed review with working_directory=review_repo, and compute out_of_bounds_reads against [review_repo, review_input]. Remove the AGENTS.md checkout/unlink blinding for the fixed review, but keep the process-dir rename. Record review_repo_tree_sha in the summary. Add a test asserting that `git log` in the review repo has exactly two neutral commits, that no .eval or intent dir exists, and that `git diff HEAD~1` matches diff.patch apart from the .gitkeep. (b) change_description.md: use the heading '## Description document' with no path. (c) scripts/run_local.sh: copy driver/, reviewer/ and processes/$PROCESS into $WORK/eval, and copy the brief and any --intent-file into $WORK. Run that copy so no repository path appears in any session and the rename only touches the temp copy. Correct the header comment to say local real-model runs are not sandboxed and headline numbers come from Harbor runs only. (d) Fix reviewer/README.md's blinding claim to state what remains: the content-level differences in change_description.md.",
+   "why": "The judge is 2/7 of the headline. Today it can learn the condition from summary.json, the history and the intent folder, with no record of it. One structural fix closes all of these channels and leaves the provisional summary where analyze.py expects it. The local-run fix also stops a killed run from leaving the repository's process directory renamed.",
+   "files": [
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/driver/test_author_stage.py",
+    "ideas/change-intent/eval/scripts/run_local.sh",
+    "ideas/change-intent/eval/reviewer/README.md"
+   ],
+   "from_findings": [
+    "A6",
+    "I7",
+    "M4",
+    "I11",
+    "A9",
+    "G12"
+   ]
+  },
+  {
+   "priority": 6,
+   "title": "Make the time budget non-binding before the stage caps, and bound the driver",
+   "what": "Set CopilotProcessAgent.DRIVER_BUDGET_SEC = 9600 (caps sum to 1800+3600+900+3*900 = 9000, plus overhead) and task.toml [agent] timeout_sec = 10500, and update both comments. Wrap the driver in the shell command as `timeout --kill-after=60 $(( DRIVER_BUDGET_SEC + 600 )) python3 ...`, so the cp and exit always run. In CopilotBackend, wrap create_session, abort, get_events, disconnect and client.stop in asyncio.wait_for(..., 120). Record deadline_clamped per fixed-review attempt, i.e. whether the epoch rather than the cap set the attempt's deadline.",
+   "why": "With the current 7800 s epoch, only arms with author or process-review stages can lose fixed-review retries. That gives a condition-correlated missing review, scored 0 in ITT. A hung RPC can also leave the driver running during the shared verifier.",
+   "files": [
+    "ideas/change-intent/eval/agents/copilot_process.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/task.toml",
+    "ideas/change-intent/eval/driver/backends.py",
+    "ideas/change-intent/eval/driver/run_process.py"
+   ],
+   "from_findings": [
+    "A5",
+    "I8"
+   ]
+  },
+  {
+   "priority": 7,
+   "title": "Pin Copilot session isolation and provider routing; make accounting robust",
+   "what": "(a) Pass enable_session_store=False, memory={'enabled': False}, skip_embedding_retrieval=True and enable_file_hooks=False to every create_session (run_stage and ask_once), and record them in the manifest. Construct CopilotClient with base_directory=<work>/copilot-home when a token is present in the environment; refuse to run the copilot backend without an env token, rather than silently using the developer's ~/.copilot. Do not set enable_config_discovery. (b) Apply self.provider only to sessions on the implementer model. Add --reviewer-provider-json and --stand-in-provider-json (EVAL_REVIEWER_PROVIDER_JSON and EVAL_STAND_IN_PROVIDER_JSON), where an absent value means the Copilot API. Refuse to start when a BYOK provider is set and the reviewer route is not explicitly given. Record the provider type and base_url host per role (never the key). (c) copilot_process.py: pass the provider JSON through env['EVAL_PROVIDER_JSON'], not on the command line. (d) Structured-output fallback: when a response_schema turn raises a RuntimeError that is neither STRUCTURED_OUTPUT_MISSING nor a timeout, resend in the same session without response_schema, with JSON_ONLY_RETRY plus the schema text appended. Record _meta.structured_output = 'native' or 'prompt' per attempt. (e) Compute usage, usage_by_model, models_seen and resolved_model from live_events always, and keep persisted events separately (events-<stage>.json plus events-live-<stage>.json). (f) _resolved_model: read selectedModel from session.start and newModel from session.model_change. Record model_changes plus reasoningEffort, reasoningEffortManaged and copilotVersion from session.start, and the set of usage rte values, per stage.",
+   "why": "These remove an unrecorded and possibly asymmetric context channel from author to implement. They stop the cross-vendor reviewer being silently routed to the implementer's endpoint, keep the API key out of shareable logs, and stop a provider schema rejection from erasing the review leg in every trial. They also keep a usage-list quirk from marking valid trials invalid (no_model_calls), and make server-side settings visible so drift can be detected.",
+   "files": [
+    "ideas/change-intent/eval/driver/backends.py",
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/agents/copilot_process.py"
+   ],
+   "from_findings": [
+    "I1",
+    "I2",
+    "I3",
+    "I5",
+    "I6",
+    "I10",
+    "M10"
+   ]
+  },
+  {
+   "priority": 8,
+   "title": "Make analyze.py's statistics honest and stop it pooling heterogeneous trials",
+   "what": "(a) _t_quantile: use the largest tabulated df at or below the actual df (conservative), or compute the quantile exactly. Add a test: welch([0.9,0.95,1.0],[0.5,0.8,0.6]) must give an interval that includes 0. (b) Build the condition key from process, labels, intent sha, model, reviewer_model and brief_sha256[:8]. Within a condition, if process_files digest, harness_git_sha, stand_in or stand_in_model vary, or harness_dirty is true, print the heterogeneity and exit non-zero unless --allow-mixed is passed. Add model_mismatch as an invalid_reason, behind --keep-model-mismatch. (c) Add a calibration table per condition: P(reviewer_verdict_correct=1) and P(no_blocking_findings), split by hidden_tests_all_pass, plus mean(review - correctness). (d) Next to each difference, print the minimum attainable permutation p for the arm sizes and the minimum detectable effect, (t_crit + 0.84) * pooled_sd * sqrt(2/k). Print the per-arm missing-review rate as a row. (e) Relabel PP as 'PP (biased: selects on post-treatment authoring success; sensitivity only)'. Print 'primary: correctness' first, and label the other dimensions as secondary or exploratory.",
+   "why": "The interval is the number most likely to be quoted, and today it is too narrow. Silent pooling of colleagues' reruns could create or erase differences. The calibration table is the only way to see whether the description is moving the 2/7 judge dimension differently by arm.",
+   "files": [
+    "ideas/change-intent/eval/scripts/analyze.py",
+    "ideas/change-intent/eval/scripts/test_analyze.py"
+   ],
+   "from_findings": [
+    "M7",
+    "M5",
+    "M3",
+    "M6",
+    "M8",
+    "M13"
+   ]
+  },
+  {
+   "priority": 9,
+   "title": "Document how to run a comparison so it can be interpreted",
+   "what": "(a) copilot_process.py docstring: replace the one-harbor-run-per-arm example with a Harbor job config listing every arm's agent in one job (JobPlan nests agents innermost, so trials interleave). Note that k=3 is a plumbing pilot whose minimum permutation p is 0.10. (b) processes/README.md table: add that 'artifact A vs B' compares documents, not shapes. A shape comparison needs (1) a process per shape with shape-neutral guidance (the noun is the only difference) and (2) at least 5 artifacts per shape from the same skill and stand-in, or from authors who have not seen tests/__hidden, analysed by artifact cluster. Add that 'whole process' bundles guidance, an extra session, the artifact and a review pass. (c) State the run order: a baseline pilot at k of about 5 first. If mean correctness is at least 0.95 (or the all-pass rate at least 0.9), the task cannot discriminate on the primary endpoint; stop and add a task or a lighter-brief variant before the full run.",
+   "why": "This prevents the two likeliest misreadings: time-blocked arms confounded with server drift, and frozen-document wins read as shape effects. It also gates the expensive run on a pilot that shows whether this task has any headroom.",
+   "files": [
+    "ideas/change-intent/eval/agents/copilot_process.py",
+    "ideas/change-intent/eval/processes/README.md"
+   ],
+   "from_findings": [
+    "M10",
+    "M1",
+    "M2",
+    "G6",
+    "M6",
+    "M11"
+   ]
+  }
+ ],
+ "changes_later": [
+  {
+   "title": "Judge test-retest and re-measurement of missing reviews",
+   "what": "Rebuild the review repository from the task seed plus diff-with-artifact.patch, which is saved in every trial, using the same build_review_repo and retry loop as the driver. Add a script that reports verdict kappa and rating ICC across reruns, and an option to feed a re-measured review.json to the verifier.",
+   "why": "Reviewer reliability is a precondition for interpreting review differences. Until this exists, review results are exploratory."
+  },
+  {
+   "title": "Decomposition arms",
+   "what": "With build_processes.py, add (a) a frozen intent with agents_block, system_append and review all null (the artifact alone), and (b) baseline plus a length-matched, intent-free engineering-guidance system_append. Optionally add (c) baseline plus a standard PR-description request, as a description-matched control for the review dimension.",
+   "why": "Without these, a change-intent win cannot be attributed to the intent rather than to more instructions or a better PR description."
+  },
+  {
+   "title": "More tasks and an under-specified brief variant",
+   "what": "Add 5-10 tasks, including briefs where the stand-in holds private author decisions it reveals only when asked, in every stage, so baseline can ask too. Pair them with hidden tests on those decisions and on implied robustness (malformed rows, invalid months, --until before --start). Add an instruction-lite.md variant of ledger-budgets with its own hidden tier. Analyse with task as a blocking factor.",
+   "why": "The authoring dialogue only has something to elicit when the brief leaves decisions open. One fully specified task cannot support a general claim."
+  },
+  {
+   "title": "Task configuration instead of hard-coded task identity",
+   "what": "Add tests/task_config.json (package, code_dirs, seed_tests, seed_test_count, stdlib_only). The driver takes --code-dirs from the agent class, and run_local.sh takes --task. Keep one canonical criteria.py and sync it into each task, with a drift check.",
+   "why": "Needed before a second task. Otherwise the continuation rule nudges every trial to the cap there."
+  },
+  {
+   "title": "Verify the effective tools and agents per stage",
+   "what": "After create_session, call session.rpc.tools.initialize_and_validate() and get_current_metadata(), plus session.rpc.agent.list(), and store the results in the stage summary. Flag read-only stages that are missing a READ_ONLY_TOOLS name or that have an edit tool.",
+   "why": "Turns 'same tools' and 'built-ins off' from assertions into measurements. Check it in the pilot."
+  },
+  {
+   "title": "Harbor agent metadata",
+   "what": "Override get_version_command to print the SDK version and the CLI_VERSION actually used. Set capabilities to AgentCapabilities() so Harbor rejects unsupported flags. Pin or drop the gh.io CLI install, and set DEFAULT_SETUP_TIMEOUT_SEC to 900.",
+   "why": "Published Harbor results otherwise carry a misleading agent version, and unsupported flags are silently ignored."
+  },
+  {
+   "title": "Reproducibility pins before publishing",
+   "what": "Pin python:3.12-slim-bookworm and the uv image by digest, and pin rewardkit's transitive dependencies. Have the verifier write a hash of /tests into its details. Record the Harbor version and image digest. Make analyze refuse harness_dirty trials by default (part of priority 8b).",
+   "why": "Colleagues' reruns must be able to show that they used the same verifier and interpreter."
+  },
+  {
+   "title": "Measure 'add tests' and other recorded proxies",
+   "what": "agent_added_tests: count 'def test_' lines added in git diff <baseline>..HEAD -- tests/. Add a diagnostic that runs the agent's suite against the seed ledger package to count tests that exercise new behaviour. Report nudges per trial, the number of Amendments entries and code-diff lines per arm as secondaries.",
+   "why": "A stated brief requirement and design.md's 'without being re-prompted' purpose currently go unmeasured."
+  },
+  {
+   "title": "Explicit reasoning effort",
+   "what": "Pass reasoning_effort per stage once the model's supported values are known, and record it.",
+   "why": "This removes a server-side default as a source of drift between runs. It depends on the model, so verify in the pilot first."
+  },
+  {
+   "title": "out_of_bounds_reads coverage",
+   "what": "Drop the blanket /home skip in favour of an allowlist of the agent HOME's .copilot and .cache. Flag '..' escapes.",
+   "why": "After priority 5 this matters only for local runs, which are not the headline."
+  }
+ ],
+ "limitations_to_state": [
+  "One task, with a fully specified interface contract. All hidden tests check stated contract items, so correctness can only move through slips against a spec-grade brief and may sit at the ceiling in every arm. Results do not generalise beyond this task.",
+  "The scripted stand-in adds no information beyond the brief, so the authoring dialogue's main mechanism (eliciting author decisions) is not exercised. A null or negative result is not evidence against change intents in settings where the author holds undocumented decisions.",
+  "Whole-process comparisons bundle about 60 KB of guidance, an extra authoring session, the artifact and a process review pass against a baseline with none of them. A win cannot be attributed to the artifact alone without the decomposition arms.",
+  "Frozen-artifact comparisons compare specific documents (n=1 per shape) written by the experimenter, under change-intent-specific guidance. They say nothing about artifact shape (change intent versus spec versus plan).",
+  "The review dimension (2/7 of the headline) comes from a single LLM judge whose input includes a condition-dependent description. It is not calibrated against humans, its test-retest reliability is not yet measured, and it can be moved by description quality independently of the code. Content-level unblinding is inherent. Review results are exploratory; the primary endpoint is correctness (hidden tests).",
+  "A missing fixed review scores 0 in the verifier (ITT). The headline is also reported with missing reviews excluded (XR), and missing-review rates are reported per arm.",
+  "The PP view selects on post-treatment authoring success in one arm and is biased. It is a sensitivity view only.",
+  "Power: at k=3 the minimum two-sided permutation p is 0.10. The minimum detectable effect is about 3.0, 1.3 and 0.9 SD at k=3, 10 and 20. One failing hidden test moves the headline by about 0.11-0.12. Only one pre-registered primary comparison is confirmatory; everything else is exploratory.",
+  "Headline weights (4:2:1) are a design choice, not derived. Per-criterion means are reported so readers can re-weight.",
+  "The task is medium-sized (about 435 reference lines, low coupling between features), at or below the intended 1000-2000 line range.",
+  "Only Harbor runs count toward results. Local real-model runs are not sandboxed from the repository.",
+  "Server-side model behaviour (default reasoning effort, A/B treatments, alias updates) is not under the harness's control. Arms are interleaved in one job, and the recorded effort and treatment signals are checked for heterogeneity, but a colleague's rerun weeks later may not match."
+ ],
+ "notes": "What I ran and checked:\n- Read stand_in.py, backends.py, run_process.py, copilot_process.py, run_local.sh, analyze.py, criteria.py, task.toml, instruction.md, test.sh, reward.toml, processes/change-intent-v1/process.json and SKILL.md (Phase 1/3/4 wording, including 'empty sections omitted' and the mandated closing line containing 'correct').\n- Unit simulation of the stand-in (/tmp/claude-0/-home-user-ai-toolbox/c4033a8d-daef-5188-afd2-caaffe52687e/scratchpad/review4-adjudicator/sim_standin.py) gave:\n  - a complete Phase 3 proposal is approved;\n  - after an ask_user '(Recommended)' ruling latched approval, three re-presentations all got default:defer-to-brief, which is the loop;\n  - a proposal containing 'intent brief' got 'Yes, that brief is correct. Proceed.';\n  - h4 headings: presents=False;\n  - 3 of 6 headings: presents=True;\n  - 'ledger.csv'.startswith(('ledger',)) is True.\n- SDK session.py:2281-2351: send_and_wait keeps only the last root AssistantMessageData.\n- Runtime definitions/sidekick/session-search.yaml exists and pulls prior-session context through the session store. client.py create_session accepts enable_session_store, memory, skip_embedding_retrieval and enable_file_hooks, and the defaults are None outside 'empty' mode.\n- SessionModelChangeData uses new_model, and assistant.usage is ephemeral in the schema.\n- Grader repro (/tmp/claude-0/-home-user-ai-toolbox/c4033a8d-daef-5188-afd2-caaffe52687e/scratchpad/review4-adjudicator/g1): criteria._pytest_run on 2 tests with one failing 'imported 1 skipped 2' assertion returned 1/12, while pytest itself reported '1 failed, 1 passed'. The stdlib regex flagged 'from a' in a docstring.\n- The reviewer's five proposed hidden tests: ref 5 passed; variants C, F, G and M each '1 failed, 4 passed'.\n- Harbor job_plan.py nests config.agents innermost.\n- Offline tests: 16 passed. git status clean. Nothing in the repository was modified.\n\nTrade-offs for the owner to decide, with my recommended default:\n1. Primary endpoint: correctness group or hidden_tests_pass_fraction (recommended), with the headline and review dimensions secondary. Alternative: keep the headline primary. That is more sensitive to the judge and the description, and only defensible after calibration (8c) shows equal judge calibration across arms.\n2. Stand-in policy after approval: auto-approve re-presentations and send at most two write nudges (recommended). It is faithful to an author who already approved. A stricter policy that rejects re-presented text would add harness-driven loops.\n3. Time budget: raise the Harbor agent timeout to about 10,500 s (recommended; costs only wall-clock on slow trials). Alternative: cut max fixed-review attempts to 2 to stay within 9000 s, which loses retry robustness equally in all arms.\n4. Blinding: a synthetic review repository (recommended; one structural change closes summary.json, history and intent-dir leaks). The lighter alternative is to move .eval aside during the review and squash history, which gives more moving parts for the same result.\n5. BYOK: require an explicit reviewer route whenever BYOK is used (recommended), rather than defaulting the reviewer to the Copilot API, which fails silently without entitlement.\n6. Hidden-test additions and the brief sentence: land them before any real run (recommended). Adding them after the first comparison makes old and new runs incomparable.\n7. Pilot gate: run baseline at k of about 5 first. If correctness is at the ceiling, invest in an under-specified brief variant or a second task before spending on k=20 per arm (recommended), rather than running the full comparison on a task that cannot discriminate.\n8. ModelStandIn arm: keep it as a secondary condition only, and compare it with ChangeIntentV1, not with Baseline.\n\nMerges: I7+A6+M4 are one blinding change. I11+A9+G12 are one run_local change. G11+M15 are deferred together. M2+G6 are one limitation plus the pilot gate. A1+A2+A3 are one stand-in change."
+}

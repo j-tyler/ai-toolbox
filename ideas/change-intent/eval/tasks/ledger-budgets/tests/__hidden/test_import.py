@@ -81,3 +81,19 @@ def test_import_rerun_of_same_file_adds_nothing(workdir, run):
     run(["import", str(bank), "--date-col", "d", "--amount-col", "a", "--note-col", "n"])
     _, out, _ = run(["import", str(bank), "--date-col", "d", "--amount-col", "a", "--note-col", "n"])
     assert out.strip() == "imported 0 skipped 2"
+
+
+def test_import_dedup_ignores_category(workdir, run):
+    """Duplicate = same date, amount, note; the ledger row's category does not matter."""
+    add(run, "2026-10-01", "5.00", "groceries", "x")
+    bank = workdir / "bank.csv"
+    write_csv(bank, ["d", "a", "n"], [["2026-10-01", "5.00", "x"]])
+    _, out, _ = run(["import", str(bank), "--date-col", "d", "--amount-col", "a", "--note-col", "n"])
+    assert out.strip() == "imported 0 skipped 1"
+
+
+def test_import_amounts_exact_cents(workdir, run):
+    bank = workdir / "bank.csv"
+    write_csv(bank, ["d", "a"], [["2026-10-01", "1.15"], ["2026-10-02", "4.35"], ["2026-10-03", "0.29"]])
+    run(["import", str(bank), "--date-col", "d", "--amount-col", "a"])
+    assert [r["amount_cents"] for r in ledger_rows(workdir)] == ["115", "435", "29"]

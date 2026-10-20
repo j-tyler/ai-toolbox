@@ -61,11 +61,17 @@ so "files next to the ledger file" is checked, not assumed.
 3. **Author stage**, by `author.mode`. `skill`: one SDK session with the process's authoring skill
    loaded; its questions reach a **stand-in author** (`driver/stand_in.py`) through the SDK's
    `on_user_input_request` handler for `ask_user` calls and through scripted replies for prose
-   questions. The dialogue ends when a commit made during the stage touches the intent directory,
-   whatever the agent asks next; an existing but uncommitted draft gets one request to show it for
-   approval. The stage records `author_outcome` (approved, unapproved_file, no_file) and which cue
-   produced the approval, and restores and flags anything the author changed outside the intent
-   directory, committed or not. `frozen`: a supplied file is committed with no dialogue, which
+   questions. The stand-in judges each turn on what a human would have read: the whole turn's
+   assistant text (not only the last message), or the `ask_user` question plus the text before it.
+   It approves only when that text presents the artifact (most of its required section headings at
+   any level, or a large share of its lines); it re-approves a re-shown file, nudges an approved
+   but unwritten or uncommitted file at most twice, then lets the stage end. The dialogue ends when
+   a commit made during the stage touches the intent directory, whatever the agent asks next; an
+   existing but uncommitted draft gets one request to show it for approval. The stage records
+   `author_outcome` (approved, unapproved_file, no_file), `end_reason` (committed,
+   stand_in_stopped, turn_cap, deadline, error, agent_stopped) and which cue produced the approval,
+   and restores and flags anything the author changed outside the intent directory, committed or
+   not. `frozen`: a supplied file is committed with no dialogue, which
    removes authoring variance. `none`: no artifact. Harness commit messages are condition-neutral.
    `driver/test_author_stage.py` pins these rules.
 4. **Implement stage**: a fresh session. The prompt is the same neutral text for every condition
@@ -84,12 +90,16 @@ so "files next to the ledger file" is checked, not assumed.
    appended to a read-only session that assesses the diff against the intent and returns a met /
    not met / cannot verify table per claim as its final message; the driver saves it.
 7. **Fixed review** (every condition): a second read-only session (the bundled runtime's own
-   read-only tool set, built-in sub-agents off) runs
+   read-only tool set, built-in sub-agents off, session store and memory off) runs
    [`reviewer/fixed_reviewer.md`](reviewer/fixed_reviewer.md) with workspace custom instructions
-   **off**, `AGENTS.md` restored to its seed content, the process directory renamed out of reach,
-   and exactly three inputs in a sealed temporary directory outside both the workspace and the
-   work directory: `requirements.md` (the brief, the standard for correctness in every condition),
-   `diff.patch` (code only), and `change_description.md` (rated for adequacy, never the standard).
+   **off**, in a **synthetic review repository**: a fresh git repo with two neutral commits, `base`
+   (the seed tree) and `change` (the implementation tree minus the intent directory, with
+   `AGENTS.md` as it was at the seed). It holds no `.eval`, no harness commit messages and no
+   process files, so nothing in the checkout says which arm produced it. The reviewer also gets
+   exactly three inputs in a sealed temporary directory: `requirements.md` (the brief, the standard
+   for correctness in every condition), `diff.patch` (code only), and `change_description.md`
+   (rated for adequacy, never the standard). What remains condition-dependent is the content of
+   that description, which is the thing under test.
    A non-JSON answer gets one follow-up and then fresh sessions; a review that is still missing is
    recorded as missing, not scored, and the analyzer reports the headline both ways.
    It returns JSON against `REVIEW_SCHEMA` (findings with location, severity, and confidence; an
@@ -149,7 +159,10 @@ scripts/run_local.sh change-intent-v1-frozen --intent-file path/to/intent.md --m
 scripts/analyze.py runs/ --ref baseline
 ```
 
-The workspace is created outside the repository so a real run cannot read the hidden tests.
+The workspace and a private copy of the harness are created outside the repository, so no
+repository path reaches a model session. A local real-model session is still not sandboxed: its
+tools can read anything your user can read, including this repository's hidden tests, if the model
+goes looking. Use local real runs to debug a process; headline numbers come from Harbor runs only.
 
 BYOK instead of Copilot entitlement: pass `--provider-json '{"type":"anthropic","base_url":"...","api_key":"..."}'`
 (the SDK's `ProviderConfig`). Note that without BYOK each SDK prompt counts against the Copilot
@@ -170,8 +183,37 @@ harbor view jobs
 scripts/analyze.py ~/jobs/<job> --ref baseline
 ```
 
-The task's agent timeout is 9000 s; the driver is given a 7800 s deadline so it always finishes,
-resets, and copies its artifacts inside that window.
+The stage caps sum to 9000 s (author 1800, implement 3600, process review 900, three fixed-review
+attempts of 900). The driver is given a 9600 s deadline and the task's agent timeout is 10500 s, so
+the deadline is not binding before the caps in any arm and the driver always finishes, resets, and
+copies its artifacts inside the window. A `deadline_clamped` flag per fixed-review attempt records
+the exception.
+
+**Run every arm in one job.** Harbor nests agents innermost in its plan, so a job config that lists
+every arm interleaves their trials; separate `harbor run`s per arm would confound the arm with
+whatever the model service was doing that hour:
+
+```yaml
+# job.yaml
+agents:
+  - import_path: agents.copilot_process:Baseline
+    model_name: gpt-5.4
+  - import_path: agents.copilot_process:ChangeIntentV1
+    model_name: gpt-5.4
+datasets:
+  - path: tasks/ledger-budgets
+n_attempts: 20
+```
+
+```bash
+PYTHONPATH=. harbor run -c job.yaml
+```
+
+**Run order.** A baseline pilot at about five attempts comes first. If its mean correctness is at
+least 0.95, or at least nine in ten trials pass every hidden test, the task cannot discriminate on
+the primary endpoint: stop and add a task, or a lighter-brief variant, before spending on the full
+run. `analyze.py` prints the smallest p-value the arm sizes can attain and the minimum detectable
+effect next to every difference.
 
 `PYTHONPATH=.` is required: Harbor imports `module:Class` with importlib and does not add the
 current directory to `sys.path`.
@@ -209,11 +251,16 @@ variant, copy a generated directory to a new name, edit the copy, add a two-line
   feeds the `review` dimension. Its instructions quote published sources (Google's review guide,
   the published Anthropic reviewer threshold, OpenAI's review schema shape, the TU Delft
   reviewability factors) so nobody in the experiment wrote the reviewer for their own process.
-- **The fixed reviewer sees the intent.** This is a deliberate choice: "reviewable with the
-  artifact the process actually leaves behind" is the claim under test. Its verdict standard is
-  relative to the description, which favours sparser descriptions a little; the ratio scoring and
-  the neutral heading reduce that, and a blinded diff-only arm is listed under future work. The
-  intent file is also inside `diff.patch`; `summary.json` records a code-only shortstat as well.
+- **The fixed reviewer sees the description, not the condition.** "Reviewable with the artifact
+  the process actually leaves behind" is the claim under test, so `change_description.md` carries
+  the intent plus the implementer's summaries under a neutral heading. Correctness is judged
+  against `requirements.md` (the brief, identical in every arm), never against the description;
+  the description is rated for adequacy separately, and `verified_claims_ratio` is a ratio so a
+  description that claims less cannot win by claiming less. The repository the reviewer reads is
+  a neutral two-commit copy with no process files. Content-level unblinding is inherent: a
+  reviewer that reads a change-intent-shaped description knows it is reading one. State it.
+- **Primary endpoint: correctness.** The composite reward is secondary; review and handoff are
+  exploratory. One pre-registered comparison is confirmatory; everything else is a look.
 - **Reviewers are read-only by construction and by cleanup.** Edit tools are excluded from review
   sessions, and the driver resets the tree to the implementation commit afterwards and records
   anything that moved.
@@ -221,7 +268,16 @@ variant, copy a generated directory to a new name, edit the copy, add a two-line
   driver validates it, tolerates a fenced block or surrounding prose, and keeps the raw message.
 - **Every run is pinned and manifested.** `summary.json` carries the harness git SHA, SDK
   version, the hash of every process file, the brief, the reviewer instructions, the schema, and
-  each rendered prompt, plus the resolved model per stage when the SDK reports it.
+  each rendered prompt, plus the resolved model per stage when the SDK reports it, the session
+  isolation flags, and the provider route per role (type and host, never a key). `analyze.py`
+  refuses to pool trials whose process files, harness commit, stand-in or dirty flag differ.
+- **Sessions are isolated and keys stay off the command line.** Every session runs with the
+  runtime's session store, memory, embedding retrieval and file hooks off, under a fresh
+  `COPILOT_HOME`; the Copilot backend refuses to run without a token in the environment rather
+  than reading a developer's `~/.copilot`. BYOK provider JSON travels only in environment
+  variables, one per role (`EVAL_PROVIDER_JSON`, `EVAL_REVIEWER_PROVIDER_JSON`,
+  `EVAL_STAND_IN_PROVIDER_JSON`); a BYOK implementer with no explicit reviewer route is refused,
+  so the reviewer cannot silently share the implementer's vendor.
 - **Time caps are per stage and identical across conditions.** The implement cap does not shrink
   because authoring took long; `task.toml`'s agent timeout covers the sum.
 
@@ -344,12 +400,103 @@ reviewability one; the baseline has no guidance-matched control; the primary end
 `hidden_tests_pass_fraction` with the composite secondary; and three attempts per arm is a pilot,
 not a comparison.
 
+## Fourth review pass
+
+The fourth pass used four fresh Opus reviewers, each with one lens and no knowledge of the earlier
+passes (realistic agent behaviour against the harness; the exercise and grader; the SDK, Harbor
+and Reward Kit integration contract; measurement validity), plus an adjudicator who reproduced the
+claims before ruling. It is saved as `docs/adjudication-2026-10-20-pass4.json`. Verdict: sound
+with fixes, do not start a real comparison before they land. Nine changes were upheld and applied;
+a longer list of proposed changes was rejected with reasons (kept: abort after timeout, all
+built-in sub-agents excluded, cross-vendor reviewer, exit 0 on stage errors, weight-0
+diagnostics, the all-pass bonus, the 4:2:1 weights, the diff excluding the intent directory,
+correctness judged against the brief, the scripted stand-in as default, exact permutation for
+small pools).
+
+1. **The author stage could loop to its turn cap and run the change-intent arm with no intent.**
+   Three realistic skill behaviours did it: re-showing the file after approval, showing the
+   proposal and then calling `ask_user`, and a proposal that mentions "intent brief". The
+   stand-in now reads the whole turn (the SDK's `send_and_wait` returns only the last root
+   message, so the backend joins every root assistant message from live events) and the `ask_user`
+   context; headings at any level and bold labels count as sections; a re-shown file is
+   re-approved; an approved but unwritten file gets at most two nudges, then the stage ends with
+   `end_reason=stand_in_stopped`. Tests pin each of these.
+2. **The continuation rule counted the CLI's own `./ledger.csv` as a code change** (`ledger.csv`
+   starts with `ledger`), which could swing correctness by about 0.7 in one arm. Prefix matching
+   is now on `ledger/`. The non-author stand-in reply is identical in every arm, including the
+   model stand-in's.
+3. **Grader defects that landed unevenly.** Pytest outcomes were counted with a regex over the
+   whole output, so a failing assertion that printed "1 skipped" scored 1/12 instead of 1/2; counts
+   now come from JUnit XML. Suites run in a throwaway copy of the workspace, so an agent's tests
+   cannot dirty the tree the handoff check reads. The seed regression suite runs from pristine
+   copies under `tests/__seed/`, with `seed_tests_modified` as a diagnostic. The stdlib check
+   parses imports with `ast` instead of matching docstring lines. `process_stages_clean` ignores
+   the fixed review as well as the implement stage. The hidden conftest maps `SystemExit` to an
+   exit code.
+4. **Five contract-derived hidden tests** (import de-duplication ignores category; import amounts
+   are exact cents; the report omits budgeted categories with no spending; apply ignores an
+   identical manual entry; spent equal to the limit is not over), and the brief now defines
+   `remaining`. Reference 37/37, seed 5/37.
+5. **The fixed reviewer runs in a synthetic repository** (above), `change_description.md` has no
+   path in its heading, and `run_local.sh` runs a private copy of the harness so no repository
+   path reaches a session.
+6. **The time budget was binding only in arms with author or review stages.** Caps sum to 9000 s;
+   the driver budget is 9600 s and the agent timeout 10500 s; the driver runs under `timeout` so
+   the copy-out always happens; SDK lifecycle calls are bounded; `deadline_clamped` is recorded.
+7. **Session isolation and provider routing are pinned** (above), structured output falls back to
+   a prompted JSON turn when the schema path errors, and usage is accounted from live events
+   because `assistant.usage` is not persisted.
+8. **Statistics.** The t quantile was taken from the first tabulated df at or above the actual
+   df, which made intervals too narrow; it now uses the largest df at or below. The condition key
+   includes model, reviewer model and brief hash; mixed conditions stop the analysis; model
+   mismatches are invalid; a calibration table shows whether the reviewer's verdict tracks the
+   hidden tests; the smallest attainable p and the minimum detectable effect print next to every
+   difference; PP is labelled as the biased sensitivity view it is.
+9. **How to run a comparison** so it can be interpreted: one job for all arms, the pilot gate,
+   and what artifact comparisons can and cannot say (`processes/README.md`).
+
+### Limitations to state in any write-up
+
+- One task, with a fully specified interface contract. Every hidden test checks a stated item, so
+  correctness can only move through slips against a spec-grade brief and may sit at the ceiling in
+  every arm. Results do not generalise beyond this task.
+- The scripted stand-in adds no information beyond the brief, so the authoring dialogue's main
+  mechanism (eliciting decisions the author holds) is not exercised. A null or negative result is
+  not evidence against change intents where the author knows things the brief does not say.
+- A whole-process comparison bundles about 60 KB of guidance, an extra authoring session, the
+  artifact and a process review pass against a baseline with none of them. A win cannot be
+  attributed to the artifact alone without the decomposition arms.
+- A frozen-artifact comparison compares specific documents (one per shape) written by the
+  experimenter, under change-intent-specific guidance. It says nothing about artifact shape.
+- The review dimension (2/7 of the headline) is a single LLM judge whose input includes a
+  condition-dependent description. It is not calibrated against humans, its test-retest
+  reliability is not yet measured, and it can be moved by description quality independently of
+  the code. Review results are exploratory; the primary endpoint is correctness.
+- A missing fixed review scores 0 (ITT). The headline is also reported with missing reviews
+  excluded (XR) and the missing-review rate per arm. PP selects on post-treatment authoring
+  success and is biased.
+- Power: at three attempts per arm the smallest two-sided permutation p is 0.10, and the minimum
+  detectable effect is about 3.0, 1.3 and 0.9 standard deviations at 3, 10 and 20 attempts. One
+  failing hidden test moves the headline by about 0.11. Only one pre-registered comparison is
+  confirmatory.
+- The headline weights (4:2:1) are a design choice. Per-criterion means are reported so readers
+  can re-weight.
+- The task is medium-sized (about 435 reference lines, low coupling), at or below the intended
+  1000 to 2000 line range.
+- Only Harbor runs count. Local real-model runs are not sandboxed from the repository.
+- Server-side model behaviour (default reasoning effort, A/B treatments, alias updates) is outside
+  the harness's control. Arms are interleaved in one job and the recorded signals are checked for
+  heterogeneity, but a rerun weeks later may not match.
+
 ## What was and was not verified here
 
 Verified in the authoring environment: hidden tests versus seed and reference; the driver end to
 end in fake mode for baseline, change-intent-v1, and change-intent-v1-frozen through every stage;
-the offline tests in `driver/test_author_stage.py` (including stand-in probes, a prose-only reviewer,
-and two artifact files) and `scripts/test_analyze.py`;
+the offline tests in `driver/test_author_stage.py` (stand-in probes for every loop the fourth
+pass reproduced, an `ask_user` ruling flow, an author that never writes, a data-file-only turn,
+the synthetic review repository, a prose-only reviewer, two artifact files) and
+`scripts/test_analyze.py` (condition keys, heterogeneity, model mismatch, the conservative
+interval, the mixed-condition stop);
 Reward Kit grading of the resulting workspaces, including through `uvx` exactly as `test.sh`
 runs it; headline parity across conditions with identical outputs; the stand-in stopping rules;
 verifier survival on malformed reviewer output; the Harbor agent classes import against Harbor

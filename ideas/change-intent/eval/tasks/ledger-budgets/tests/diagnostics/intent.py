@@ -4,3 +4,4 @@ from rewardkit import criteria
 criteria.intent_file_present(weight=1.0)
 criteria.intent_has_required_sections(weight=1.0)
 criteria.author_approved(weight=1.0)
+criteria.seed_tests_modified(weight=0.0)

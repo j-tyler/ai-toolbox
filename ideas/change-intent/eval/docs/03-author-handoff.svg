@@ -58,7 +58,7 @@
     <!-- branch C: no file / question -->
     <rect x="600" y="266" width="250" height="56" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
     <text x="725" y="286" text-anchor="middle" font-weight="600">no file, or the agent asked</text>
-    <text x="725" y="304" text-anchor="middle" fill="#6b7280">scripted reply: confirm · pick · approve</text>
+    <text x="725" y="304" text-anchor="middle" fill="#6b7280">approve only what is shown; ≤2 nudges</text>
     <line x1="725" y1="242" x2="725" y2="264" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
 
     <!-- back edges to the turn box -->
@@ -69,7 +69,7 @@
 
     <!-- branch D: caps -->
     <rect x="910" y="186" width="306" height="56" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
-    <text x="1063" y="206" text-anchor="middle" font-weight="600">END: cap hit (12 turns, or wall-clock)</text>
+    <text x="1063" y="206" text-anchor="middle" font-weight="600">END: cap hit, or stand-in stops nudging</text>
     <text x="1063" y="224" text-anchor="middle" fill="#6b7280">session aborted; whatever exists is what there is</text>
     <line x1="850" y1="214" x2="908" y2="214" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
     <text x="879" y="206" text-anchor="middle" fill="#6b7280">too long</text>
@@ -105,7 +105,7 @@
     <!-- Implement stop rule -->
     <rect x="300" y="556" width="580" height="110" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
     <text x="590" y="578" text-anchor="middle" font-weight="600" fill="#ea580c">Implement stop rule (driver, after each turn)</text>
-    <text x="312" y="600">done when:  (tree dirty OR HEAD moved)  AND  the final message does not end in a question</text>
+    <text x="312" y="600">done when:  the code tree changed  AND  the visible test suite is green  (one rule for every arm)</text>
     <text x="312" y="618">otherwise:  nudge "continue until complete, do not wait for me", at most 2 times, then stop</text>
     <text x="312" y="636">then:  commit --allow-empty "eval: implementation"; both reviews reset the tree to that commit</text>
     <text x="312" y="654" fill="#6b7280">same wall-clock cap for every condition, independent of how long authoring took</text>
