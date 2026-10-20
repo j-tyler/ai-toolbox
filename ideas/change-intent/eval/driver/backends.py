@@ -47,6 +47,9 @@ class Backend:
         next_turn: Callable[[str], Awaitable[str | None]],
         max_turns: int,
         timeout_sec: float,
+        response_schema: dict[str, Any] | None = None,
+        read_only: bool = False,
+        model: str | None = None,
     ) -> StageResult:
         raise NotImplementedError
 
@@ -73,8 +76,13 @@ def _event_to_dict(ev: Any) -> dict[str, Any]:
     return out
 
 
+USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens")
+
+
 def _usage_from_events(events: list[dict[str, Any]]) -> dict[str, int]:
+    """Sum the per-call usage counters from ``assistant.usage`` events (not the limit fields)."""
     totals: dict[str, int] = {}
+    calls = 0
     for ev in events:
         t = str(ev.get("type", ""))
         if "usage" not in t:
@@ -82,9 +90,15 @@ def _usage_from_events(events: list[dict[str, Any]]) -> dict[str, int]:
         data = ev.get("data") or {}
         if not isinstance(data, dict):
             continue
-        for k, v in data.items():
-            if isinstance(v, int) and "token" in k.lower():
-                totals[k] = totals.get(k, 0) + v
+        calls += 1
+        for key in USAGE_KEYS:
+            v = data.get(key)
+            if v is None:
+                v = data.get("".join(w.capitalize() if i else w for i, w in enumerate(key.split("_"))))  # camelCase from to_dict
+            if isinstance(v, (int, float)):
+                totals[key] = totals.get(key, 0) + int(v)
+    if calls:
+        totals["model_calls"] = calls
     return totals
 
 
@@ -131,7 +145,7 @@ class CopilotBackend(Backend):
         finally:
             await session.disconnect()
 
-    async def run_stage(self, stage, workspace, prompt, *, system_append, skill_dirs, on_user_input, next_turn, max_turns, timeout_sec) -> StageResult:
+    async def run_stage(self, stage, workspace, prompt, *, system_append, skill_dirs, on_user_input, next_turn, max_turns, timeout_sec, response_schema=None, read_only=False, model=None) -> StageResult:
         from copilot.session import PermissionHandler
 
         await self._ensure()
@@ -143,7 +157,7 @@ class CopilotBackend(Backend):
 
         session_kwargs: dict[str, Any] = dict(
             on_permission_request=PermissionHandler.approve_all,
-            model=self.model,
+            model=model or self.model,
             provider=self.provider,
             working_directory=str(workspace),
             on_user_input_request=user_input_handler,
@@ -153,12 +167,20 @@ class CopilotBackend(Backend):
             session_kwargs["system_message"] = {"mode": "append", "content": system_append}
         if skill_dirs:
             session_kwargs["skill_directories"] = skill_dirs
+        if read_only:
+            # Reviewer sessions: no edit/create tools. Tool names follow the Copilot SDK custom-agent
+            # docs (view, grep, glob, bash); bash stays so the reviewer can run the tests. The driver
+            # also resets the working tree after a read-only stage as a belt-and-braces measure.
+            session_kwargs["excluded_tools"] = ["edit", "create", "write", "apply_patch", "multi_edit"]
         session = await self._client.create_session(**session_kwargs)
         try:
             message = prompt
             while True:
                 result.turns += 1
-                ev = await session.send_and_wait(message, timeout=timeout_sec)
+                send_kwargs: dict[str, Any] = {"timeout": timeout_sec}
+                if response_schema is not None:
+                    send_kwargs["response_schema"] = response_schema
+                ev = await session.send_and_wait(message, **send_kwargs)
                 result.final_message = _message_text(ev)
                 if result.turns >= max_turns:
                     break
@@ -202,10 +224,19 @@ class FakeBackend(Backend):
     async def ask_once(self, system_prompt: str, user_prompt: str) -> str:
         return "Yes, let's do that."
 
-    async def run_stage(self, stage, workspace, prompt, *, system_append, skill_dirs, on_user_input, next_turn, max_turns, timeout_sec) -> StageResult:
+    async def run_stage(self, stage, workspace, prompt, *, system_append, skill_dirs, on_user_input, next_turn, max_turns, timeout_sec, response_schema=None, read_only=False, model=None) -> StageResult:
         result = StageResult(stage=stage, final_message="", turns=0, started=time.time())
         events: list[dict[str, Any]] = [{"type": "fake.prompt", "data": {"content": prompt[:500]}}]
-        if stage == "author":
+        if stage == "review":
+            result.turns += 1
+            (workspace / ".eval").mkdir(exist_ok=True)
+            (workspace / ".eval" / "process_review.md").write_text(FAKE_PROCESS_REVIEW, encoding="utf-8")
+            result.final_message = "Review written to .eval/process_review.md"
+        elif stage == "fixed_review":
+            result.turns += 1
+            has_tests = any((workspace / "tests").glob("test_*.py"))
+            result.final_message = json.dumps(FAKE_REVIEW if has_tests else {**FAKE_REVIEW, "overall_correctness": "uncertain"})
+        elif stage == "author":
             result.turns += 1
             ans, _ = await on_user_input("Is this brief accurate?", ["Yes, proceed", "No, let me restate"])
             events.append({"type": "fake.ask_user", "data": {"answer": ans}})
@@ -236,6 +267,34 @@ class FakeBackend(Backend):
         result.finished = time.time()
         return result
 
+
+FAKE_PROCESS_REVIEW = """# Review against change-intent
+
+| Claim | Assessment | Basis |
+| --- | --- | --- |
+| AC1 budget status output | met | tests/test_budget.py::test_status_text passes; assertions cover sort, remaining, OVER |
+| AC2 recur apply idempotent | met | tests/test_recurring.py::test_apply_idempotent; second run asserts "applied 0" |
+| AC3 import de-duplication | met | tests/test_import.py covers in-file and against-ledger duplicates |
+| AC4 report json | met | tests/test_report.py::test_report_json compares full object |
+| INV existing commands unchanged | met | seed tests unchanged and passing; cli.py add/list bodies untouched in diff |
+| INV ledger CSV format unchanged | cannot verify | no test pins the header row; store.py unchanged in diff, inferred only |
+
+## Findings
+
+None blocking. The intent folder carries exactly one current intent and no amendments.
+"""
+
+FAKE_REVIEW = {
+    "summary": "The change implements budgets, recurring rules, CSV import, and a report as described; tests cover each command and pass.",
+    "findings": [
+        {"title": "Import parses amounts before validating all rows", "body": "A malformed amount on row N leaves earlier rows unsaved but the error message does not say which row.", "file": "ledger/importer.py", "line_start": 50, "line_end": 62, "severity": 1, "confidence": 0.85, "category": "functionality"}
+    ],
+    "overall_correctness": "correct",
+    "overall_confidence": 0.9,
+    "reviewability": {"description_adequacy": 4, "coherence": 4, "verifiability": 5, "size_appropriateness": 3, "clarity": 4},
+    "effort_to_review": 3,
+    "cannot_verify": ["Behaviour when budgets.csv is edited by hand with an invalid row"],
+}
 
 FAKE_INTENT = """# Change intent: ledger budgets, recurring, import, report
 

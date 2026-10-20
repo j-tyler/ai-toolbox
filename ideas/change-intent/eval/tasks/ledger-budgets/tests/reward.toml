@@ -1,8 +1,8 @@
-# Overall reward: correctness dominates. `process` reports on the artifacts a process promises and is
-# kept light so a baseline without an intent is not penalised for honesty. Judge-based quality
-# dimensions (intent quality, reviewability) are the next thing to add here, as a sibling directory
-# with a judge TOML; see README.
+# Overall reward. Correctness (hidden tests) dominates. `review` is the fixed reviewer's verdict and
+# reviewability ratings, identical reviewer for every condition. `process` reports on the artifacts
+# a process promises (intent, its own review) and is kept light so a baseline without them is not
+# penalised for honesty. Every criterion's value is in reward-details.json.
 [[reward]]
 name = "reward"
 aggregation = "weighted-mean"
-weights = { correctness = 4.0, process = 1.0 }
+weights = { correctness = 4.0, review = 2.0, process = 1.0 }

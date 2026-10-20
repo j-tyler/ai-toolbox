@@ -6,10 +6,10 @@ process the agent follows: no intent at all, change intent as drafted in
 [`../mechanics`](../mechanics/README.md), or any variant you add. The output is graded by
 third-party, inspectable tooling so the comparison is defensible to people who did not build it.
 
-Status: **prototype**. The pipeline runs end to end offline (fake backend) and the grader
-discriminates correctly. Real Copilot runs and Harbor container runs are wired up but were not
-executed in the authoring environment, which has no Copilot-entitled token and no Docker daemon.
-The review stage is deliberately not included yet; it slots in as a third stage in the driver.
+Status: **prototype**. The pipeline runs end to end offline (fake backend) through all four
+stages, and the grader discriminates correctly. Real Copilot runs and Harbor container runs are
+wired up but were not executed in the authoring environment, which has no Copilot-entitled token
+and no Docker daemon.
 
 ## Pieces
 
@@ -20,7 +20,8 @@ The review stage is deliberately not included yet; it slots in as a third stage 
 | Agent runtime | [GitHub Copilot SDK](https://github.com/github/copilot-sdk), MIT, Python | yes |
 | The exercise: seed project, brief, hidden tests, reference solution | `tasks/ledger-budgets/` | ours |
 | Process versions, generated from `../mechanics` | `processes/` | ours |
-| Driver: author → implement with a stand-in author | `driver/` | ours |
+| Driver: author → implement → review → fixed review, with a stand-in author | `driver/` | ours |
+| Fixed reviewer instructions, assembled from published sources | `reviewer/` | ours, cited |
 | Harbor agent classes, one per condition | `agents/copilot_process.py` | ours |
 
 Everything "ours" is small and meant to be read. The claim to neutrality rests on the hidden
@@ -57,24 +58,45 @@ still pass.
 4. **Implement stage**: a fresh session with the implementation guidance appended to its system
    prompt and a prompt that points at the committed intent file by path, with the brief attached
    as context. The baseline gets the brief alone. The result is committed.
-5. The driver writes `.eval/` (summary, dialogue log, full SDK events per stage, readable
-   transcripts, `diff.patch`), and Harbor runs `tests/test.sh`, which is Reward Kit.
+5. The driver writes `diff.patch` and `change_description.md`, which holds whatever the process
+   produced to describe the change: the approved intent plus the implementer's summary for
+   change-intent processes, the summary alone for the baseline.
+6. **Review stage** (process versions that list it): the change-intent review guidance is
+   appended to a read-only session that assesses the diff against the intent and writes
+   `.eval/process_review.md` with a met / not met / cannot verify table per claim.
+7. **Fixed review** (every condition): a second read-only session runs
+   [`reviewer/fixed_reviewer.md`](reviewer/fixed_reviewer.md), the same instructions for every
+   process version, given the repository and `change_description.md`. It returns JSON against
+   `REVIEW_SCHEMA` (findings with location, severity, and confidence; an overall verdict; five
+   reviewability ratings; effort to review; what it could not verify). The reviewer model is
+   pinned separately (`--reviewer-model`, `EVAL_REVIEWER_MODEL` under Harbor) so it can come from
+   another vendor than the implementer. The working tree is reset after each review stage, and any
+   path a reviewer touched is recorded in the summary.
+8. The driver writes `.eval/` (summary, dialogue log, SDK events and transcripts per stage,
+   `review.json`, `process_review.md`), and Harbor runs `tests/test.sh`, which is Reward Kit.
 
-### Grading dimensions (today)
+### Grading dimensions
 
 ```
-reward            weighted mean: correctness 4, process 1
+reward            weighted mean: correctness 4, review 2, process 1
   correctness     acceptance (hidden tests pass fraction, all-pass) 3 : regression (seed tests, agent's suite, stdlib-only) 1
-  process         artifacts (committed, summary without errors, tests added) 2 : intent (file present, required sections) 1
+  review          fixed_reviewer (present, verdict correct, no blocking findings) 1
+                  : reviewability (mean of five ratings 3, description adequacy 1, low effort 1, few unverifiable claims 1) 1
+  process         artifacts (committed, summary clean, tests added) 2 : intent (present, sections) 1
+                  : review (process review present, claims assessed, determinacy) 1
 ```
 
-Offline check, fake backend, same grader: change-intent-v1 0.958, baseline 0.891, untouched seed
-0.303. The baseline loses only on the intent-artifact checks, which is by design and why
-`process` is weighted low. `reward-details.json` lists every criterion's value.
+`review` is the fixed reviewer's structured verdict turned into numbers; the criteria do not
+re-judge the code. `process` reports on the artifacts a process promises, including its own
+review pass, and is weighted low so a baseline without them is not penalised for honesty.
+`reward-details.json` lists every criterion's value.
 
-Judge-based dimensions (intent quality, implementation adherence, reviewability with a fixed
-reviewer) are the next addition: a sibling directory under `tests/` with a Reward Kit judge TOML.
-Keep the judge model pinned and from a different vendor than the implementer.
+Offline check, fake backend, same grader: change-intent-v1 0.934, baseline 0.864, where the fake
+reviewer returns the same verdict for both. In real runs the two reviews are where the
+conditions are expected to separate: the fixed reviewer rates description adequacy and
+verifiability from the artifacts each process leaves behind, and the process review's
+determinacy (how many claims it can decide rather than mark `cannot verify`) is a direct measure
+of how reviewable the implementation made its own intent.
 
 ## Running
 
@@ -144,15 +166,29 @@ the copy, add a two-line subclass in `agents/copilot_process.py`, and run it wit
   sees the hidden tests or the criteria.
 - **Verifier interpreter.** Reward Kit runs under `uvx` with its own virtualenv; the criteria run
   pytest with the workspace image's `python3`, which has pytest installed.
+- **Two reviews, two owners.** The process review belongs to the process version and varies with
+  it; the fixed reviewer belongs to the harness and never varies. Only the fixed reviewer's output
+  feeds the `review` dimension. Its instructions quote published sources (Google's review guide,
+  the published Anthropic reviewer threshold, OpenAI's review schema shape, the TU Delft
+  reviewability factors) so nobody in the experiment wrote the reviewer for their own process.
+- **Reviewers are read-only by construction and by cleanup.** Edit tools are excluded from review
+  sessions, and the driver resets the tree afterwards and records anything that changed.
+- **Structured output.** The fixed reviewer returns JSON through the SDK's `response_schema`; the
+  driver also tolerates a fenced block or surrounding prose and keeps the raw message.
 
 ## What was and was not verified here
 
 Verified in the authoring environment: hidden tests versus seed and reference; the driver end to
-end in fake mode for both processes; Reward Kit grading of the resulting workspaces; the Harbor
-agent classes import against Harbor 0.24 and `task.toml` validates against its schema; the
-Copilot SDK runtime downloads, starts, and creates a session.
+end in fake mode for both processes through author, implement, process review, and fixed review;
+Reward Kit grading of the resulting workspaces across all three dimensions; the Harbor agent
+classes import against Harbor 0.24 and `task.toml` validates against its schema; the Copilot SDK
+runtime downloads, starts, and creates a session; the SDK's `create_session` accepts
+`excluded_tools`, per-session `model`, and `send_and_wait` accepts `response_schema`.
 
 Not verified: a real model turn through the SDK (the environment's GitHub token has no Copilot
 entitlement, the failure is `Session was not created with authentication info or custom
 provider`), the Docker image build, and an actual `harbor run`. Those are the first three things
-to do on a machine with Docker and a Copilot token.
+to do on a machine with Docker and a Copilot token. Two things to watch on the first real run:
+whether the tool names in `excluded_tools` match the CLI's current names (the reset-and-record
+fallback covers a mismatch), and whether the model honours the response schema on a long review
+turn (the raw message is kept and the parser is lenient).

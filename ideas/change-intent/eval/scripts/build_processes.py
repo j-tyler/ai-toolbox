@@ -8,6 +8,7 @@ A *process version* is a directory the driver can install into a workspace:
       AGENTS.block.md              appended to the workspace AGENTS.md (optional)
       skills/<skill>/SKILL.md      skills made available to the authoring session
       implementation-guidance.md   appended to the implementing session's system prompt
+      review-guidance.md           appended to the process-review session's system prompt (review stage)
 
 The change-intent versions are generated from ../mechanics so there is one
 source of truth. Re-run this script after editing the mechanics files. To
@@ -62,16 +63,20 @@ def build_change_intent_v1() -> None:
     impl = after_first_rule(MECHANICS / "implementation-guidance.md")
     (out / "implementation-guidance.md").write_text(GENERATED.format(src="implementation-guidance.md") + impl, encoding="utf-8")
 
+    review = after_first_rule(MECHANICS / "review-guidance.md")
+    (out / "review-guidance.md").write_text(GENERATED.format(src="review-guidance.md") + review, encoding="utf-8")
+
     (out / "process.json").write_text(
         json.dumps(
             {
                 "name": "change-intent-v1",
-                "description": "Change intent as drafted in mechanics/: authoring skill with a stand-in author, then implementation against the approved intent.",
-                "stages": ["author", "implement"],
+                "description": "Change intent as drafted in mechanics/: authoring skill with a stand-in author, implementation against the approved intent, then the intent-aware review pass.",
+                "stages": ["author", "implement", "review"],
                 "agents_block": "AGENTS.block.md",
                 "skills_dir": "skills",
                 "authoring_skill": "change-intent-author",
                 "implementation_guidance": "implementation-guidance.md",
+                "review_guidance": "review-guidance.md",
                 "intent_dir": "change-intent",
             },
             indent=2,

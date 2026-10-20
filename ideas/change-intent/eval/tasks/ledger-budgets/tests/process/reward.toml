@@ -1,3 +1,3 @@
 [[reward]]
 aggregation = "weighted-mean"
-weights = { artifacts = 2.0, intent = 1.0 }
+weights = { artifacts = 2.0, intent = 1.0, review = 1.0 }

@@ -5,7 +5,8 @@ in the task container, uploads the eval driver and the process directory, and ru
 ``driver/run_process.py``. Everything the driver leaves in ``/app/.eval`` is available to the
 verifier; the SDK events are also copied into Harbor's agent logs directory.
 
-Run (from the eval/ directory, with Docker and a Copilot-entitled token in COPILOT_GITHUB_TOKEN):
+Run (from the eval/ directory, with Docker and a Copilot-entitled token in COPILOT_GITHUB_TOKEN;
+set EVAL_REVIEWER_MODEL to pin the fixed reviewer to a model from another vendor):
 
     harbor run -p tasks/ledger-budgets \
         -a agents.copilot_process:ChangeIntentV1 -m gpt-5.4 -k 3
@@ -72,12 +73,14 @@ class CopilotProcessAgent(CopilotCli):
         connection = getattr(self, "model_connection", None)  # newer Harbor: BYOK env resolved from -m
         if connection is not None and getattr(connection, "env", None):
             env.update(connection.env)
-        for key in ("COPILOT_PROVIDER_TYPE", "COPILOT_PROVIDER_BASE_URL", "COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_WIRE_API"):
+        for key in ("COPILOT_PROVIDER_TYPE", "COPILOT_PROVIDER_BASE_URL", "COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_WIRE_API",
+                    "EVAL_REVIEWER_MODEL"):
             if key in os.environ and key not in env:
                 env[key] = os.environ[key]
 
         await self._upload_tree(environment, EVAL_ROOT / "driver", f"{REMOTE_EVAL}/driver")
         await self._upload_tree(environment, EVAL_ROOT / "processes" / self.PROCESS, f"{REMOTE_EVAL}/processes/{self.PROCESS}")
+        await self._upload_tree(environment, EVAL_ROOT / "reviewer", f"{REMOTE_EVAL}/reviewer")
         await self._upload_config_text(environment, content=instruction, remote_path=REMOTE_BRIEF, filename="brief.md")
 
         model_flag = ""
