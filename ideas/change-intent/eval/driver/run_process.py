@@ -2,29 +2,32 @@
 """Run one process version against one workspace and leave gradable artifacts behind.
 
     python run_process.py --workspace /app --process ../processes/change-intent-v1 \
-        --brief /path/to/instruction.md --out /app/.eval [--model gpt-5.4] [--reviewer-model ...] \
-        [--backend copilot|fake] [--intent-file path]
+        --brief /path/to/instruction.md --out /app/.eval --model gpt-5.4 --reviewer-model claude-sonnet-4.5 \
+        [--backend copilot|fake] [--intent-file path] [--label key=value ...]
 
 Stages, in order (which run is decided by the process's process.json; see processes/README.md):
   author        mode "skill": the authoring skill runs in a Copilot SDK session and a stand-in author
                 answers every question; the stage ends when a commit made during the stage touches the
                 intent dir; mode "frozen": a supplied file is committed as-is (no dialogue), which
                 isolates the artifact from authoring variance; mode "none": no artifact.
-                Harness commits are condition-neutral: "eval: setup", "eval: description document",
-                "eval: implementation".
   implement     always. One neutral prompt for every condition: implement what {source} describes,
-                where source is the intent file when one exists, else the brief. The brief is attached
-                only when the process says include_brief. Process-specific guidance arrives only through
-                the process's system_append and its agents-file block.
+                where source is the artifact when one exists, else the brief. The brief is attached only
+                when the process says include_brief. Process-specific guidance arrives only through the
+                process's system_append and its agents-file block. Continuation is decided by one
+                objective rule for every condition: nudge while the visible test suite is red or nothing
+                under the code tree changed, up to a fixed number of times.
   review        the process's own review pass, when the process defines one; returns its review as text.
   fixed_review  always, harness-owned: the same reviewer for every condition, read-only, custom
-                instructions off, shown only diff.patch and change_description.md from a sealed
-                directory outside the workspace; returns JSON matching REVIEW_SCHEMA.
+                instructions off, built-in sub-agents off, shown exactly three files in a sealed
+                directory outside the workspace: requirements.md (the brief), diff.patch (code only),
+                change_description.md (the artifact, if any, plus the implementer's summary). Correctness
+                is judged against requirements.md; the description is rated for adequacy. An invalid or
+                missing review is retried in a fresh session, then recorded as missing, never as a score.
 
-During the run all artifacts live OUTSIDE the workspace (a temp dir, or --work-dir), so no stage can
-read another stage's output unless the harness hands it over. At the end everything is copied to --out
-for the verifier. summary.json is always written, even on failure; the exit code is 0 unless
---fail-on-error is given, and per-stage status lives in summary.json.
+Harness commits are condition-neutral: "eval: setup", "eval: description document",
+"eval: implementation". During the run all artifacts live OUTSIDE the workspace (a temp dir, or
+--work-dir); at the end everything is copied to --out for the verifier. summary.json is written at
+start (status running) and at the end; the exit code is 0 unless --fail-on-error is given.
 """
 
 from __future__ import annotations
@@ -45,11 +48,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from backends import Backend, CopilotBackend, FakeBackend, StageResult, StageSpec  # noqa: E402
+from backends import READ_ONLY_TOOLS, Backend, CopilotBackend, FakeBackend, StageResult, StageSpec  # noqa: E402
 from stand_in import ModelStandIn, ScriptedStandIn  # noqa: E402
 
 EVAL_ROOT = Path(__file__).resolve().parents[1]
 FIXED_REVIEWER_PROMPT_PATH = EVAL_ROOT / "reviewer" / "fixed_reviewer.md"
+CODE_DIRS = ("ledger",)  # where "the implementation" lives for the continuation rule
 
 # ---- harness-neutral prompt templates. Process-specific wording belongs in the process directory. ----
 
@@ -68,7 +72,7 @@ before you finish, and finish by summarising what you changed and how you verifi
 
 BRIEF_SECTION = "\n# Brief\n\n{brief}\n"
 
-IMPLEMENT_NUDGE = "Please continue until the implementation is complete and all tests pass, then summarise. Do not wait for me."
+IMPLEMENT_NUDGE = "Please continue until the implementation is complete and the test suite passes, then summarise. Do not wait for me."
 
 DEFAULT_PROCESS_REVIEW_PROMPT = """Review the change in this repository following the review guidance in your \
 instructions. The change is `git diff {baseline}..HEAD`; the current {noun}, if any, is `{intent_path}`. You may \
@@ -80,13 +84,14 @@ ordinary-review findings (correctness, security, error handling, clarity), each 
 verdict on the {noun} itself. Report; do not repair.
 """
 
-JSON_ONLY_RETRY = "Return only the JSON object matching the schema, nothing else."
-
-FIXED_REVIEW_PROMPT = """Review the change described by the two files in `{review_input}`: `diff.patch` is the \
-complete change, and `change_description.md` is what the author's process produced to describe it. The repository \
-in your working directory is checked out at the state after the change; read what you need there and run \
+FIXED_REVIEW_PROMPT = """Review the change described by the three files in `{review_input}`: `requirements.md` is \
+what was asked for and is the standard for correctness; `diff.patch` is the complete code change; \
+`change_description.md` is what the author's process produced to describe the change. The repository in your \
+working directory is checked out at the state after the change; read what you need there and run \
 `python -m pytest -q`. Return your review as JSON matching the schema. Do not modify any file.
 """
+
+JSON_ONLY_RETRY = "Return only the JSON object matching the schema, nothing else."
 
 REVIEW_SCHEMA: dict = {
     "type": "object",
@@ -125,12 +130,13 @@ REVIEW_SCHEMA: dict = {
         "cannot_verify": {"type": "array", "items": {"type": "string"}},
     },
 }
+FINDING_CATEGORIES = set(REVIEW_SCHEMA["properties"]["findings"]["items"]["properties"]["category"]["enum"])
 
 
 # ---- helpers -----------------------------------------------------------------------------------
 
-def sh(cmd: list[str], cwd: Path, check: bool = True) -> str:
-    proc = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True)
+def sh(cmd: list[str], cwd: Path, check: bool = True, timeout: float | None = None) -> str:
+    proc = subprocess.run(cmd, cwd=cwd, text=True, capture_output=True, timeout=timeout)
     if check and proc.returncode != 0:
         raise RuntimeError(f"{' '.join(cmd)} failed: {proc.stderr.strip()}")
     return proc.stdout
@@ -161,7 +167,7 @@ def git_dirty_paths(ws: Path) -> list[str]:
             continue
         code, path = entry[:2], entry[3:]
         paths.append(path)
-        if code[0] in "RC":  # rename/copy: the next field is the original name; skip it
+        if code[0] in "RC":
             i += 1
         i += 1
     return paths
@@ -173,6 +179,10 @@ def git_committed_paths(ws: Path, since: str) -> list[str]:
 
 def git_tracked_at(ws: Path, commit: str, path: str) -> bool:
     return subprocess.run(["git", "cat-file", "-e", f"{commit}:{path}"], cwd=ws, capture_output=True).returncode == 0
+
+
+def git_stash_count(ws: Path) -> int:
+    return len([l for l in sh(["git", "stash", "list"], ws, check=False).splitlines() if l.strip()])
 
 
 def git_reset_to(ws: Path, commit: str) -> tuple[list[str], bool]:
@@ -211,21 +221,48 @@ def read_rel(process_dir: Path, name: str | None) -> str | None:
     return (process_dir / name).read_text(encoding="utf-8") if name else None
 
 
+def slugify(text: str, n: int = 32) -> str:
+    text = re.sub(r"^\s*(brief|task|change)\s*[:\-]\s*", "", text, flags=re.I)
+    s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return s[:n].rstrip("-") or "change"
+
+
 def load_process(process_dir: Path) -> dict:
     process = json.loads((process_dir / "process.json").read_text(encoding="utf-8"))
     if "author" not in process:
         raise SystemExit(f"{process_dir}/process.json uses the old schema; run scripts/build_processes.py")
     process.setdefault("intent", {"dir": "change-intent", "claim_sections": ["Acceptance criteria", "Invariants"]})
     process["intent"].setdefault("noun", "description document")
+    process["intent"].setdefault("required_sections", [])
     process.setdefault("implement", {})
     process["implement"].setdefault("custom_instructions", True)
     process["implement"].setdefault("include_brief", True)
     return process
 
 
-def find_intent(ws: Path, intent_dir: str) -> Path | None:
-    files = sorted(p for p in (ws / intent_dir).glob("*.md") if p.is_file()) if (ws / intent_dir).exists() else []
-    return files[-1] if files else None
+def intent_files_in(ws: Path, intent_dir: str) -> list[Path]:
+    return sorted(p for p in (ws / intent_dir).glob("*.md") if p.is_file()) if (ws / intent_dir).exists() else []
+
+
+def resolve_intent(ws: Path, intent_dir: str, since: str | None) -> tuple[Path | None, list[str]]:
+    """The artifact file. Prefer files added or modified by commits since ``since`` (newest commit wins);
+    fall back to whatever exists on disk. Returns (path, all candidate relative paths)."""
+    candidates = [str(p.relative_to(ws)) for p in intent_files_in(ws, intent_dir)]
+    if since:
+        committed = [
+            p for p in sh(["git", "diff", "--name-only", f"{since}..HEAD", "--", intent_dir], ws, check=False).splitlines()
+            if p.strip() and p.endswith(".md") and (ws / p).exists()
+        ]
+        if committed:
+            # newest: the one touched by the most recent commit
+            def last_touch(p: str) -> int:
+                out = sh(["git", "log", "-1", "--format=%ct", "--", p], ws, check=False).strip()
+                return int(out) if out else 0
+            best = max(committed, key=last_touch)
+            return ws / best, candidates
+    if candidates:
+        return ws / candidates[-1], candidates
+    return None, candidates
 
 
 def write_transcript(path: Path, result: StageResult) -> None:
@@ -253,6 +290,23 @@ def write_transcript(path: Path, result: StageResult) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def out_of_bounds_reads(events: list[dict], allowed: list[str]) -> list[str]:
+    """Tool calls whose arguments mention an absolute path outside the allowed roots."""
+    hits: list[str] = []
+    for ev in events:
+        if not str(ev.get("type", "")).endswith("tool.execution_start"):
+            continue
+        data = ev.get("data") if isinstance(ev.get("data"), dict) else {}
+        text = json.dumps(data.get("arguments", data.get("args")), default=str)
+        for m in re.finditer(r"(?<![\w.])(/[\w./@-]+)", text):
+            path = m.group(1)
+            if path.startswith(("/usr", "/bin", "/dev", "/proc", "/etc", "/lib", "/opt", "/root/.cache", "/home")):
+                continue
+            if not any(path.startswith(a) for a in allowed):
+                hits.append(f"{data.get('tool_name') or data.get('toolName')}: {path}")
+    return sorted(set(hits))[:50]
+
+
 def parse_review_json(text: str) -> dict | None:
     """The reviewer returns JSON; tolerate a fenced block or surrounding prose."""
     text = text.strip()
@@ -274,33 +328,77 @@ def parse_review_json(text: str) -> dict | None:
 
 
 def validate_review(review: dict) -> list[str]:
-    """Minimal structural check against REVIEW_SCHEMA; returns a list of problems (empty = valid)."""
+    """Structural check against REVIEW_SCHEMA, including each finding; returns problems (empty = valid)."""
     problems = []
     for key in REVIEW_SCHEMA["required"]:
         if key not in review:
             problems.append(f"missing {key}")
-    if not isinstance(review.get("findings"), list) or not all(isinstance(f, dict) for f in review.get("findings", [])):
-        problems.append("findings must be a list of objects")
+    findings = review.get("findings")
+    if not isinstance(findings, list):
+        problems.append("findings must be a list")
+    else:
+        for i, f in enumerate(findings):
+            if not isinstance(f, dict):
+                problems.append(f"finding {i} is not an object"); continue
+            for k in ("title", "body", "file"):
+                if not isinstance(f.get(k), str):
+                    problems.append(f"finding {i}.{k} must be a string")
+            for k in ("line_start", "line_end"):
+                if not isinstance(f.get(k), int) or isinstance(f.get(k), bool) or f.get(k, 0) < 1:
+                    problems.append(f"finding {i}.{k} must be an integer >= 1")
+            if not isinstance(f.get("severity"), int) or isinstance(f.get("severity"), bool) or not 1 <= f.get("severity", 0) <= 3:
+                problems.append(f"finding {i}.severity must be 1..3")
+            if not isinstance(f.get("confidence"), (int, float)) or isinstance(f.get("confidence"), bool) or not 0 <= f.get("confidence", -1) <= 1:
+                problems.append(f"finding {i}.confidence must be 0..1")
+            if f.get("category") not in FINDING_CATEGORIES:
+                problems.append(f"finding {i}.category not in enum")
     if review.get("overall_correctness") not in ("correct", "incorrect", "uncertain"):
         problems.append("overall_correctness not in enum")
+    oc = review.get("overall_confidence")
+    if not isinstance(oc, (int, float)) or isinstance(oc, bool) or not 0 <= oc <= 1:
+        problems.append("overall_confidence must be 0..1")
     rv = review.get("reviewability")
-    if not isinstance(rv, dict) or not all(isinstance(rv.get(k), int) and 1 <= rv[k] <= 5 for k in REVIEW_SCHEMA["properties"]["reviewability"]["required"]):
+    if not isinstance(rv, dict) or not all(isinstance(rv.get(k), int) and not isinstance(rv.get(k), bool) and 1 <= rv[k] <= 5 for k in REVIEW_SCHEMA["properties"]["reviewability"]["required"]):
         problems.append("reviewability ratings must be integers 1..5")
-    if not isinstance(review.get("effort_to_review"), int) or not 1 <= review.get("effort_to_review", 0) <= 5:
+    e = review.get("effort_to_review")
+    if not isinstance(e, int) or isinstance(e, bool) or not 1 <= e <= 5:
         problems.append("effort_to_review must be 1..5")
-    if not isinstance(review.get("claims_checked"), int):
+    if not isinstance(review.get("claims_checked"), int) or isinstance(review.get("claims_checked"), bool):
         problems.append("claims_checked must be an integer")
-    if not isinstance(review.get("cannot_verify"), list):
-        problems.append("cannot_verify must be a list")
+    cv = review.get("cannot_verify")
+    if not isinstance(cv, list) or not all(isinstance(x, str) for x in cv):
+        problems.append("cannot_verify must be a list of strings")
     return problems
 
 
 def stage_summary(res: StageResult, **extra) -> dict:
     return {
         "status": "error" if res.error else "ok",
-        "turns": res.turns, "seconds": res.seconds, "usage": res.usage, "error": res.error,
-        "timed_out": res.timed_out, "resolved_model": res.resolved_model, **extra,
+        "turns": res.turns, "seconds": res.seconds, "usage": res.usage, "usage_by_model": res.usage_by_model,
+        "error": res.error, "timed_out": res.timed_out, "resolved_model": res.resolved_model,
+        "models_seen": res.models_seen, **extra,
     }
+
+
+def model_mismatch(res: StageResult, expected: str | None) -> list[str]:
+    if not expected:
+        return []
+    return [m for m in res.models_seen if m and m != expected and m.rsplit("/", 1)[-1] != expected.rsplit("/", 1)[-1]]
+
+
+def visible_suite_green(ws: Path) -> bool | None:
+    """Run the workspace's own test suite; None if it could not run."""
+    try:
+        proc = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--no-header", "tests"],
+                              cwd=ws, text=True, capture_output=True, timeout=300)
+    except Exception:
+        return None
+    return proc.returncode == 0
+
+
+def write_summary(out: Path, summary: dict) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
 
 # ---- main --------------------------------------------------------------------------------------
@@ -316,8 +414,8 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
     summary["work_dir"] = str(work)
     intent_cfg = process["intent"]
     intent_dir = intent_cfg["dir"]
+    noun = intent_cfg.get("noun", "description document")
 
-    # Git identity for every session the driver spawns (author commits, implementer commits).
     for k, v in {"GIT_AUTHOR_NAME": "eval", "GIT_AUTHOR_EMAIL": "eval@example.invalid",
                  "GIT_COMMITTER_NAME": "eval", "GIT_COMMITTER_EMAIL": "eval@example.invalid"}.items():
         os.environ.setdefault(k, v)
@@ -332,6 +430,8 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
     if args.backend == "fake":
         backend: Backend = FakeBackend(Path(args.fake_reference) if args.fake_reference else None, intent_dir)
     else:
+        if not args.model:
+            raise SystemExit("--model is required for the copilot backend so every stage runs on a known model")
         provider = json.loads(args.provider_json) if args.provider_json else None
         backend = CopilotBackend(args.model, provider)
         reviewer = args.reviewer_model or args.model
@@ -343,9 +443,9 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
         summary["reviewer_same_model"] = reviewer == args.model
 
     dialogue_log = work / "author_dialogue.json"
-    noun = intent_cfg.get("noun", "description document")
-    stand_in = (ModelStandIn(brief, lambda s, u: backend.ask_once(s, u, args.stand_in_model), intent_dir, dialogue_log, noun)
-                if args.stand_in == "model" else ScriptedStandIn(brief, intent_dir, dialogue_log, noun))
+    required_sections = list(intent_cfg.get("required_sections") or [])
+    stand_in = (ModelStandIn(brief, lambda s, u: backend.ask_once(s, u, args.stand_in_model), intent_dir, dialogue_log, noun, required_sections)
+                if args.stand_in == "model" else ScriptedStandIn(brief, intent_dir, dialogue_log, noun, required_sections))
 
     async def on_user_input(question: str, choices: list[str] | None) -> tuple[str, bool]:
         if isinstance(stand_in, ModelStandIn):
@@ -357,9 +457,9 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
 
     rendered_prompts: dict[str, str] = {}
 
-    def save_stage(res: StageResult) -> None:
-        (work / f"events-{res.stage}.json").write_text(json.dumps(res.events, indent=1, default=str), encoding="utf-8")
-        write_transcript(work / f"transcript-{res.stage}.md", res)
+    def save_stage(res: StageResult, suffix: str = "") -> None:
+        (work / f"events-{res.stage}{suffix}.json").write_text(json.dumps(res.events, indent=1, default=str), encoding="utf-8")
+        write_transcript(work / f"transcript-{res.stage}{suffix}.md", res)
 
     def deadline_for(cap: float | None) -> float | None:
         stage_deadline = time.time() + cap if cap else None
@@ -367,7 +467,7 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
             stage_deadline = min(stage_deadline or args.deadline_epoch, args.deadline_epoch)
         return stage_deadline
 
-    # ---- manifest: tie every number to the exact inputs that produced it --------------------
+    # ---- manifest -------------------------------------------------------------------------------
     manifest: dict = {
         "process_name": process["name"],
         "process_dir": str(process_dir),
@@ -381,6 +481,8 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
         "reviewer_model": args.reviewer_model or args.model,
         "author_mode": author_mode,
         "versions": backend.versions(),
+        "read_only_tools": list(READ_ONLY_TOOLS),
+        "builtin_agents_excluded": list(backend.excluded_builtin_agents()),
     }
     manifest["harness_git_sha"] = os.environ.get("EVAL_HARNESS_SHA") or (sh(["git", "rev-parse", "HEAD"], EVAL_ROOT, check=False).strip() or None)
     dirty_env = os.environ.get("EVAL_HARNESS_DIRTY")
@@ -395,9 +497,6 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
         manifest["copilot_cli_version"] = getattr(_cli_version, "CLI_VERSION", None)
     except Exception:
         manifest["copilot_cli_version"] = None
-    from backends import READ_ONLY_TOOLS
-
-    manifest["read_only_tools"] = list(READ_ONLY_TOOLS)
     if args.intent_file:
         manifest["intent_source"] = {"path": str(Path(args.intent_file).resolve()), "sha256": sha256_file(Path(args.intent_file))}
     labels = dict(kv.split("=", 1) for kv in (args.label or []) if "=" in kv)
@@ -407,9 +506,11 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
             labels.setdefault(k.strip(), v.strip())
     summary["labels"] = labels
     summary["manifest"] = manifest
+    summary["status"] = "running"
+    write_summary(out, summary)  # provisional: a killed driver still leaves a labelled record
     shutil.copy2(process_dir / "process.json", work / "process.json")
 
-    # ---- workspace -----------------------------------------------------------------------------
+    # ---- workspace ------------------------------------------------------------------------------
     if not (ws / ".git").exists():
         sh(["git", "init", "-q"], ws)
     exclude = ws / ".git" / "info" / "exclude"
@@ -419,6 +520,7 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
         with exclude.open("a", encoding="utf-8") as fh:
             fh.write(f"\n{rel_out}/\n")
     git_commit_all(ws, "eval: seed")
+    seed_commit = git_head(ws)
     block = read_rel(process_dir, process.get("agents_block"))
     if block:
         agents_md = ws / "AGENTS.md"
@@ -427,17 +529,19 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
     if author_mode != "none":
         (ws / intent_dir).mkdir(exist_ok=True)
         (ws / intent_dir / ".gitkeep").touch()
-    git_commit_all(ws, "eval: setup")  # condition-neutral: the process name lives in summary.json only
+    git_commit_all(ws, "eval: setup")
     baseline = git_head(ws)
     summary["baseline_commit"] = baseline
     intent_path: Path | None = None
+    stage_model_flags: dict[str, list[str]] = {}
 
     try:
-        # ---- author ----------------------------------------------------------------------------
+        # ---- author -----------------------------------------------------------------------------
         if author_mode == "frozen":
             src = Path(args.intent_file) if args.intent_file else process_dir / process["author"]["frozen_intent"]
             (ws / intent_dir).mkdir(exist_ok=True)
-            dst = ws / intent_dir / src.name
+            first_line = next((l.strip("# ").strip() for l in brief.splitlines() if l.strip()), "change")
+            dst = ws / intent_dir / f"{time.strftime('%Y-%m-%d')}-{slugify(first_line)}.md"  # convention-shaped, never the source name
             shutil.copy2(src, dst)
             commit = git_commit_all(ws, "eval: description document")
             intent_path = dst
@@ -452,29 +556,29 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
             rendered_prompts["author"] = prompt
             head_before = git_head(ws)
 
-            def intent_state() -> tuple[bool, bool]:
-                """(exists, committed). Committed means a commit made during this stage touched the intent
-                dir; the setup commit's placeholder must not count, so the range starts at head_before."""
-                exists = find_intent(ws, intent_dir) is not None
+            def intent_state() -> tuple[bool, bool, str | None]:
+                files = intent_files_in(ws, intent_dir)
+                exists = bool(files)
                 committed = exists and git_head(ws) != head_before and any(
                     p.startswith(intent_dir + "/") for p in git_committed_paths(ws, head_before)
                 )
-                return exists, committed
+                text = files[-1].read_text(encoding="utf-8", errors="replace") if files else None
+                return exists, committed, text
 
             async def next_author_turn(message: str) -> str | None:
-                exists, committed = intent_state()
+                exists, committed, text = intent_state()
                 if isinstance(stand_in, ModelStandIn):
-                    return await stand_in.reply_to_message_async(message, exists, committed)
-                return stand_in.reply_to_message(message, exists, committed)
+                    return await stand_in.reply_to_message_async(message, exists, committed, text)
+                return stand_in.reply_to_message(message, exists, committed, text)
 
             res = await backend.run_stage(
                 StageSpec("author", prompt, skill_dirs=skill_dirs, custom_instructions=a.get("custom_instructions", True),
                           max_turns=args.max_author_turns, turn_timeout_sec=args.stage_timeout, deadline=deadline_for(args.cap_author)),
                 ws, on_user_input=on_user_input, next_turn=next_author_turn,
             )
-            intent_path = find_intent(ws, intent_dir)
-            # Anything the author stage touched outside the intent dir is contamination, whether it was
-            # left uncommitted or committed by the agent: restore it to the pre-stage state and flag it.
+            stage_model_flags["author"] = model_mismatch(res, args.model)
+            intent_path, candidates = resolve_intent(ws, intent_dir, head_before)
+
             def outside(p: str) -> bool:
                 return not p.startswith(intent_dir + "/") and p != intent_dir
             stray_uncommitted = [p for p in git_dirty_paths(ws) if outside(p)]
@@ -482,18 +586,27 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
             if stray_uncommitted or stray_committed:
                 revert_paths(ws, sorted(set(stray_uncommitted) | set(stray_committed)), head_before)
             commit = git_commit_all(ws, "eval: description document")
-            outcome = "approved" if intent_path and stand_in.approved else ("unapproved_file" if intent_path else "no_file")
+            if intent_path and len(candidates) > 1:
+                outcome = "multiple_files"
+            elif intent_path and stand_in.approved:
+                outcome = "approved"
+            elif intent_path:
+                outcome = "unapproved_file"
+            else:
+                outcome = "no_file"
             summary["stages"]["author"] = stage_summary(
                 res, mode="skill", intent_file=str(intent_path.relative_to(ws)) if intent_path else None,
+                intent_candidates=candidates,
                 intent_sha256=sha256_file(intent_path) if intent_path else None, commit=commit,
                 author_outcome=outcome,
                 author_contamination={"uncommitted": stray_uncommitted, "committed": stray_committed},
                 exchanges=len(stand_in.exchanges),
                 approval_cues=[e.cue for e in stand_in.exchanges if e.cue and e.cue.startswith(("approve", "ask_user:approve", "model:approve"))],
+                model_mismatch=stage_model_flags["author"],
             )
             save_stage(res)
 
-        # ---- implement -------------------------------------------------------------------------
+        # ---- implement --------------------------------------------------------------------------
         stand_in.stage = "implement"
         impl = process["implement"]
         system_append = read_rel(process_dir, impl.get("system_append"))
@@ -504,51 +617,76 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
         rendered_prompts["implement"] = prompt
         head_before_impl = git_head(ws)
         nudges = {"n": 0}
+        turn_log: list[dict] = []
 
         async def next_impl_turn(message: str) -> str | None:
-            worked = bool(git_dirty_paths(ws)) or git_head(ws) != head_before_impl
-            if worked and "?" not in message[-300:]:
-                return None
-            if nudges["n"] >= args.max_implement_nudges:
-                return None
-            nudges["n"] += 1
-            return IMPLEMENT_NUDGE
+            """One objective continuation rule for every condition: continue while the visible suite is
+            red or nothing in the code tree changed, up to --max-implement-nudges times."""
+            changed = [p for p in git_dirty_paths(ws) + git_committed_paths(ws, head_before_impl) if p.startswith(CODE_DIRS)]
+            green = visible_suite_green(ws)
+            done = bool(changed) and green is True
+            reason = "complete" if done else ("suite_red" if changed else "no_code_change")
+            if not done and nudges["n"] < args.max_implement_nudges:
+                nudges["n"] += 1
+                turn_log.append({"end_reason": reason, "action": "nudge"})
+                return IMPLEMENT_NUDGE
+            turn_log.append({"end_reason": reason, "action": "stop"})
+            return None
 
         res = await backend.run_stage(
             StageSpec("implement", prompt, system_append=system_append, custom_instructions=impl.get("custom_instructions", True),
                       max_turns=1 + args.max_implement_nudges, turn_timeout_sec=args.stage_timeout, deadline=deadline_for(args.cap_implement)),
             ws, on_user_input=on_user_input, next_turn=next_impl_turn,
         )
-        implement_message = res.final_message
+        stage_model_flags["implement"] = model_mismatch(res, args.model)
+        implement_messages = [m for m in res.messages if m.strip()] or ([res.final_message] if res.final_message.strip() else [])
         head_after_agent = git_head(ws)
+        stash_left = git_stash_count(ws)
+        if stash_left:
+            sh(["git", "stash", "drop", "-q"], ws, check=False)  # recorded; the implementation is what was committed/left in the tree
         impl_commit = git_commit_all(ws, "eval: implementation", allow_empty=True)
         summary["impl_commit"] = impl_commit
         summary["stages"]["implement"] = stage_summary(
             res, commit=impl_commit, used_intent=intent_path is not None, include_brief=include_brief,
-            agent_committed=head_after_agent != head_before_impl,
+            agent_committed=head_after_agent != head_before_impl, turns_detail=turn_log, stash_left=stash_left,
+            model_mismatch=stage_model_flags["implement"],
         )
         save_stage(res)
 
-        # ---- artifacts the reviewers may see --------------------------------------------------
-        diff = sh(["git", "diff", f"{baseline}..HEAD"], ws, check=False)
+        # ---- artifacts the reviewers may see ---------------------------------------------------
+        # The artifact may have been moved or deleted by the implementer: re-resolve and record it.
+        if intent_path is not None and not intent_path.exists():
+            new_path, _ = resolve_intent(ws, intent_dir, None)
+            summary["stages"]["implement"]["intent_removed_by_implementer"] = True
+            summary["stages"]["implement"]["intent_relocated_to"] = str(new_path.relative_to(ws)) if new_path else None
+            intent_path = new_path
+        code_only = ["--", ".", f":(exclude){intent_dir}"]
+        diff = sh(["git", "diff", f"{baseline}..HEAD", *code_only], ws, check=False)
         (work / "diff.patch").write_text(diff, encoding="utf-8")
+        (work / "diff-with-artifact.patch").write_text(sh(["git", "diff", f"{baseline}..HEAD"], ws, check=False), encoding="utf-8")
         summary["diff_shortstat"] = sh(["git", "diff", "--shortstat", f"{baseline}..HEAD"], ws, check=False).strip()
-        summary["diff_shortstat_code_only"] = sh(
-            ["git", "diff", "--shortstat", f"{baseline}..HEAD", "--", ".", f":(exclude){intent_dir}"], ws, check=False).strip()
+        summary["diff_shortstat_code_only"] = sh(["git", "diff", "--shortstat", f"{baseline}..HEAD", *code_only], ws, check=False).strip()
         sections = ["# Change description", ""]
-        if intent_path is not None:
-            sections += [f"## Description document (`{intent_path.relative_to(ws)}`)", "", intent_path.read_text(encoding="utf-8").strip(), ""]
-        sections += ["## Implementer summary", "", implement_message.strip() or "(none)", ""]
+        try:
+            if intent_path is not None:
+                sections += [f"## Description document (`{intent_path.relative_to(ws)}`)", "", intent_path.read_text(encoding="utf-8").strip(), ""]
+        except Exception as exc:  # never let the description abort the reviews
+            sections += ["## Description document", "", f"(unreadable: {exc})", ""]
+        sections += ["## Implementer summary", ""]
+        for i, m in enumerate(implement_messages, 1):
+            sections += [f"### Turn {i}", "", m.strip(), ""]
+        if not implement_messages:
+            sections += ["(none)", ""]
         (work / "change_description.md").write_text("\n".join(sections), encoding="utf-8")
 
-        # ---- process review (owned by the process version) -----------------------------------
+        # ---- process review (owned by the process version) -------------------------------------
         rv = process.get("review")
         if rv and not args.skip_reviews:
             stand_in.stage = "review"
             template = read_rel(process_dir, rv.get("prompt_file")) or DEFAULT_PROCESS_REVIEW_PROMPT
-            intent_ref = str(intent_path.relative_to(ws)) if intent_path else "(no intent file was produced)"
+            intent_ref = str(intent_path.relative_to(ws)) if intent_path else "(no file was produced)"
             prompt = template.format(baseline=baseline, intent_path=intent_ref, noun=noun,
-                                     claim_sections=", ".join(f"`## {c}`" for c in intent_cfg.get("claim_sections", [])))
+                                     claim_sections=", ".join(f"`## {c}`" for c in intent_cfg.get("claim_sections", [])) or "the claims")
             rendered_prompts["review"] = prompt
             res = await backend.run_stage(
                 StageSpec("review", prompt, system_append=read_rel(process_dir, rv.get("system_append")),
@@ -560,56 +698,111 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
                 (work / "process_review.md").write_text(res.final_message, encoding="utf-8")
             dirty, moved = git_reset_to(ws, impl_commit)
             summary["stages"]["review"] = stage_summary(res, output="process_review.md" if res.final_message.strip() else None,
-                                                        reset_paths=dirty, head_moved=moved)
+                                                        reset_paths=dirty, head_moved=moved, model_mismatch=model_mismatch(res, args.model))
             save_stage(res)
 
-        # ---- fixed review (owned by the harness; identical for every condition) ---------------
+        # ---- fixed review (owned by the harness; identical for every condition) -----------------
         if not args.skip_reviews:
             stand_in.stage = "fixed_review"
-            # Sealed input: a fresh temp dir that is NOT inside the work dir, so the reviewer cannot browse
-            # transcripts, the process review, or the dialogue log from the path it is given.
             review_input = Path(tempfile.mkdtemp(prefix="review-input-"))
+            (review_input / "requirements.md").write_text(brief, encoding="utf-8")
             shutil.copy2(work / "diff.patch", review_input / "diff.patch")
             shutil.copy2(work / "change_description.md", review_input / "change_description.md")
             prompt = FIXED_REVIEW_PROMPT.format(review_input=review_input)
-            rendered_prompts["fixed_review"] = FIXED_REVIEW_PROMPT.format(review_input="<review_input>")  # stable hash
+            rendered_prompts["fixed_review"] = FIXED_REVIEW_PROMPT.format(review_input="<review_input>")
             summary["review_input_dir"] = str(review_input)
 
-            retried = {"n": 0}
+            # Blind the reviewer to process-owned context in the checkout: AGENTS.md back to its seed
+            # content (uncommitted; reset afterwards) and the process directory out of reach.
+            agents_md = ws / "AGENTS.md"
+            agents_hidden = False
+            if block:
+                if git_tracked_at(ws, seed_commit, "AGENTS.md"):
+                    sh(["git", "checkout", seed_commit, "--", "AGENTS.md"], ws, check=False)
+                elif agents_md.exists():
+                    agents_md.unlink()
+                agents_hidden = True
+            hidden_process_dir = process_dir.with_name(process_dir.name + ".hidden-during-review")
+            process_hidden = False
+            try:
+                process_dir.rename(hidden_process_dir)
+                process_hidden = True
+            except OSError:
+                pass
 
-            async def next_fixed_review_turn(message: str) -> str | None:
-                if parse_review_json(message) is None and retried["n"] == 0:
-                    retried["n"] += 1
-                    return JSON_ONLY_RETRY
-                return None
+            attempts: list[dict] = []
+            review: dict | None = None
+            problems: list[str] = ["not run"]
+            try:
+                for attempt in range(1, args.max_review_attempts + 1):
+                    retried = {"n": 0}
 
-            res = await backend.run_stage(
-                StageSpec("fixed_review", prompt, system_append=FIXED_REVIEWER_PROMPT_PATH.read_text(encoding="utf-8"),
-                          custom_instructions=False, read_only=True, response_schema=REVIEW_SCHEMA,
-                          model=args.reviewer_model, extra_dirs=[str(review_input)], max_turns=2,
-                          turn_timeout_sec=args.stage_timeout, deadline=deadline_for(args.cap_fixed_review)),
-                ws, on_user_input=on_user_input, next_turn=next_fixed_review_turn,
-            )
-            (work / "review_raw.md").write_text(res.final_message, encoding="utf-8")
-            shutil.copytree(review_input, work / "review-input", dirs_exist_ok=True)  # for the record
-            review = parse_review_json(res.final_message)
-            problems = validate_review(review) if review is not None else ["unparseable"]
-            if review is not None:
-                review["_meta"] = {"reviewer_model": res.resolved_model or args.reviewer_model or args.model,
-                                   "usage": res.usage, "seconds": res.seconds, "valid": not problems, "problems": problems}
-                (work / "review.json").write_text(json.dumps(review, indent=2), encoding="utf-8")
-            dirty, moved = git_reset_to(ws, impl_commit)
-            summary["stages"]["fixed_review"] = stage_summary(
-                res, parsed=review is not None, valid=not problems, problems=problems,
-                verdict=(review or {}).get("overall_correctness"), findings=len((review or {}).get("findings", []) or []),
-                reset_paths=dirty, head_moved=moved, json_retries=retried["n"] + res.retries,
-            )
-            save_stage(res)
+                    async def next_fixed_review_turn(message: str) -> str | None:
+                        if parse_review_json(message) is None and retried["n"] == 0:
+                            retried["n"] += 1
+                            return JSON_ONLY_RETRY
+                        return None
+
+                    res = await backend.run_stage(
+                        StageSpec("fixed_review", prompt, system_append=FIXED_REVIEWER_PROMPT_PATH.read_text(encoding="utf-8"),
+                                  custom_instructions=False, read_only=True, response_schema=REVIEW_SCHEMA,
+                                  model=args.reviewer_model, extra_dirs=[str(review_input)], max_turns=2,
+                                  turn_timeout_sec=args.stage_timeout, deadline=deadline_for(args.cap_fixed_review)),
+                        ws, on_user_input=on_user_input, next_turn=next_fixed_review_turn,
+                    )
+                    suffix = "" if attempt == 1 else f"-attempt{attempt}"
+                    (work / f"review_raw{suffix}.md").write_text(res.final_message, encoding="utf-8")
+                    save_stage(res, suffix)
+                    candidate = parse_review_json(res.final_message)
+                    problems = validate_review(candidate) if candidate is not None else ["unparseable"]
+                    oob = out_of_bounds_reads(res.events, [str(ws), str(review_input)])
+                    attempts.append({"attempt": attempt, "parsed": candidate is not None, "valid": not problems, "problems": problems,
+                                     "json_retries": retried["n"] + res.retries, "error": res.error, "timed_out": res.timed_out,
+                                     "seconds": res.seconds, "usage": res.usage, "out_of_bounds_reads": oob,
+                                     "model_mismatch": model_mismatch(res, args.reviewer_model or args.model)})
+                    dirty, moved = git_reset_to(ws, impl_commit)
+                    attempts[-1]["reset_paths"] = [p for p in dirty if not (agents_hidden and p == "AGENTS.md")]
+                    attempts[-1]["head_moved"] = moved
+                    if agents_hidden and not block:
+                        pass
+                    if agents_hidden:  # re-apply the blind for the next attempt (reset restored it)
+                        if git_tracked_at(ws, seed_commit, "AGENTS.md"):
+                            sh(["git", "checkout", seed_commit, "--", "AGENTS.md"], ws, check=False)
+                        elif agents_md.exists():
+                            agents_md.unlink()
+                    if candidate is not None and not problems:
+                        review = candidate
+                        review["_meta"] = {"reviewer_model": res.resolved_model or args.reviewer_model or args.model,
+                                           "usage": res.usage, "seconds": res.seconds, "valid": True, "attempt": attempt}
+                        break
+                    if res.error and not res.timed_out and attempt == 1 and "SystemExit" in (res.error or ""):
+                        break
+            finally:
+                git_reset_to(ws, impl_commit)
+                if process_hidden:
+                    hidden_process_dir.rename(process_dir)
+            if review is None:
+                review = {"_meta": {"valid": False, "missing": True, "attempts": len(attempts), "problems": problems}}
+            (work / "review.json").write_text(json.dumps(review, indent=2), encoding="utf-8")
+            shutil.copytree(review_input, work / "review-input", dirs_exist_ok=True)
+            last = attempts[-1] if attempts else {}
+            summary["stages"]["fixed_review"] = {
+                "status": "ok" if review.get("_meta", {}).get("valid") else "missing",
+                "missing": not review.get("_meta", {}).get("valid", False),
+                "attempts": attempts, "verdict": review.get("overall_correctness"),
+                "findings": len(review.get("findings", []) or []), "agents_md_hidden": agents_hidden,
+                "process_dir_hidden": process_hidden, "seconds": sum(a.get("seconds", 0) or 0 for a in attempts),
+                "usage": {k: sum((a.get("usage") or {}).get(k, 0) for a in attempts) for k in {k for a in attempts for k in (a.get("usage") or {})}},
+                "timed_out": any(a.get("timed_out") for a in attempts), "error": last.get("error"),
+                "out_of_bounds_reads": sorted({h for a in attempts for h in a.get("out_of_bounds_reads", [])}),
+                "model_mismatch": sorted({m for a in attempts for m in a.get("model_mismatch", [])}),
+            }
     finally:
         await backend.close()
         summary["rendered_prompts_sha256"] = {k: sha256_text(v) for k, v in rendered_prompts.items()}
         (work / "rendered_prompts.json").write_text(json.dumps(rendered_prompts, indent=1), encoding="utf-8")
         summary["author_exchanges"] = len(stand_in.exchanges)
+        summary["model_mismatch_any"] = sorted({m for v in stage_model_flags.values() for m in v} | set(summary["stages"].get("fixed_review", {}).get("model_mismatch", [])))
 
 
 def main() -> int:
@@ -619,7 +812,7 @@ def main() -> int:
     p.add_argument("--brief", required=True, help="markdown file with the author's brief")
     p.add_argument("--out", required=True, help="final artifact directory, copied at the end (the verifier reads it)")
     p.add_argument("--work-dir", help="where artifacts live during the run; default: a temp dir outside the workspace")
-    p.add_argument("--model", default=os.environ.get("EVAL_MODEL"))
+    p.add_argument("--model", default=os.environ.get("EVAL_MODEL"), help="required for the copilot backend")
     p.add_argument("--reviewer-model", default=os.environ.get("EVAL_REVIEWER_MODEL"), help="model for the fixed reviewer; pin one from another vendor")
     p.add_argument("--stand-in-model", default=os.environ.get("EVAL_STAND_IN_MODEL"), help="model for the model stand-in; defaults to --model")
     p.add_argument("--allow-same-reviewer", action="store_true", help="permit the fixed reviewer to share the implementer's model")
@@ -627,13 +820,14 @@ def main() -> int:
     p.add_argument("--backend", choices=["copilot", "fake"], default="copilot")
     p.add_argument("--fake-reference", help="fake backend: directory copied in as the implementation")
     p.add_argument("--stand-in", choices=["scripted", "model"], default="scripted")
-    p.add_argument("--intent-file", help="freeze this intent: commit it as the intent and skip the author dialogue")
+    p.add_argument("--intent-file", help="freeze this artifact: commit it as the intent and skip the author dialogue")
     p.add_argument("--skip-reviews", action="store_true", help="stop after implementation")
     p.add_argument("--label", action="append", help="key=value recorded in summary.json (repeatable); e.g. --label intent=A --label guidance=v1")
     p.add_argument("--max-author-turns", type=int, default=12)
     p.add_argument("--max-implement-nudges", type=int, default=2)
+    p.add_argument("--max-review-attempts", type=int, default=3, help="fresh fixed-review sessions before recording the review as missing")
     p.add_argument("--stage-timeout", type=float, default=3600.0, help="seconds to wait for one turn")
-    p.add_argument("--cap-author", type=float, default=float(os.environ.get("EVAL_CAP_AUTHOR", 1800)), help="wall-clock cap for the author stage, seconds")
+    p.add_argument("--cap-author", type=float, default=float(os.environ.get("EVAL_CAP_AUTHOR", 1800)))
     p.add_argument("--cap-implement", type=float, default=float(os.environ.get("EVAL_CAP_IMPLEMENT", 3600)), help="same cap for every condition")
     p.add_argument("--cap-review", type=float, default=float(os.environ.get("EVAL_CAP_REVIEW", 900)))
     p.add_argument("--cap-fixed-review", type=float, default=float(os.environ.get("EVAL_CAP_FIXED_REVIEW", 900)))
@@ -643,10 +837,11 @@ def main() -> int:
 
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    summary: dict = {"process": None, "stages": {}, "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "backend": args.backend}
+    summary: dict = {"process": None, "stages": {}, "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "backend": args.backend, "status": "running"}
     exit_code = 0
     try:
         summary["process"] = json.loads((Path(args.process) / "process.json").read_text(encoding="utf-8")).get("name")
+        write_summary(out, summary)
         asyncio.run(run(args, summary))
     except SystemExit as exc:
         summary["harness_error"] = str(exc)
@@ -665,8 +860,8 @@ def main() -> int:
                     dst = out / src.relative_to(work)
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, dst)
-        (out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-        print(json.dumps(summary, indent=2))
+        write_summary(out, summary)
+        print(json.dumps(summary, indent=2, default=str))
         if failed and args.fail_on_error and exit_code == 0:
             exit_code = 1
     return exit_code if (args.fail_on_error or exit_code == 2) else 0

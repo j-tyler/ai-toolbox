@@ -71,7 +71,9 @@ so "files next to the ledger file" is checked, not assumed.
 4. **Implement stage**: a fresh session. The prompt is the same neutral text for every condition
    ("implement the change described in the {noun} at {path}", or "in the brief below"), with the
    brief attached when `implement.include_brief` is true. The noun comes from `intent.noun` in
-   `process.json`, so a spec or a plan is named as such. Everything process-specific
+   `process.json`, so a spec or a plan is named as such. Continuation is one objective rule for every
+   condition: the driver nudges while the visible test suite is red or nothing under the code tree
+   changed, at most twice, and records why each turn ended. Every turn's summary is kept. Everything process-specific
    arrives through `implement.system_append` and the agents-file block, never through the harness
    prompt. The result is committed as `eval: implementation` (an empty marker commit if the agent
    already committed), and that commit is recorded.
@@ -82,11 +84,14 @@ so "files next to the ledger file" is checked, not assumed.
    appended to a read-only session that assesses the diff against the intent and returns a met /
    not met / cannot verify table per claim as its final message; the driver saves it.
 7. **Fixed review** (every condition): a second read-only session (the bundled runtime's own
-   read-only tool set) runs [`reviewer/fixed_reviewer.md`](reviewer/fixed_reviewer.md) with
-   workspace custom instructions **off**, so the change-intent `AGENTS.md` block cannot reach it,
-   and with exactly two inputs copied into a sealed temporary directory outside both the workspace
-   and the harness work directory: `diff.patch` and `change_description.md`. If the first answer is
-   not JSON the driver asks once more for JSON only.
+   read-only tool set, built-in sub-agents off) runs
+   [`reviewer/fixed_reviewer.md`](reviewer/fixed_reviewer.md) with workspace custom instructions
+   **off**, `AGENTS.md` restored to its seed content, the process directory renamed out of reach,
+   and exactly three inputs in a sealed temporary directory outside both the workspace and the
+   work directory: `requirements.md` (the brief, the standard for correctness in every condition),
+   `diff.patch` (code only), and `change_description.md` (rated for adequacy, never the standard).
+   A non-JSON answer gets one follow-up and then fresh sessions; a review that is still missing is
+   recorded as missing, not scored, and the analyzer reports the headline both ways.
    It returns JSON against `REVIEW_SCHEMA` (findings with location, severity, and confidence; an
    overall verdict; five reviewability ratings; effort to review; how many claims it checked and
    which it could not verify). The driver validates the JSON and keeps the raw message. The
@@ -293,11 +298,58 @@ direct intent and test-strength graders, a blinded reviewer arm, multi-file arti
 agents blocks, structural (not keyword) approval detection, and verdict calibration against the
 hidden tests.
 
+## Third review pass
+
+A third pass, two fresh Opus reviewers with no knowledge of the earlier reviews and two new frames
+(a realistic agent trying to break the harness; a methodologist vetting the measurement), plus an
+adjudicator, is saved as `docs/adjudication-2026-10-20-pass3.json`. Both reviewers rated the
+harness not yet sound for the inference; the adjudicator reproduced the mechanical claims and
+ordered eight changes, all applied:
+
+1. The frozen arm, launched as its own docstring said, never received its intent and graded the
+   untouched seed as that arm's result. The Harbor agent now resolves the file from the host at run
+   time and refuses to start without it; the frozen artifact gets a convention-shaped name; a
+   provisional `summary.json` is written at start; the analyzer excludes invalid trials (harness
+   error, driver never finished, no model calls) and counts them per condition.
+2. The fixed reviewer judged each arm against that arm's own description. It now gets the brief as
+   `requirements.md` in every condition and judges correctness against it; the description is rated
+   separately; the diff it sees is code only; `AGENTS.md` and the process directory are hidden
+   during the review; out-of-bounds reads are recorded.
+3. The stand-in's default reply carried a scope directive the brief contradicts, and its approval
+   was keyword-based in both directions. It now defers to the brief, approves only when the agent
+   presents the artifact (structural match on its headings or lines), nudges once to commit after
+   approval, and the model stand-in decides approval with a separate yes/no call. Two files in the
+   intent directory resolve to the committed one and are labelled `multiple_files`.
+4. A nudge used to replace the implementer's summary, and a mid-task stop without a question was
+   accepted. Every turn's summary is kept, and continuation is one objective rule (visible suite
+   green and code changed). Stashes are detected and recorded.
+5. A missing or invalid fixed review used to score as the worst possible review. It is now retried
+   in fresh sessions, then recorded as missing; handoff no longer depends on it; the analyzer
+   reports the headline with and without missing reviews; `scripts/rerun_fixed_review.py` gives
+   judge test-retest.
+6. Built-in sub-agents pinned to other models (explore, research, task, and the rest) are excluded
+   from every session; usage is recorded per model; `--model` is required; mismatches are flagged.
+7. The analyzer groups by process, labels, and frozen-intent hash, decomposes the headline into
+   individual criteria so a review win and a code win can be told apart, and reports differences
+   with a permutation p-value and a Welch interval, warning below ten trials per arm (the
+   adjudicator's simulation put the false-positive rate of the old bootstrap at about one in five
+   at three attempts).
+8. The artifact is re-resolved after implementation in case the implementer moved it; the hidden
+   suite runs exactly once per verification; skipped and expected-failure tests do not count as
+   passing.
+
+Stated limitations the adjudicator asked for in any write-up: the brief's interface contract is
+nearly complete, so this task cannot show an authoring benefit, only an implementation and
+reviewability one; the baseline has no guidance-matched control; the primary endpoint should be
+`hidden_tests_pass_fraction` with the composite secondary; and three attempts per arm is a pilot,
+not a comparison.
+
 ## What was and was not verified here
 
 Verified in the authoring environment: hidden tests versus seed and reference; the driver end to
 end in fake mode for baseline, change-intent-v1, and change-intent-v1-frozen through every stage;
-the offline tests in `driver/test_author_stage.py` and `scripts/test_analyze.py`;
+the offline tests in `driver/test_author_stage.py` (including stand-in probes, a prose-only reviewer,
+and two artifact files) and `scripts/test_analyze.py`;
 Reward Kit grading of the resulting workspaces, including through `uvx` exactly as `test.sh`
 runs it; headline parity across conditions with identical outputs; the stand-in stopping rules;
 verifier survival on malformed reviewer output; the Harbor agent classes import against Harbor

@@ -1,0 +1,315 @@
+{
+ "overall": "I checked every finding against the code at HEAD b328fd6 and reran the parts that can be run: the 8 unit tests pass; the stand-in probes; the frozen arm without an intent; and a bootstrap simulation of my own. The plumbing is sound. Hidden tests only appear at verification time, author-stage contamination is reverted, review stages are reset, and the time budgets nest. The structured-output retry also matches the SDK.\n\nThe harness is still not ready to support \"score difference => process difference\", for four reasons:\n- **The fixed reviewer judges each arm against that arm's own description, never the brief (M1).** Its reference standard therefore depends on the condition.\n- **The harness's own wording and choices reach only some arms.** The stand-in's default reply carries a scope directive. The process's AGENTS.md is in the reviewer's checkout. Sub-agents can run on other pinned models.\n- **Failed or invalid trials are scored as outcomes.** This covers the frozen arm launched as documented, missing fixed reviews, and harness errors.\n- **The implementer summary the reviewer sees can be replaced by a nudge reply.**\n\nThe analysis is also miscalibrated at the documented k=3. My own simulation through analyze.diff_ci gives a null false-positive rate of 0.21 at k=3 and 0.07 at k=20. It also pools different frozen artifacts into one row and cannot separate a code win from a write-up win.\n\nMost fixes are small, local edits to run_process.py, stand_in.py, backends.py, copilot_process.py and analyze.py. Two items are about scope rather than code, and are limitations to state:\n- **The task is fully specified (M2).** The brief's contract spells out almost every hidden assertion and the stand-in knows only the brief, so this task cannot show an authoring benefit.\n- **The baseline has no guidance-matched control (M4).**",
+ "frameA_verdict": "Mostly correct and well evidenced. I reproduced these directly:\n- F1: exit code 2, harness_error, counted by analyze.\n- F2: the Phase-1 preview sentence returns 'Approved as proposed', approved=True.\n- F3: 'How would you like to proceed?' / 'Approve as written' is labelled unapproved; 'Do you approve of keeping the naming?' / 'Yes (recommended)' is labelled approved.\n- F4: once approved, an announce-only turn returns None.\n\nF5, F6, F7, F8, F9 and F14 are visible in the code exactly as described. F11 is confirmed: explore and task pin gpt-5.6-luna, gpt-5.4-mini or claude-haiku-4.5, research pins claude-sonnet-5, and the SDK exposes excluded_builtin_agents.\n\nSeverity was overstated in three places:\n- **F2 goes from critical to major.** The skill's own Phase-1 template contains none of the cue words; it ends 'Confirm or correct each line', which hits the confirm-brief rule. Also, 'approval' does not match the cue 'approve'. The failure needs the agent to add its own preview wording.\n- **F3 goes from major to minor.** It only corrupts the PP rows and outcome counts; ITT differences are untouched.\n- **F9 and F10 go from major to minor.** Both are low-likelihood paths, and F9 mostly goes away once frozen intents are copied to a neutral, convention-shaped filename.\n\nF17 is folded into Frame B's M9. The AGENTS.md part is the condition-specific and more likely leak.",
+ "frameB_verdict": "This frame has the most important findings.\n\n- **M1 is the single biggest validity threat.** I verified it: FIXED_REVIEW_PROMPT and fixed_reviewer.md lines 12 and 37 judge against 'what the description says', and the brief is never shown. The intent also appears twice (in diff.patch and in change_description.md).\n- **M3's miscalibration is real.** My independent simulation through analyze.diff_ci gave null false-positive rates of 0.21, 0.11, 0.085 and 0.07 at k=3, 5, 10 and 20. The cliff arithmetic also checks out: all_pass is 4/7 \u00d7 3/4 \u00d7 1/4 \u2248 0.107, and one blocking finding plus the 'incorrect' verdict is about 0.114.\n- **M5 is confirmed and fires on every skill-arm default reply.** It also contradicts the brief, which says 'Anything not stated here is yours to decide'.\n- **M6 and M7 are confirmed.** analyze.py groups only by summary['process'], never reads labels or intent_source, and never opens reward-details.json. processes/README.md:52 recommends exactly the pooled design.\n\nThree severities should come down:\n- **M2 goes from critical to major.** It is real (32 hidden tests, nearly all transcribing contract sentences) but it limits what a result can be attributed to; it does not break the inference that a score difference comes from the process.\n- **M8 goes from major to minor.** It is about honesty in the write-up.\n- **M9's AGENTS.md path stays major, at moderate confidence.** The block, including its 'Reviewing a change' instructions, is committed before the baseline commit. It is therefore in the reviewer's checkout but not in the diff, and only in intent arms.",
+ "upheld": [
+  {
+   "finding_id": "M1",
+   "reviewer": "B",
+   "reason": "Critical; verified. run_process.py:85-89 and 538-542 together with fixed_reviewer.md:12, 27 and 37: correctness and description_adequacy are judged against the process's own description. The brief is absent in every arm, and intent arms supply a detailed spec. The intent file also sits in diff.patch (the diff starts at the baseline commit, after setup) and again in change_description.md."
+  },
+  {
+   "finding_id": "M3",
+   "reviewer": "B",
+   "reason": "Critical as long as k=3 and the percentile bootstrap are the documented method. My own simulation through analyze.diff_ci gave null false-positive rates of 0.21 at k=3 and 0.0725 at k=20. The cliff sizes check out from the reward.toml and group weights (all_pass about 0.107; a blocking sev-3 finding with the 'incorrect' verdict about 0.114)."
+  },
+  {
+   "finding_id": "F1",
+   "reviewer": "A",
+   "reason": "Critical for the frozen arm. copilot_process.py:192 reads the host environment at import time. Harbor's --ae goes to agent extra_env inside the container (factory.py:217, installed/base.py), so the documented launch passes no --intent-file. I reproduced exit 2 with harness_error, and analyze.py:59-70 counts the trial anyway."
+  },
+  {
+   "finding_id": "M5",
+   "reviewer": "B",
+   "reason": "Major; verified at stand_in.py:126-131. Every skill-arm default reply says 'Anything the brief does not mention is out of scope for this change', which contradicts instruction.md:9 ('Anything not stated here is yours to decide'). Only intent arms receive it, and it lands in their '## Out of scope'."
+  },
+  {
+   "finding_id": "F6",
+   "reviewer": "A",
+   "reason": "Major; verified. backends.py:274 overwrites final_message every turn. run_process.py:510 nudges on any '?' in the last 300 characters, even after real work. implement_message (line 522) feeds change_description.md. The change-intent guidance asks implementers to return amendments for the author to rule on, which makes ending on a question more likely in that arm."
+  },
+  {
+   "finding_id": "F8",
+   "reviewer": "A",
+   "reason": "Major; verified. criteria.py:194-285 scores an absent or invalid review as 0 on every review criterion, and summary_recorded (lines 164-175) also loses half of handoff when the fixed review times out. Instrument failure gets folded into the process score."
+  },
+  {
+   "finding_id": "F11",
+   "reviewer": "A",
+   "reason": "Major; verified. The definitions explore.agent.yaml, task.agent.yaml and research.agent.yaml pin other models. Author and implement sessions get the full tool set with no excluded_builtin_agents (backends.py:219-241); the SDK supports it (client.py:2382, 2871). _resolved_model returns only the first model it sees."
+  },
+  {
+   "finding_id": "F12",
+   "reviewer": "A",
+   "reason": "Major; verified in analyze.py:59-70. Trials with harness_error or no model calls count as outcomes. summary.json is written only in main()'s finally block (run_process.py:657-668), so a killed driver leaves a reward.json with no attribution."
+  },
+  {
+   "finding_id": "M6",
+   "reviewer": "B",
+   "reason": "Major; verified. analyze.py:113-115 groups by process only. processes/README.md:52 recommends varying --intent-file under the one frozen process. The frozen filename is copied verbatim into the workspace, the implement prompt and the diff (run_process.py:440, 500)."
+  },
+  {
+   "finding_id": "M7",
+   "reviewer": "B",
+   "reason": "Major; verified. DIMS_HEADLINE reads only reward.json, so the review group mixes verdict proxies with description-driven ratings and cannot be split apart."
+  },
+  {
+   "finding_id": "M9",
+   "reviewer": "B",
+   "reason": "Major at moderate confidence (merged with A's F17). The process's AGENTS.md block, with reviewer-directed text at AGENTS.block.md:13, is committed in setup. It is therefore in the fixed reviewer's checkout, and only in intent arms. custom_instructions=False stops it being auto-loaded but not read. /logs/agent/eval-work and /eval/processes/<name> are readable by bash under approve_all."
+  },
+  {
+   "finding_id": "F7",
+   "reviewer": "A",
+   "reason": "Major at moderate confidence. run_process.py:510 accepts any turn end once some work exists and the message has no '?'. The SDK supports agent_mode='autopilot' (session.py:2211, 2300). Continuation depends on when the model yields, and longer evidence-heavy work splits more often."
+  },
+  {
+   "finding_id": "F4",
+   "reviewer": "A",
+   "reason": "Major at moderate confidence. Reproduced: with approved=True, 'I'll strip the source tags and commit the final file now.' returns None, and the driver commits whatever draft exists."
+  },
+  {
+   "finding_id": "F5",
+   "reviewer": "A",
+   "reason": "Major but low frequency. find_intent (run_process.py:226-228) silently takes the name that sorts last."
+  },
+  {
+   "finding_id": "F2",
+   "reviewer": "A",
+   "reason": "Upheld but downgraded to major. Reproduced the approval on the preview sentence. However, the skill's Phase-1 template ends with 'Confirm or correct each line', which triggers the confirm-brief rule, and 'approval' does not match the cue 'approve'. The failure needs the agent to add its own wording."
+  },
+  {
+   "finding_id": "M2",
+   "reviewer": "B",
+   "reason": "Upheld but downgraded to major (a limitation to state). instruction.md:7-30 fixes the output strings that the 32 hidden tests assert, and the stand-in knows only the brief. This limits what an authoring effect could show; it does not break the comparison itself."
+  },
+  {
+   "finding_id": "M4",
+   "reviewer": "B",
+   "reason": "Major design limitation. Baseline has no guidance; change-intent-v1 adds about 26 KB of guidance and an authoring session of up to 1800 s. This is the owner's call: either scope the claim or add a guidance-matched control."
+  },
+  {
+   "finding_id": "F3",
+   "reviewer": "A",
+   "reason": "Upheld but downgraded to minor. Reproduced both directions. Only author_outcome and the PP rows depend on it; the ITT differences do not."
+  },
+  {
+   "finding_id": "F9",
+   "reviewer": "A",
+   "reason": "Upheld but downgraded to minor. intent_path.read_text() at run_process.py:540 has no guard and aborts both reviews. It needs the implementer to move the intent, and is mostly removed by using a neutral, convention-shaped frozen filename."
+  },
+  {
+   "finding_id": "F10",
+   "reviewer": "A",
+   "reason": "Upheld but downgraded to minor. A leftover stash is not detected. It is plausible but unlikely, and only needs a diagnostic flag."
+  },
+  {
+   "finding_id": "F13",
+   "reviewer": "A",
+   "reason": "Minor. validate_review (run_process.py:276-295) does not type-check findings. response_schema should normally prevent bad findings."
+  },
+  {
+   "finding_id": "F14",
+   "reviewer": "A",
+   "reason": "Minor. lru_cache does not hold a lock across the call (criteria.py:44-48), so concurrent callers each run pytest."
+  },
+  {
+   "finding_id": "F15",
+   "reviewer": "A",
+   "reason": "Minor. existing_tests_still_pass runs the copies the agent could edit. Hidden test_regression partly covers this."
+  },
+  {
+   "finding_id": "F16",
+   "reviewer": "A",
+   "reason": "Minor. With no --model, the same-model guard at run_process.py:338 compares against None and passes, and manifest.model is null."
+  },
+  {
+   "finding_id": "M8",
+   "reviewer": "B",
+   "reason": "Upheld, downgraded to minor; it belongs in the write-up as a limitation. No criterion reads Amendments. Scope discipline is measured only by judge ratings. The process review has no causal path to the headline."
+  },
+  {
+   "finding_id": "M10",
+   "reviewer": "B",
+   "reason": "Minor. agent_tests_pass (criteria.py:63-64, headline via regression.py) ignores skipped and xfailed tests. Process guidance could coach the judge-facing summary."
+  },
+  {
+   "finding_id": "M11",
+   "reviewer": "B",
+   "reason": "Minor. The Dockerfile uses uv:latest and a base image pinned by tag only. reasoning_effort is unset and unrecorded. tasks/ is covered only through the harness SHA and the dirty flag."
+  },
+  {
+   "finding_id": "M12",
+   "reviewer": "B",
+   "reason": "Minor. Local runs use approve_all with bash in a host directory, and the skill dirs point inside the repo. Only container results should be published."
+  },
+  {
+   "finding_id": "F17",
+   "reviewer": "A",
+   "reason": "Merged into M9: the same blinding gap, of which the AGENTS.md path is the condition-specific and likelier part."
+  }
+ ],
+ "rejected": [],
+ "changes_now": [
+  {
+   "priority": 1,
+   "title": "Make the frozen arm launchable and keep invalid trials out of the outcome tables",
+   "what": "copilot_process.py:\n- Drop the class-level FROZEN_INTENT = os.environ.get(...).\n- In run(), resolve self.FROZEN_INTENT or os.environ['EVAL_INTENT_FILE'] from the host environment.\n- If the process is change-intent-v1-frozen (or process.json author.mode == 'frozen') and no readable file resolves, raise before uploading anything.\n- Fix the docstring: export it on the host, not with --ae.\n\nrun_process.py:\n- Copy the frozen intent to a fixed, convention-shaped name, e.g. change-intent/<run-date>-ledger-budgets.md, never src.name. Record the source name and sha256 in the manifest only.\n- Write a provisional summary.json (process, labels, started, status='running') to --out at start. In copilot_process.py, also write it to /logs/agent/eval before the driver runs.\n\nanalyze.py:\n- Classify a trial as invalid when it has harness_error, zero model_calls in implement, or status 'running' (a killed driver).\n- Exclude invalid trials from the means and differences, and print an invalid count per process.",
+   "why": "As documented, every frozen trial grades the untouched seed (0.183) and is counted as that arm's result. Infrastructure failures read as treatment effects.",
+   "files": [
+    "ideas/change-intent/eval/agents/copilot_process.py",
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/scripts/analyze.py"
+   ],
+   "from_findings": [
+    "F1",
+    "F12",
+    "M6",
+    "F9"
+   ]
+  },
+  {
+   "priority": 2,
+   "title": "Give the fixed reviewer one reference standard and blind it to process-owned context",
+   "what": "Put the brief into review_input as requirements.md in every condition.\n\nChange FIXED_REVIEW_PROMPT and fixed_reviewer.md:\n- Correctness, findings and overall_correctness are judged against requirements.md.\n- change_description.md is rated only for description_adequacy and verifiability, and claims_checked counts claims from either file.\n\nBuild diff.patch with ':(exclude)<intent_dir>'; the intent is already shown in change_description.md.\n\nBefore the fixed review:\n- Restore AGENTS.md to its 'eval: seed' content in the working tree (uncommitted; git_reset_to cleans it up afterwards, and that reset should not be reported as reviewer edits).\n- Remove or rename /eval/processes/<name> for the duration of the review (record that this was done).\n\nAfter the fixed review, scan its tool.execution_start events for paths outside the workspace and review_input. Record summary.fixed_review.out_of_bounds_reads.",
+   "why": "Today 2/7 of the headline is judged against a standard the treatment writes itself. The process's review instructions also sit in the reviewer's checkout only in intent arms. Any review-dimension win can be dismissed as 'the judge was given a spec in one arm'.",
+   "files": [
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/reviewer/fixed_reviewer.md",
+    "ideas/change-intent/eval/reviewer/README.md"
+   ],
+   "from_findings": [
+    "M1",
+    "M9",
+    "F17"
+   ]
+  },
+  {
+   "priority": 3,
+   "title": "Neutralise the stand-in and tie approval to a presented file",
+   "what": "stand_in.py:\n- **Default reply.** Make it information-neutral and consistent with the brief, e.g. 'Where you offer options, take the one you recommend. The brief is everything I have decided; anything it does not state is your call. When the change intent is ready, show me the complete file for approval. Do not implement.'\n- **When approval is granted.** Only when the message presents a proposal: it contains a 'Proposed' header or at least 3 of the required '## ' section headings. Never on a message containing 'Intent brief'. For ask_user, approve when an affirmative choice follows a presentation, whether or not the question says 'approv'.\n- **After approval but before a commit.** Send one counted nudge ('Write the final file under change-intent/ and commit it now.') instead of returning None.\n- **ModelStandIn.** Derive approval from a separate structured yes/no call rather than regex on the reply.\n\nrun_process.py:\n- Replace find_intent's 'name that sorts last' with: the intent file added or modified by commits made during the stage; if several, the newest; record author_outcome='multiple_files' and list them.\n\nAdd regression tests for the Phase-1 preview sentence, a 'How would you like to proceed?' approval, and announce-then-stop.",
+   "why": "Harness-owned wording currently reaches only the intent arms and adds scope (M5). Approval labels drive PP and author outcomes. The skill arm can also commit an unapproved or scaffolded draft labelled approved.",
+   "files": [
+    "ideas/change-intent/eval/driver/stand_in.py",
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/driver/test_author_stage.py"
+   ],
+   "from_findings": [
+    "M5",
+    "F2",
+    "F3",
+    "F4",
+    "F5"
+   ]
+  },
+  {
+   "priority": 4,
+   "title": "Keep the implementer's real summary and use one objective continuation rule",
+   "what": "backends.py:\n- Add StageResult.messages: list[str], appending each turn's final message.\n\nrun_process.py:\n- Build the Implementer summary from all non-empty implement messages in order, each under a turn heading, rather than res.final_message.\n- In next_impl_turn, replace the '?' heuristic with an objective rule identical for every condition: nudge (up to --max-implement-nudges) when the visible suite (python -m pytest -q in ws) is not green, or when nothing under ledger/ changed since head_before_impl; otherwise stop.\n- Record implement.end_reason per turn and git stash list count (stash_left).\n- Owner alternative: agent_mode='autopilot' for all implement turns.",
+   "why": "A nudge currently replaces the summary the fixed reviewer sees, and this is more likely in the arm whose guidance asks for author rulings. When a mid-task stop is accepted depends on how the model phrases its last turn, not on the process.",
+   "files": [
+    "ideas/change-intent/eval/driver/backends.py",
+    "ideas/change-intent/eval/driver/run_process.py"
+   ],
+   "from_findings": [
+    "F6",
+    "F7",
+    "F10"
+   ]
+  },
+  {
+   "priority": 5,
+   "title": "Treat a failed fixed review as a measurement failure, not a score",
+   "what": "validate_review:\n- Check each finding's types, enums and ranges against REVIEW_SCHEMA items. Invalid findings make the review invalid.\n\nOn an invalid, empty or timed-out review:\n- Re-run the fixed reviewer in a fresh session on the same review_input, up to 2 more attempts. Record attempts.\n\nIf still missing:\n- Write review.json as {\"_meta\": {\"valid\": false, \"missing\": true}}.\n- Remove fixed_review from HEADLINE_STAGES in criteria.py summary_recorded, so a reviewer failure does not also cost handoff.\n- In analyze.py, report missing-review counts per process, and the headline both ways (missing scored 0, and missing excluded).\n\nAdd scripts/rerun_fixed_review.py to re-review saved review-input/ for test-retest.",
+   "why": "One reviewer failure moves a trial by about 0.25, and failure risk grows with description and diff size, which is the intent arm.",
+   "files": [
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/criteria.py",
+    "ideas/change-intent/eval/scripts/analyze.py"
+   ],
+   "from_findings": [
+    "F8",
+    "F13"
+   ]
+  },
+  {
+   "priority": 6,
+   "title": "Enforce the same model across stages",
+   "what": "backends.py run_stage:\n- Pass excluded_builtin_agents=['explore','task','research','rubber-duck','code-review','security-review'] for every stage. Check the exact names against the definitions/ directory of the pinned cli 1.0.100.\n- Record usage per model from assistant.usage events' model field.\n\nrun_process.py:\n- For --backend copilot, refuse to start without --model.\n- After each stage, flag a model mismatch when any model other than the requested one (or the reviewer model in fixed_review) appears.",
+   "why": "Sub-agents run pinned gpt-5.6-luna, gpt-5.4-mini, claude-haiku-4.5 or claude-sonnet-5. How much work is delegated depends on the process, for example the skill's Explore phase. So score differences can reflect a model mixture, and the manifest shows only one model.",
+   "files": [
+    "ideas/change-intent/eval/driver/backends.py",
+    "ideas/change-intent/eval/driver/run_process.py"
+   ],
+   "from_findings": [
+    "F11",
+    "F16"
+   ]
+  },
+  {
+   "priority": 7,
+   "title": "Fix the analysis output: grouping, decomposition, intervals",
+   "what": "analyze.py:\n- Group by (process, labels, manifest.intent_source.sha256) and refuse to pool different intent hashes.\n- Read reward-details.json and print per process and per difference: hidden_tests_pass_fraction, hidden_tests_all_pass, existing_tests_still_pass, reviewer_verdict_correct, no_blocking_findings, reviewability_score, description_adequacy, diff_shortstat_code_only, author outcomes and invalid/missing counts.\n- Replace the percentile bootstrap for differences with a permutation test plus a Welch t interval, and warn when n<10 per arm.\n- Change the documented -k 3 in copilot_process.py to a pilot-only note.\n\nThis can land after the trials are collected, because everything it needs is already stored.",
+   "why": "At k=3 about 1 in 5 null comparisons look significant. Comparing artifact shapes as documented averages them together. A win from the write-up cannot be told apart from a code win.",
+   "files": [
+    "ideas/change-intent/eval/scripts/analyze.py",
+    "ideas/change-intent/eval/scripts/test_analyze.py",
+    "ideas/change-intent/eval/agents/copilot_process.py",
+    "ideas/change-intent/eval/processes/README.md"
+   ],
+   "from_findings": [
+    "M3",
+    "M6",
+    "M7"
+   ]
+  },
+  {
+   "priority": 8,
+   "title": "Small robustness fixes in driver and grader",
+   "what": "- After implement, re-resolve the intent (find_intent plus `git diff -M --name-status baseline..HEAD -- intent_dir`). Wrap the change_description build so it can never abort the reviews; record intent_removed_by_implementer.\n- In criteria.py, replace lru_cache with a dict checked and filled inside the per-key lock.\n- Count skipped and xfailed tests as not passing in agent_tests_pass.",
+   "why": "These stop a condition-specific crash that discards both reviews, stop the hidden suite running twice (where a flaky test could make the two correctness criteria disagree), and close a cheap way to game a criterion.",
+   "files": [
+    "ideas/change-intent/eval/driver/run_process.py",
+    "ideas/change-intent/eval/tasks/ledger-budgets/tests/criteria.py"
+   ],
+   "from_findings": [
+    "F9",
+    "F14",
+    "M10"
+   ]
+  }
+ ],
+ "changes_later": [
+  {
+   "title": "Add an underspecified task variant with a private author decision table",
+   "what": "Write a second brief that leaves real decisions open: overlapping month and default budgets, dedup key semantics, import rounding, how created recurrence occurrences are tracked. Give the stand-in a decision table it reveals only when asked about the matching fork. Give the baseline the same ask-the-author channel during implement. Hidden tests should check those decisions. Keep ledger-budgets as a negative control.",
+   "why": "On the current task the contract fixes nearly every hidden assertion, so the authoring dialogue cannot carry author knowledge. Until a variant like this exists, the write-up must say that a null result does not show the process fails to help, and that a positive result reflects guidance and compute rather than authoring."
+  },
+  {
+   "title": "Guidance-matched and plan-first controls; a 2x2 for artifact shape",
+   "what": "Add three things:\n- A generic-guidance baseline: write tests per requirement, show they fail when the behaviour is broken, report the evidence.\n- A plan-first baseline under the same author cap.\n- For comparing shapes, either one neutral implementation guidance shared by every artifact, or a shape \u00d7 guidance 2x2.\n\nArtifacts should be authored blind to the hidden tests and then frozen.",
+   "why": "Without these controls, 'change intent beats baseline' means 'this whole bundle beats nothing'. Comparing shapes under change-intent-specific guidance confounds the shape with the guidance."
+  },
+  {
+   "title": "Size the experiment and pre-register endpoints",
+   "what": "Pre-register hidden_tests_pass_fraction as the primary endpoint, with the review dimension as secondary. Run k>=20 per arm on 3-5 tasks and analyse stratified by task. Report the all_pass bonus separately, or drop it. Measure judge test-retest with rerun_fixed_review.py on stored inputs. Run a description-swap calibration: the same code reviewed with and without the artifact.",
+   "why": "Power to detect a realistic effect on one task is low even at k=20, and binary cliffs worth about 0.11 dominate the variance."
+  },
+  {
+   "title": "State the unmeasured claims and add cheap objective diagnostics",
+   "what": "In the write-up, list which design claims are measured, proxied or unmeasured: amendments, scope discipline, the review loop, consistency across changes. Add weight-0 diagnostics: amendment count, files and lines outside ledger/ and tests/, unexpected CLI subcommands, edits to seed tests (which also covers the existing_tests_still_pass gap). Either feed process-review findings back for one repair round, or describe that stage as cost only.",
+   "why": "Otherwise a published result implicitly endorses claims the harness never tested."
+  },
+  {
+   "title": "Reproducibility hardening",
+   "what": "Pin the uv image and python base by digest. Set reasoning_effort explicitly and record it. Record the Harbor version and the image digest in the manifest. Hash tasks/<task>/** on the host into the manifest. State that individual numbers are distributional and cannot be replicated exactly.",
+   "why": "A colleague rerunning the experiment cannot confirm that the grader weights, the runtime or the reasoning effort matched."
+  },
+  {
+   "title": "Publish only container results",
+   "what": "Document that local real-model runs are for debugging only, since bash with approve_all can reach tasks/**/__hidden and solution/ on the host. Optionally make run_local.sh copy the process dir to a temp location and refuse --backend copilot outside a sandbox.",
+   "why": "Locally there is a possible leak of the answer key, and it differs between arms."
+  }
+ ],
+ "notes": "**Trade-offs for the owner to decide, with my recommended default:**\n1. **Missing fixed review.** Score it as 0 (ITT, which punishes instrument failure) or exclude it (risks selection bias). Default: re-run the reviewer up to 2 times on the stored inputs, then report both ways and treat 'excluded' as primary.\n2. **Show the brief to the fixed reviewer.** This changes the construct from 'reviewable from the process's description alone' to 'correct against the requirements, with a rated description'. Default: yes; it matches a real PR that links its issue.\n3. **Continuation rule.** Default: a test-and-diff based nudge, identical for every arm. Autopilot is a reasonable alternative but changes how the agent ends its turns.\n4. **Excluding built-in sub-agents.** This is less like real Copilot use, but needed for 'same model'. Default: exclude them, and say so.\n5. **Headline composite or pre-registered primary endpoint.** Default: primary = hidden_tests_pass_fraction; the composite is secondary.\n6. **Budget versus controls.** Default: run the guidance-matched control before any 'change intent beats baseline' claim, and scope the first write-up to 'this whole bundle versus nothing'.\n\n**Independent checks I ran:**\n- Unit tests: 8 passed.\n- Stand-in probes: /tmp/claude-0/-home-user-ai-toolbox/c4033a8d-daef-5188-afd2-caaffe52687e/scratchpad/review3-adjudicator/probe_standin.py.\n- Frozen arm without an intent: exit 2, harness_error. Workspace at /tmp/claude-0/-home-user-ai-toolbox/c4033a8d-daef-5188-afd2-caaffe52687e/scratchpad/review3-adjudicator/frozen.\n- Bootstrap null simulation: /tmp/claude-0/-home-user-ai-toolbox/c4033a8d-daef-5188-afd2-caaffe52687e/scratchpad/review3-adjudicator/sim.py. False-positive rate 0.21 / 0.1075 / 0.085 / 0.0725 at k = 3 / 5 / 10 / 20.\n- Read the definitions under /root/.cache/github-copilot-sdk/cli/1.0.100/prebuilds/linux-x64/definitions, and Harbor's --ae path (cli/jobs.py:653, agents/factory.py:217).\n\n**Two observations of my own:**\n- The frozen process keeps include_brief=true, so an 'artifact' comparison is really brief plus artifact. Decide this deliberately per shape run.\n- Change-intent arms show the intent to the fixed reviewer twice (diff.patch and change_description.md). Change 2 removes the duplicate.\n\nNothing was modified in the repository."
+}

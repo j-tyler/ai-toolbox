@@ -22,7 +22,6 @@ import shutil
 import subprocess
 import sys
 import threading
-from functools import lru_cache
 from pathlib import Path
 
 from rewardkit import criterion
@@ -41,11 +40,20 @@ def _python() -> str:
     return os.environ.get("LEDGER_PYTHON") or shutil.which("python3") or sys.executable
 
 
-@lru_cache(maxsize=None)
+_PYTEST_RESULTS: dict = {}
+_PYTEST_GUARD = threading.Lock()
+
+
 def _pytest_cached(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
-    # Reward Kit runs criteria on threads; the lock makes the hidden suite run once per verification.
-    with _PYTEST_LOCKS.setdefault((args, cwd), threading.Lock()):
-        return _pytest_run(args, cwd)
+    """Reward Kit runs criteria on threads. The per-key lock plus the dict means each suite runs once
+    per verification and every caller sees the same result (lru_cache alone did not coalesce)."""
+    key = (args, cwd)
+    with _PYTEST_GUARD:
+        lock = _PYTEST_LOCKS.setdefault(key, threading.Lock())
+    with lock:
+        if key not in _PYTEST_RESULTS:
+            _PYTEST_RESULTS[key] = _pytest_run(args, cwd)
+        return _PYTEST_RESULTS[key]
 
 
 def _pytest_run(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
@@ -62,7 +70,9 @@ def _pytest_run(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
         raise RuntimeError(f"pytest is not installed for {_python()}; set LEDGER_PYTHON to the workspace interpreter")
     passed = sum(int(n) for n in re.findall(r"(\d+) passed", out))
     failed = sum(int(n) for n in re.findall(r"(\d+) (?:failed|error)", out))
-    return passed, passed + failed, out[-2000:]
+    # skipped, xfailed, deselected: not passing, so a suite cannot be made green by marking tests
+    dodged = sum(int(n) for n in re.findall(r"(\d+) (?:skipped|xfailed|deselected)", out))
+    return passed, passed + failed + dodged, out[-2000:]
 
 
 def _pytest(args: list[str], cwd: Path) -> tuple[int, int, str]:
@@ -158,7 +168,7 @@ def implementation_committed(workspace: Path) -> bool:
     return head == impl and not _git(workspace, "status", "--porcelain").strip()
 
 
-HEADLINE_STAGES = ("implement", "fixed_review")  # the stages every condition runs
+HEADLINE_STAGES = ("implement",)  # handoff counts only this; a reviewer failure is a measurement failure, not a score
 
 
 @criterion(shared=True)
@@ -192,11 +202,13 @@ REVIEWABILITY_KEYS = ["description_adequacy", "coherence", "verifiability", "siz
 
 
 def _review(workspace: Path) -> dict | None:
+    """The fixed review, or None when it is missing or invalid. A missing review scores 0 in this
+    dimension (intention-to-treat); analyze.py also reports the headline with missing reviews excluded."""
     r = _json(workspace, "review.json")
     if not r:
         return None
     meta = r.get("_meta") or {}
-    if isinstance(meta, dict) and meta.get("valid") is False:
+    if isinstance(meta, dict) and (meta.get("valid") is False or meta.get("missing")):
         return None
     return r
 

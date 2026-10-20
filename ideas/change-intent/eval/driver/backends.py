@@ -50,6 +50,9 @@ class StageResult:
     timed_out: bool = False
     resolved_model: str | None = None
     retries: int = 0
+    messages: list[str] = field(default_factory=list)  # every turn's final message, in order
+    usage_by_model: dict[str, dict[str, int]] = field(default_factory=dict)
+    models_seen: list[str] = field(default_factory=list)
 
     @property
     def seconds(self) -> float:
@@ -76,6 +79,9 @@ class Backend:
     def versions(self) -> dict[str, str]:
         return {}
 
+    def excluded_builtin_agents(self) -> tuple[str, ...]:
+        return BUILTIN_AGENTS
+
 
 def _event_to_dict(ev: Any) -> dict[str, Any]:
     for attr in ("to_dict", "model_dump"):
@@ -95,6 +101,10 @@ def _event_to_dict(ev: Any) -> dict[str, Any]:
 
 USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens")
 READ_ONLY_TOOLS = ("grep", "glob", "view", "bash", "read_bash", "stop_bash", "lsp")
+# Built-in sub-agents of the pinned runtime (cli 1.0.100 definitions/*.agent.yaml). Some are pinned to
+# other models (explore: gpt-5.6-luna/gpt-5.4-mini; research: claude-sonnet-5), which would break the
+# "same model for every condition" premise, so every stage excludes all of them.
+BUILTIN_AGENTS = ("code-review", "explore", "rem-agent", "research", "rubber-duck", "security-review", "task")
 STRUCTURED_OUTPUT_MISSING = "Run completed without a structured assistant response"
 
 
@@ -121,6 +131,24 @@ def _usage_from_events(events: list[dict[str, Any]]) -> dict[str, int]:
     if calls:
         totals["model_calls"] = calls
     return totals
+
+
+def _usage_by_model(events: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    out: dict[str, dict[str, int]] = {}
+    for ev in events:
+        if str(ev.get("type", "")) != "assistant.usage":
+            continue
+        data = ev.get("data") or {}
+        if not isinstance(data, dict):
+            continue
+        model = str(data.get("model") or "unknown")
+        bucket = out.setdefault(model, {})
+        bucket["model_calls"] = bucket.get("model_calls", 0) + 1
+        for key in USAGE_KEYS:
+            v = data.get(key, data.get(_camel(key)))
+            if isinstance(v, (int, float)):
+                bucket[key] = bucket.get(key, 0) + int(v)
+    return out
 
 
 def _resolved_model(events: list[dict[str, Any]]) -> str | None:
@@ -225,6 +253,7 @@ class CopilotBackend(Backend):
                 enable_file_change_tracking=True,
                 skip_custom_instructions=not spec.custom_instructions,
                 on_event=on_event,
+                excluded_builtin_agents=list(BUILTIN_AGENTS),
             )
             if spec.system_append:
                 session_kwargs["system_message"] = {"mode": "append", "content": spec.system_append}
@@ -272,6 +301,7 @@ class CopilotBackend(Backend):
                     else:
                         raise
                 result.final_message = _message_text(ev)
+                result.messages.append(result.final_message)
                 if result.turns >= spec.max_turns:
                     break
                 follow_up = await next_turn(result.final_message)
@@ -299,6 +329,8 @@ class CopilotBackend(Backend):
             # Prefer the full history; fall back to what we captured live (covers timeouts/disconnects).
             result.events = events if len(events) >= len(live_events) else live_events
             result.usage = _usage_from_events(result.events)
+            result.usage_by_model = _usage_by_model(result.events)
+            result.models_seen = sorted(result.usage_by_model)
             result.resolved_model = _resolved_model(result.events)
             result.finished = time.time()
         return result
@@ -343,7 +375,9 @@ class FakeBackend(Backend):
                 "I explored the code and drafted a file. Should I also refactor the CLI while I am here?",
                 "Here is the complete proposed document:\n\n" + FAKE_INTENT + "\n\nDo you approve?",
             ]
+            result.messages = []
             for msg in script:
+                result.messages.append(msg)
                 follow = await next_turn(msg)
                 result.turns += 1
                 events.append({"type": "fake.message", "data": {"content": msg[:200], "reply": follow}})
@@ -370,6 +404,7 @@ class FakeBackend(Backend):
                 result.final_message = "Implemented from the reference solution (fake backend)."
             else:
                 result.final_message = "Fake backend: no reference directory, nothing implemented."
+            result.messages = [result.final_message]
         result.events = events
         result.usage = {"input_tokens": 0, "output_tokens": 0}
         result.finished = time.time()

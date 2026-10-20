@@ -28,16 +28,24 @@ What the reviewer sees, and only this:
 - the repository, checked out at the implementation commit, with workspace custom instructions
   (`AGENTS.md` and the like) turned off for the session and a read-only tool set (grep, glob,
   view, bash for running tests, no edit or create tools);
-- a sealed temporary directory, outside the harness work directory, holding exactly two files:
-  `diff.patch` and `change_description.md`. The description holds whatever the process produced to
-  describe the change under a neutral heading: the artifact file, if there is one, and the
-  implementer's final summary.
+- a sealed temporary directory, outside the harness work directory, holding exactly three files:
+  `requirements.md` (the brief, the same for every condition, and the standard for correctness),
+  `diff.patch` (the code change, with the artifact file excluded), and `change_description.md`
+  (whatever the process produced to describe the change under a neutral heading: the artifact, if
+  there is one, and every turn of the implementer's summary). The description is rated for
+  adequacy; correctness is never judged against it.
 
-It is not given the dialogue log, the transcripts, or the process's own review. The harness's git
-commit messages are condition-neutral (`eval: setup`, `eval: description document`,
-`eval: implementation`), so `git log` does not name the condition. After the stage the working
-tree is reset to the implementation commit and anything that moved is recorded. Reviewability is
-judged with the description the process actually leaves behind; that is deliberate.
+It is not given the dialogue log, the transcripts, or the process's own review. During the review
+the workspace `AGENTS.md` is restored to its seed content and the process directory is renamed out
+of reach, so the process's instructions cannot be read from the checkout; the harness's git commit
+messages are condition-neutral (`eval: setup`, `eval: description document`, `eval: implementation`).
+Tool calls that mention paths outside the workspace and the sealed directory are recorded as
+`out_of_bounds_reads`. After the stage the working tree is reset to the implementation commit.
+
+An answer that does not parse or validate gets one "JSON only" follow-up, then up to two fresh
+sessions; if it is still missing, `review.json` records a missing review and the verifier scores
+the review dimension 0 for that trial while `analyze.py` also reports the headline with missing
+reviews excluded. `scripts/rerun_fixed_review.py` re-reviews a saved trial for test-retest.
 
 The reviewer is not the same thing as the change-intent **process review** (the review-guidance
 instrument in `../mechanics`), which belongs to the process under test and runs only for

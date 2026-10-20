@@ -14,6 +14,8 @@ sys.path, so PYTHONPATH=. is required:
     PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1 -m gpt-5.4 -k 3
     PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline        -m gpt-5.4 -k 3
 
+-k 3 is a pilot to check the plumbing. A comparison needs k >= 20 per arm (see scripts/analyze.py).
+
 Optional environment forwarded to the driver: EVAL_CAP_AUTHOR, EVAL_CAP_IMPLEMENT, EVAL_CAP_REVIEW,
 EVAL_CAP_FIXED_REVIEW (seconds), EVAL_STAND_IN_MODEL, EVAL_ALLOW_SAME_REVIEWER=1.
 
@@ -103,8 +105,15 @@ class CopilotProcessAgent(CopilotCli):
         await self._upload_tree(environment, EVAL_ROOT / "driver", f"{REMOTE_EVAL}/driver")
         await self._upload_tree(environment, EVAL_ROOT / "processes" / self.PROCESS, f"{REMOTE_EVAL}/processes/{self.PROCESS}")
         await self._upload_tree(environment, EVAL_ROOT / "reviewer", f"{REMOTE_EVAL}/reviewer")
-        if self.FROZEN_INTENT:
-            src = Path(self.FROZEN_INTENT).expanduser().resolve()
+        frozen = self.FROZEN_INTENT or os.environ.get("EVAL_INTENT_FILE")  # HOST environment, read at run time
+        process_cfg = json.loads((EVAL_ROOT / "processes" / self.PROCESS / "process.json").read_text(encoding="utf-8"))
+        if process_cfg.get("author", {}).get("mode") == "frozen" or frozen:
+            if not frozen or not Path(frozen).expanduser().is_file():
+                raise FileNotFoundError(
+                    f"process {self.PROCESS} needs a frozen intent: export EVAL_INTENT_FILE=/path/to/intent.md on the host "
+                    f"(not --ae, which only reaches the container) or set FROZEN_INTENT on the agent class; got {frozen!r}"
+                )
+            src = Path(frozen).expanduser().resolve()
             self.REMOTE_INTENT = f"{REMOTE_EVAL}/intent/{src.name}"
             await self.exec_as_root(environment, command=f"mkdir -p {REMOTE_EVAL}/intent")
             await environment.upload_file(src, self.REMOTE_INTENT)
@@ -185,11 +194,12 @@ class ChangeIntentV1(CopilotProcessAgent):
 
 
 class ChangeIntentV1Frozen(CopilotProcessAgent):
-    """change-intent-v1 guidance with a pre-authored intent. Set the file with --ae EVAL_INTENT_FILE=/path or
-    subclass with FROZEN_INTENT set; the file is uploaded into the container and passed as --intent-file."""
+    """change-intent-v1 guidance with a pre-authored intent. Export EVAL_INTENT_FILE=/path on the HOST before
+    `harbor run` (Harbor's --ae only reaches the container), or subclass with FROZEN_INTENT set; the file is
+    uploaded into the container and passed as --intent-file. The run refuses to start without it."""
 
     PROCESS = "change-intent-v1-frozen"
-    FROZEN_INTENT = os.environ.get("EVAL_INTENT_FILE")
+    # The file comes from EVAL_INTENT_FILE in the HOST environment at run time (see run()).
 
     @staticmethod
     def name() -> str:

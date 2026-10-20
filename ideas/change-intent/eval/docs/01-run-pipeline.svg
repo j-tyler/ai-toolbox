@@ -56,7 +56,7 @@
       <rect x="900" y="270" width="230" height="96" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
       <text x="1015" y="292" text-anchor="middle" font-weight="600">4  Fixed review</text>
       <text x="1015" y="310" text-anchor="middle">read-only tools, custom instructions OFF</text>
-      <text x="1015" y="326" text-anchor="middle" fill="#6b7280">reviewer/fixed_reviewer.md, own model</text>
+      <text x="1015" y="326" text-anchor="middle" fill="#6b7280">judges against the brief; own model</text>
       <text x="1015" y="342" text-anchor="middle">returns JSON (schema-checked)</text>
       <text x="1015" y="358" text-anchor="middle" fill="#6b7280">identical for every condition</text>
     </g>
@@ -88,13 +88,13 @@
     <g fill="#1f2937">
       <rect x="352" y="432" width="200" height="72" rx="4" fill="#ffffff" stroke="#9ca3af"/>
       <text x="452" y="450" text-anchor="middle" font-weight="600">driver writes after stage 2</text>
-      <text x="452" y="468" text-anchor="middle">diff.patch</text>
+      <text x="452" y="468" text-anchor="middle">diff.patch (code only)</text>
       <text x="452" y="484" text-anchor="middle">change_description.md</text>
       <text x="452" y="500" text-anchor="middle" fill="#6b7280">intent (if any) + implementer summary</text>
 
       <rect x="570" y="432" width="200" height="72" rx="4" fill="#ffffff" stroke="#9ca3af"/>
       <text x="670" y="450" text-anchor="middle" font-weight="600">sealed temp dir (elsewhere)</text>
-      <text x="670" y="468" text-anchor="middle">copies of the two files above</text>
+      <text x="670" y="468" text-anchor="middle">requirements.md + the two files</text>
       <text x="670" y="484" text-anchor="middle" fill="#6b7280">the ONLY path stage 4 is given</text>
 
       <rect x="788" y="432" width="330" height="72" rx="4" fill="#ffffff" stroke="#9ca3af"/>
