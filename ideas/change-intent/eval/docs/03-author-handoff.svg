@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 690" width="1240" height="690" role="img" aria-label="How the author stage starts, loops with the stand-in, decides it is finished, and hands the committed intent to the implement stage, which has its own stopping rule.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+  <rect width="1240" height="690" fill="#ffffff"/>
+  <g font-family="ui-sans-serif, system-ui, Helvetica, Arial" font-size="12" fill="#1f2937">
+    <text x="24" y="30" font-size="16" font-weight="600">Start, loop, stop, hand off: the driver decides, not the agent</text>
+    <text x="24" y="48" fill="#6b7280">The agent never signals "done". After every turn the driver inspects the git repo; a committed intent file is the end of authoring.</text>
+
+    <!-- START -->
+    <rect x="24" y="80" width="220" height="64" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="134" y="102" text-anchor="middle" font-weight="600">START (driver)</text>
+    <text x="134" y="120" text-anchor="middle">sends the author prompt:</text>
+    <text x="134" y="136" text-anchor="middle" fill="#6b7280">"use skill X; ask me; commit; stop"</text>
+    <text x="134" y="162" text-anchor="middle" fill="#6b7280">records HEAD before = h0</text>
+
+    <!-- TURN -->
+    <rect x="300" y="80" width="220" height="64" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="410" y="102" text-anchor="middle" font-weight="600">Agent turn</text>
+    <text x="410" y="120" text-anchor="middle">skill explores, drafts, asks</text>
+    <text x="410" y="136" text-anchor="middle" fill="#6b7280">send_and_wait(..., timeout)</text>
+    <line x1="244" y1="112" x2="298" y2="112" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- ask_user loop -->
+    <rect x="300" y="186" width="220" height="56" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="410" y="208" text-anchor="middle" font-weight="600">mid-turn: ask_user tool call</text>
+    <text x="410" y="226" text-anchor="middle" fill="#6b7280">stand-in answers via the SDK handler</text>
+    <line x1="380" y1="144" x2="380" y2="184" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <line x1="440" y1="184" x2="440" y2="146" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="448" y="168" fill="#6b7280">answer</text>
+
+    <!-- IDLE check -->
+    <rect x="600" y="80" width="250" height="64" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+    <text x="725" y="102" text-anchor="middle" font-weight="600" fill="#ea580c">Turn ends (session idle)</text>
+    <text x="725" y="120" text-anchor="middle">driver looks at the repo:</text>
+    <text x="725" y="136" text-anchor="middle" fill="#6b7280">file in change-intent/?   HEAD past h0?</text>
+    <line x1="520" y1="112" x2="598" y2="112" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- branch A: committed -> END -->
+    <rect x="910" y="80" width="306" height="64" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+    <text x="1063" y="102" text-anchor="middle" font-weight="600" fill="#2563eb">END: intent committed</text>
+    <text x="1063" y="120" text-anchor="middle">stand-in says nothing more, even to</text>
+    <text x="1063" y="136" text-anchor="middle">"shall I proceed with implementation?"</text>
+    <line x1="850" y1="112" x2="908" y2="112" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+    <text x="879" y="104" text-anchor="middle" fill="#2563eb">yes</text>
+
+    <!-- branch B: file exists, not approved -->
+    <rect x="600" y="186" width="250" height="56" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="725" y="206" text-anchor="middle" font-weight="600">file exists, not approved yet</text>
+    <text x="725" y="224" text-anchor="middle" fill="#6b7280">stand-in, once: "show me the file first"</text>
+    <line x1="725" y1="144" x2="725" y2="184" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- branch C: no file / question -->
+    <rect x="600" y="266" width="250" height="56" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="725" y="286" text-anchor="middle" font-weight="600">no file, or the agent asked</text>
+    <text x="725" y="304" text-anchor="middle" fill="#6b7280">scripted reply: confirm · pick · approve</text>
+    <line x1="725" y1="242" x2="725" y2="264" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- back edges to the turn box -->
+    <path d="M 600 214 L 560 214 L 560 130 L 522 130" fill="none" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <path d="M 600 294 L 560 294 L 560 214" fill="none" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="566" y="258" fill="#6b7280">next</text>
+    <text x="566" y="272" fill="#6b7280">turn</text>
+
+    <!-- branch D: caps -->
+    <rect x="910" y="186" width="306" height="56" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="1063" y="206" text-anchor="middle" font-weight="600">END: cap hit (12 turns, or wall-clock)</text>
+    <text x="1063" y="224" text-anchor="middle" fill="#6b7280">session aborted; whatever exists is what there is</text>
+    <line x1="850" y1="214" x2="908" y2="214" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="879" y="206" text-anchor="middle" fill="#6b7280">too long</text>
+
+    <!-- After author: cleanup + outcome -->
+    <rect x="910" y="270" width="306" height="100" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+    <text x="1063" y="292" text-anchor="middle" font-weight="600" fill="#ea580c">After the author stage (driver)</text>
+    <g font-size="11">
+      <text x="922" y="312">1  revert edits outside change-intent/, flag them</text>
+      <text x="922" y="328">2  commit leftovers as "eval: change intent"</text>
+      <text x="922" y="344">3  outcome: approved / unapproved_file / no_file</text>
+      <text x="922" y="360" fill="#6b7280">    approved = the stand-in actually said so</text>
+    </g>
+    <line x1="1063" y1="144" x2="1063" y2="184" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)" stroke-dasharray="4 3"/>
+    <line x1="1063" y1="242" x2="1063" y2="268" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- frozen shortcut -->
+    <rect x="24" y="270" width="220" height="64" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="134" y="292" text-anchor="middle" font-weight="600">author.mode = frozen</text>
+    <text x="134" y="310" text-anchor="middle" font-size="11">copy --intent-file into change-intent/</text>
+    <text x="134" y="326" text-anchor="middle" font-size="11" fill="#6b7280">commit it; outcome = approved; no loop</text>
+    <path d="M 244 302 L 270 302 L 270 440 L 298 440" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-blue)"/>
+
+    <!-- HANDOFF -->
+    <path d="M 1063 370 L 1063 396 L 757 396 L 757 408" fill="none" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="300" y="410" width="916" height="116" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+    <text x="758" y="432" text-anchor="middle" font-weight="600">HAND-OFF: implement stage (a fresh session; nothing carries over except the repository)</text>
+    <text x="312" y="454">prompt:  "Implement the change described in the approved change intent at `change-intent/&lt;file&gt;.md`."   + the brief, if include_brief</text>
+    <text x="312" y="472">system prompt:  implementation-guidance.md appended, if the process has one.   AGENTS.md block loaded, if the process has one.</text>
+    <text x="312" y="490" fill="#6b7280">The intent travels by path inside the repo. The dialogue transcript does not travel: it stays in the sealed work dir.</text>
+    <text x="312" y="506" fill="#6b7280">No intent file at all → the prompt names the brief instead, and the trial is labelled by author_outcome.</text>
+
+    <!-- Implement stop rule -->
+    <rect x="300" y="556" width="580" height="110" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+    <text x="590" y="578" text-anchor="middle" font-weight="600" fill="#ea580c">Implement stop rule (driver, after each turn)</text>
+    <text x="312" y="600">done when:  (tree dirty OR HEAD moved)  AND  the final message does not end in a question</text>
+    <text x="312" y="618">otherwise:  nudge "continue until complete, do not wait for me", at most 2 times, then stop</text>
+    <text x="312" y="636">then:  commit --allow-empty "eval: implementation"; both reviews reset the tree to that commit</text>
+    <text x="312" y="654" fill="#6b7280">same wall-clock cap for every condition, independent of how long authoring took</text>
+    <line x1="590" y1="526" x2="590" y2="554" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- legend -->
+    <rect x="910" y="556" width="306" height="110" rx="6" fill="#ffffff" stroke="#9ca3af"/>
+    <text x="922" y="578" font-weight="600">Reading the colours</text>
+    <rect x="922" y="588" width="14" height="14" fill="#dbeafe" stroke="#2563eb"/><text x="944" y="600">intent-related step or artifact</text>
+    <rect x="922" y="610" width="14" height="14" fill="#fff7ed" stroke="#ea580c"/><text x="944" y="622">a decision the driver makes from repo state</text>
+    <rect x="922" y="632" width="14" height="14" fill="#ffffff" stroke="#1f2937"/><text x="944" y="644">agent or harness action</text>
+    <line x1="922" y1="656" x2="950" y2="656" stroke="#1f2937" stroke-dasharray="4 3"/><text x="958" y="660">optional, or only in some modes</text>
+  </g>
+</svg>

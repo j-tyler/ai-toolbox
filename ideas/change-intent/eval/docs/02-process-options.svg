@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 600" width="1240" height="600" role="img" aria-label="What differs between process versions: a grid of the inputs each stage receives, for baseline, change-intent-v1, and change-intent-v1-frozen, plus the files you add to make a new option.">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/>
+    </marker>
+  </defs>
+  <rect width="1240" height="600" fill="#ffffff"/>
+  <g font-family="ui-sans-serif, system-ui, Helvetica, Arial" font-size="12" fill="#1f2937">
+    <text x="24" y="30" font-size="16" font-weight="600">What you can vary: every input a stage receives, by process version</text>
+    <text x="24" y="48" fill="#6b7280">Grey rows are harness-owned and identical for every condition. Blue cells are process-owned: these are the "intent options".</text>
+
+    <!-- grid: 1 label col + 3 process cols -->
+    <!-- column headers -->
+    <g font-weight="600">
+      <rect x="24" y="68" width="300" height="34" fill="#f3f4f6" stroke="#9ca3af"/>
+      <text x="36" y="90">Input, by stage</text>
+      <rect x="324" y="68" width="230" height="34" fill="#f3f4f6" stroke="#9ca3af"/>
+      <text x="439" y="90" text-anchor="middle">baseline</text>
+      <rect x="554" y="68" width="230" height="34" fill="#f3f4f6" stroke="#9ca3af"/>
+      <text x="669" y="90" text-anchor="middle">change-intent-v1</text>
+      <rect x="784" y="68" width="230" height="34" fill="#f3f4f6" stroke="#9ca3af"/>
+      <text x="899" y="90" text-anchor="middle">change-intent-v1-frozen</text>
+    </g>
+
+    <!-- rows: y from 102, height 30 -->
+    <!-- helper visuals: process-owned cell = #dbeafe; harness = #ffffff; absent = "—" -->
+    <g>
+      <!-- row 1 -->
+      <rect x="24" y="102" width="300" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="36" y="121">Workspace: agents_block → AGENTS.md</text>
+      <rect x="324" y="102" width="230" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="439" y="121" text-anchor="middle" fill="#9ca3af">—</text>
+      <rect x="554" y="102" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="669" y="121" text-anchor="middle">AGENTS.block.md</text>
+      <rect x="784" y="102" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="899" y="121" text-anchor="middle">AGENTS.block.md</text>
+      <!-- row 2 -->
+      <rect x="24" y="132" width="300" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="36" y="151">Author: mode</text>
+      <rect x="324" y="132" width="230" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="439" y="151" text-anchor="middle" fill="#9ca3af">none</text>
+      <rect x="554" y="132" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="669" y="151" text-anchor="middle">skill  (dialogue with stand-in)</text>
+      <rect x="784" y="132" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="899" y="151" text-anchor="middle">frozen  (--intent-file)</text>
+      <!-- row 3 -->
+      <rect x="24" y="162" width="300" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="36" y="181">Author: skill / skills_dir</text>
+      <rect x="324" y="162" width="230" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="439" y="181" text-anchor="middle" fill="#9ca3af">—</text>
+      <rect x="554" y="162" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="669" y="181" text-anchor="middle">skills/change-intent-author/SKILL.md</text>
+      <rect x="784" y="162" width="230" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="899" y="181" text-anchor="middle" fill="#9ca3af">— (intent supplied)</text>
+      <!-- row 4 -->
+      <rect x="24" y="192" width="300" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="36" y="211">Author: stand-in policy</text>
+      <rect x="324" y="192" width="690" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="669" y="211" text-anchor="middle" fill="#6b7280">harness-owned: confirm brief, take recommended option, approve, stop when committed</text>
+      <!-- row 5 -->
+      <rect x="24" y="222" width="300" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="36" y="241">Implement: prompt text</text>
+      <rect x="324" y="222" width="690" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="669" y="241" text-anchor="middle" fill="#6b7280">harness-owned, neutral: "Implement the change described in {source}. Run the tests. Summarise."</text>
+      <!-- row 6 -->
+      <rect x="24" y="252" width="300" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="36" y="271">Implement: {source}</text>
+      <rect x="324" y="252" width="230" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="439" y="271" text-anchor="middle">the brief</text>
+      <rect x="554" y="252" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="669" y="271" text-anchor="middle">change-intent/&lt;date&gt;-&lt;slug&gt;.md</text>
+      <rect x="784" y="252" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="899" y="271" text-anchor="middle">change-intent/&lt;your file&gt;.md</text>
+      <!-- row 7 -->
+      <rect x="24" y="282" width="300" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="36" y="301">Implement: include_brief</text>
+      <rect x="324" y="282" width="230" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="439" y="301" text-anchor="middle">always (no intent)</text>
+      <rect x="554" y="282" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="669" y="301" text-anchor="middle">true  (set false → intent alone)</text>
+      <rect x="784" y="282" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="899" y="301" text-anchor="middle">true  (set false → intent alone)</text>
+      <!-- row 8 -->
+      <rect x="24" y="312" width="300" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="36" y="331">Implement: system_append (guidance)</text>
+      <rect x="324" y="312" width="230" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="439" y="331" text-anchor="middle" fill="#9ca3af">—</text>
+      <rect x="554" y="312" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="669" y="331" text-anchor="middle">implementation-guidance.md</text>
+      <rect x="784" y="312" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="899" y="331" text-anchor="middle">implementation-guidance.md</text>
+      <!-- row 9 -->
+      <rect x="24" y="342" width="300" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="36" y="361">Process review: system_append</text>
+      <rect x="324" y="342" width="230" height="30" fill="#ffffff" stroke="#e5e7eb"/><text x="439" y="361" text-anchor="middle" fill="#9ca3af">no review stage</text>
+      <rect x="554" y="342" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="669" y="361" text-anchor="middle">review-guidance.md</text>
+      <rect x="784" y="342" width="230" height="30" fill="#dbeafe" stroke="#e5e7eb"/><text x="899" y="361" text-anchor="middle">review-guidance.md</text>
+      <!-- row 10 -->
+      <rect x="24" y="372" width="300" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="36" y="391">Fixed review: instructions, inputs, model</text>
+      <rect x="324" y="372" width="690" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="669" y="391" text-anchor="middle" fill="#6b7280">harness-owned: fixed_reviewer.md, diff.patch + change_description.md, --reviewer-model, AGENTS.md off</text>
+      <!-- row 11 -->
+      <rect x="24" y="402" width="300" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="36" y="421">Model, brief, seed repo, hidden tests, caps</text>
+      <rect x="324" y="402" width="690" height="30" fill="#f3f4f6" stroke="#e5e7eb"/><text x="669" y="421" text-anchor="middle" fill="#6b7280">harness-owned: identical</text>
+    </g>
+
+    <!-- right panel: what you add -->
+    <rect x="1034" y="68" width="182" height="364" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
+    <text x="1125" y="90" text-anchor="middle" font-weight="600" fill="#ea580c">A new option =</text>
+    <text x="1125" y="108" text-anchor="middle" font-weight="600" fill="#ea580c">one directory</text>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">
+      <text x="1046" y="136">processes/my-shape/</text>
+      <text x="1046" y="154">  process.json</text>
+      <text x="1046" y="172">  AGENTS.block.md</text>
+      <text x="1046" y="190">  skills/&lt;skill&gt;/</text>
+      <text x="1046" y="208">    SKILL.md</text>
+      <text x="1046" y="226">  implementation-</text>
+      <text x="1046" y="244">    guidance.md</text>
+      <text x="1046" y="262">  review-guidance.md</text>
+    </g>
+    <text x="1046" y="292" fill="#1f2937">+ 2 lines in</text>
+    <text x="1046" y="308" fill="#1f2937">agents/copilot_process.py</text>
+    <text x="1046" y="336" fill="#6b7280">or, for an intent</text>
+    <text x="1046" y="352" fill="#6b7280">artifact alone:</text>
+    <text x="1046" y="370" fill="#1f2937">--intent-file x.md</text>
+    <text x="1046" y="386" fill="#1f2937">under the frozen</text>
+    <text x="1046" y="402" fill="#1f2937">process</text>
+
+    <!-- bottom: which rows answer which question -->
+    <rect x="24" y="452" width="1192" height="132" rx="6" fill="#ffffff" stroke="#9ca3af"/>
+    <text x="36" y="474" font-weight="600">Which rows to vary for which question (hold every other row constant)</text>
+    <g>
+      <text x="36" y="498" font-weight="600">Whole process helps?</text><text x="260" y="498">vary the column</text>
+      <text x="36" y="518" font-weight="600">Intent artifact A vs B?</text><text x="260" y="518">vary --intent-file under the frozen process</text>
+      <text x="36" y="538" font-weight="600">Guidance helps, same intent?</text><text x="260" y="538">vary implement.system_append under the frozen process</text>
+      <text x="640" y="498" font-weight="600">Authoring skill writes better intents?</text><text x="900" y="498">vary author.skill, then freeze its output</text>
+      <text x="640" y="518" font-weight="600">Intent carries the information alone?</text><text x="900" y="518">implement.include_brief = false</text>
+      <text x="640" y="538" font-weight="600">Does the AGENTS.md block matter?</text><text x="900" y="538">agents_block = null, guidance unchanged</text>
+    </g>
+    <text x="36" y="568" fill="#6b7280">The headline score (correctness, fixed review, handoff) is computed from grey rows only, so a difference between columns is attributable to the blue cells you changed.</text>
+  </g>
+</svg>

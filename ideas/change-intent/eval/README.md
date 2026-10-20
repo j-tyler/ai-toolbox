@@ -12,6 +12,12 @@ and confounds (see "What the review changed"). Real Copilot runs and Harbor cont
 wired up but were not executed in the authoring environment, which has no Copilot-entitled token
 and no Docker daemon.
 
+## Diagrams
+
+- [One run, stage by stage](docs/01-run-pipeline.svg): what each stage may read and write, the sealed artifact directory, and the verifier.
+- [What you can vary](docs/02-process-options.svg): every input a stage receives, by process version, and which row to vary for which question.
+- [Start, loop, stop, hand off](docs/03-author-handoff.svg): how the driver decides the authoring dialogue is over and hands the committed intent to implementation.
+
 ## Pieces
 
 | Piece | Where | Third party? |
