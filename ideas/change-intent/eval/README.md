@@ -61,14 +61,17 @@ so "files next to the ledger file" is checked, not assumed.
 3. **Author stage**, by `author.mode`. `skill`: one SDK session with the process's authoring skill
    loaded; its questions reach a **stand-in author** (`driver/stand_in.py`) through the SDK's
    `on_user_input_request` handler for `ask_user` calls and through scripted replies for prose
-   questions. The dialogue ends when the intent file exists and is committed, whatever the agent
-   asks next; an existing but unapproved file gets one request to show it for approval. The stage
-   records `author_outcome` (approved, unapproved_file, no_file) and reverts and flags anything the
-   author touched outside the intent directory. `frozen`: a supplied intent is committed with no
-   dialogue, which removes authoring variance. `none`: no intent.
+   questions. The dialogue ends when a commit made during the stage touches the intent directory,
+   whatever the agent asks next; an existing but uncommitted draft gets one request to show it for
+   approval. The stage records `author_outcome` (approved, unapproved_file, no_file) and which cue
+   produced the approval, and restores and flags anything the author changed outside the intent
+   directory, committed or not. `frozen`: a supplied file is committed with no dialogue, which
+   removes authoring variance. `none`: no artifact. Harness commit messages are condition-neutral.
+   `driver/test_author_stage.py` pins these rules.
 4. **Implement stage**: a fresh session. The prompt is the same neutral text for every condition
-   ("implement the change described in {source}", where source is the intent path or the brief),
-   with the brief attached when `implement.include_brief` is true. Everything process-specific
+   ("implement the change described in the {noun} at {path}", or "in the brief below"), with the
+   brief attached when `implement.include_brief` is true. The noun comes from `intent.noun` in
+   `process.json`, so a spec or a plan is named as such. Everything process-specific
    arrives through `implement.system_append` and the agents-file block, never through the harness
    prompt. The result is committed as `eval: implementation` (an empty marker commit if the agent
    already committed), and that commit is recorded.
@@ -78,10 +81,12 @@ so "files next to the ledger file" is checked, not assumed.
 6. **Review stage** (processes with a `review` section): the process's review guidance is
    appended to a read-only session that assesses the diff against the intent and returns a met /
    not met / cannot verify table per claim as its final message; the driver saves it.
-7. **Fixed review** (every condition): a second read-only session runs
-   [`reviewer/fixed_reviewer.md`](reviewer/fixed_reviewer.md) with workspace custom instructions
-   **off**, so the change-intent `AGENTS.md` block cannot reach it, and with exactly two inputs
-   copied into a sealed directory outside the workspace: `diff.patch` and `change_description.md`.
+7. **Fixed review** (every condition): a second read-only session (the bundled runtime's own
+   read-only tool set) runs [`reviewer/fixed_reviewer.md`](reviewer/fixed_reviewer.md) with
+   workspace custom instructions **off**, so the change-intent `AGENTS.md` block cannot reach it,
+   and with exactly two inputs copied into a sealed temporary directory outside both the workspace
+   and the harness work directory: `diff.patch` and `change_description.md`. If the first answer is
+   not JSON the driver asks once more for JSON only.
    It returns JSON against `REVIEW_SCHEMA` (findings with location, severity, and confidence; an
    overall verdict; five reviewability ratings; effort to review; how many claims it checked and
    which it could not verify). The driver validates the JSON and keeps the raw message. The
@@ -154,9 +159,14 @@ export COPILOT_GITHUB_TOKEN=... EVAL_REVIEWER_MODEL=claude-sonnet-4.5
 PYTHONPATH=. harbor run -p tasks/ledger-budgets -a oracle -k 1                                    # task sanity check: correctness 1.0
 PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1 -m gpt-5.4 -k 3
 PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline        -m gpt-5.4 -k 3
+EVAL_INTENT_FILE=path/to/intent.md EVAL_LABELS=intent=A \
+PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1Frozen -m gpt-5.4 -k 3
 harbor view jobs
 scripts/analyze.py ~/jobs/<job> --ref baseline
 ```
+
+The task's agent timeout is 9000 s; the driver is given a 7800 s deadline so it always finishes,
+resets, and copies its artifacts inside that window.
 
 `PYTHONPATH=.` is required: Harbor imports `module:Class` with importlib and does not add the
 current directory to `sys.path`.
@@ -251,10 +261,43 @@ M times each), hidden author preferences for the stand-in so authoring can gain 
 direct intent grader and test-strength (mutant) measures, a blinded diff-only reviewer arm, more
 tasks and attempts, a separately pinned model for the model stand-in, and digest-pinned images.
 
+## Second review pass
+
+The same two-frame, one-adjudicator workflow was run again on the hardened harness (saved as
+`docs/adjudication-2026-10-20-pass2.json`). It found six of the first pass's eleven changes landed
+cleanly, four with residuals, and one regressed: the author stop rule counted the setup commit's
+placeholder as "intent committed", so the dialogue ended as soon as any draft file existed and
+committed contamination was never checked. Changes made from the second pass:
+
+1. Author stage: committed means a commit made during the stage touched the intent directory;
+   contamination is checked in committed changes as well as uncommitted ones and restored to the
+   pre-stage state; `agent_committed` is measured before the harness's marker commit; the stand-in
+   no longer treats "final" as an approval cue and records which cue fired; an offline test file
+   pins all of this.
+2. Fixed reviewer inputs are sealed in a temporary directory outside the work directory, the
+   rendered-prompt hash no longer contains a random path, and harness commit messages no longer
+   name the condition.
+3. Time budget: the task timeout has margin over the stage caps and the Harbor agent passes an
+   absolute deadline; the handoff criterion counts only the stages every condition runs, with the
+   process's own stages reported as a diagnostic; one JSON-only retry when the reviewer answers in
+   prose; the read-only tool set is the one the bundled runtime's explore agent declares.
+4. `analyze.py` counts reward-less trials in both layouts, prints intention-to-treat and
+   per-protocol rows, and per-stage cost; it has a self-test.
+5. The harness prompts are shape-neutral: `intent.noun` in `process.json` names the artifact.
+6. Reward Kit pinned to an exact version and warmed into the image; the Harbor agent forwards the
+   harness git SHA; the manifest hashes every driver and reviewer file and records the CLI version,
+   the tool list, the frozen intent's source, and free-form `--label key=value` tags.
+
+Still deferred, from both passes: the full intent-isolation protocol, hidden author preferences,
+direct intent and test-strength graders, a blinded reviewer arm, multi-file artifacts, per-stage
+agents blocks, structural (not keyword) approval detection, and verdict calibration against the
+hidden tests.
+
 ## What was and was not verified here
 
 Verified in the authoring environment: hidden tests versus seed and reference; the driver end to
 end in fake mode for baseline, change-intent-v1, and change-intent-v1-frozen through every stage;
+the offline tests in `driver/test_author_stage.py` and `scripts/test_analyze.py`;
 Reward Kit grading of the resulting workspaces, including through `uvx` exactly as `test.sh`
 runs it; headline parity across conditions with identical outputs; the stand-in stopping rules;
 verifier survival on malformed reviewer output; the Harbor agent classes import against Harbor

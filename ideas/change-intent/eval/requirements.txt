@@ -1,5 +1,5 @@
 # Driver and local grading. Harbor itself is only needed for container runs.
 github-copilot-sdk==1.0.23
-harbor-rewardkit==0.2.*
+harbor-rewardkit==0.2.3
 pytest>=8
 # For Harbor runs:  pip install harbor   (or: uv tool install harbor)

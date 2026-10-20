@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 from functools import lru_cache
 from pathlib import Path
 
@@ -30,6 +31,7 @@ HIDDEN = Path(__file__).resolve().parent / "__hidden"  # "__" prefix: Reward Kit
 SEED_TESTS = ("tests/test_money.py", "tests/test_cli.py")
 SEED_TEST_COUNT = 17
 PYTEST_TIMEOUT_SEC = 240
+_PYTEST_LOCKS: dict = {}
 
 
 # ---- running pytest ---------------------------------------------------------------------------
@@ -41,6 +43,12 @@ def _python() -> str:
 
 @lru_cache(maxsize=None)
 def _pytest_cached(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
+    # Reward Kit runs criteria on threads; the lock makes the hidden suite run once per verification.
+    with _PYTEST_LOCKS.setdefault((args, cwd), threading.Lock()):
+        return _pytest_run(args, cwd)
+
+
+def _pytest_run(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
     env = dict(os.environ, LEDGER_WORKSPACE=cwd, PYTHONDONTWRITEBYTECODE="1")
     try:
         proc = subprocess.run(
@@ -150,13 +158,32 @@ def implementation_committed(workspace: Path) -> bool:
     return head == impl and not _git(workspace, "status", "--porcelain").strip()
 
 
+HEADLINE_STAGES = ("implement", "fixed_review")  # the stages every condition runs
+
+
 @criterion(shared=True)
 def summary_recorded(workspace: Path) -> bool:
-    """The driver wrote .eval/summary.json and no stage errored or timed out."""
+    """The driver wrote .eval/summary.json, no harness error, and the stages every condition runs
+    (implement, fixed review) finished without error or timeout. Process-only stages are diagnostics."""
     summary = _json(workspace, "summary.json")
     if not summary or summary.get("harness_error"):
         return False
-    return all(s.get("status") == "ok" and not s.get("timed_out") for s in summary.get("stages", {}).values())
+    stages = summary.get("stages", {})
+    return all(
+        stages.get(name, {}).get("status") == "ok" and not stages.get(name, {}).get("timed_out")
+        for name in HEADLINE_STAGES
+    )
+
+
+@criterion(shared=True)
+def process_stages_clean(workspace: Path) -> float:
+    """Diagnostic: share of the process's own stages (author, review) that finished ok; 1.0 when it has none."""
+    summary = _json(workspace, "summary.json") or {}
+    stages = summary.get("stages", {})
+    own = [s for name, s in stages.items() if name not in HEADLINE_STAGES]
+    if not own:
+        return 1.0
+    return sum(1 for s in own if s.get("status") == "ok" and not s.get("timed_out")) / len(own)
 
 
 # ---- review: the fixed reviewer's verdict, turned into numbers (no re-judging here) -----------

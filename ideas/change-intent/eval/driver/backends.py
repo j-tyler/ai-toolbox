@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import shutil
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +49,7 @@ class StageResult:
     error: str | None = None
     timed_out: bool = False
     resolved_model: str | None = None
+    retries: int = 0
 
     @property
     def seconds(self) -> float:
@@ -92,6 +94,8 @@ def _event_to_dict(ev: Any) -> dict[str, Any]:
 
 
 USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens")
+READ_ONLY_TOOLS = ("grep", "glob", "view", "bash", "read_bash", "stop_bash", "lsp")
+STRUCTURED_OUTPUT_MISSING = "Run completed without a structured assistant response"
 
 
 def _camel(key: str) -> str:
@@ -229,10 +233,11 @@ class CopilotBackend(Backend):
             if spec.extra_dirs:
                 session_kwargs["additional_directories"] = spec.extra_dirs
             if spec.read_only:
-                # Reviewer sessions: no edit/create tools. Names follow the Copilot SDK custom-agent docs
-                # (view, grep, glob, bash); bash stays so the reviewer can run tests. The driver also
-                # resets the working tree after a read-only stage and records anything that changed.
-                session_kwargs["excluded_tools"] = ["edit", "create", "write", "apply_patch", "multi_edit"]
+                # Reviewer sessions get the read-only tool set the bundled runtime's own "explore" agent
+                # declares (definitions/explore.agent.yaml in cli 1.0.100): no edit/create tools; bash
+                # stays so the reviewer can run tests. The driver also resets the working tree after a
+                # read-only stage and records anything that changed.
+                session_kwargs["available_tools"] = list(READ_ONLY_TOOLS)
             session = await self._client.create_session(**session_kwargs)
 
             message = spec.prompt
@@ -258,6 +263,14 @@ class CopilotBackend(Backend):
                     except Exception:
                         pass
                     break
+                except RuntimeError as exc:
+                    if spec.response_schema is not None and str(exc).startswith(STRUCTURED_OUTPUT_MISSING):
+                        # The model answered in prose instead of the schema; hand an empty message to the
+                        # driver's next_turn so it can ask once more for JSON only.
+                        ev = None
+                        result.retries += 1
+                    else:
+                        raise
                 result.final_message = _message_text(ev)
                 if result.turns >= spec.max_turns:
                     break
@@ -316,17 +329,33 @@ class FakeBackend(Backend):
             has_tests = any((workspace / "tests").glob("test_*.py"))
             result.final_message = json.dumps(FAKE_REVIEW if has_tests else {**FAKE_REVIEW, "overall_correctness": "uncertain"})
         elif spec.name == "author":
+            # Mirrors a real skill: confirm the brief, write an UNCOMMITTED draft, ask an open question,
+            # get asked for the file, present it, get approval, commit, then ask whether to implement.
+            # The driver's stop rule must only end the dialogue after the commit.
             result.turns += 1
             ans, _ = await on_user_input("Is this brief accurate?", ["Yes, proceed", "No, let me restate"])
             events.append({"type": "fake.ask_user", "data": {"answer": ans}})
-            msg = "Here is the proposed intent. Do you approve?"
+            target = workspace / self.intent_dir
+            target.mkdir(parents=True, exist_ok=True)
+            draft = target / f"{time.strftime('%Y-%m-%d')}-ledger-budgets.md"
+            draft.write_text(FAKE_INTENT, encoding="utf-8")
+            script = [
+                "I explored the code and drafted a file. Should I also refactor the CLI while I am here?",
+                "Here is the complete proposed document:\n\n" + FAKE_INTENT + "\n\nDo you approve?",
+            ]
+            for msg in script:
+                follow = await next_turn(msg)
+                result.turns += 1
+                events.append({"type": "fake.message", "data": {"content": msg[:200], "reply": follow}})
+                if follow is None:
+                    break
+            subprocess.run(["git", "add", "-A"], cwd=workspace, check=False, capture_output=True)
+            subprocess.run(["git", "commit", "-q", "-m", "Add description document"], cwd=workspace, check=False, capture_output=True)
+            msg = "Committed as " + str(draft.relative_to(workspace)) + ". Shall I proceed with the implementation?"
             follow = await next_turn(msg)
             result.turns += 1
             events.append({"type": "fake.message", "data": {"content": msg, "reply": follow}})
-            target = workspace / self.intent_dir
-            target.mkdir(parents=True, exist_ok=True)
-            (target / f"{time.strftime('%Y-%m-%d')}-ledger-budgets.md").write_text(FAKE_INTENT, encoding="utf-8")
-            result.final_message = "Approved intent written and committed."
+            result.final_message = msg
         else:
             result.turns += 1
             if self.reference_dir and self.reference_dir.exists():

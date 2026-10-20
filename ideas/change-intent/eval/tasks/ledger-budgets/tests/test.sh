@@ -8,4 +8,4 @@
 set -u
 export LEDGER_WORKSPACE=/app
 export LEDGER_PYTHON="$(command -v python3)"
-uvx --from 'harbor-rewardkit==0.2.*' rewardkit /tests
+uvx --from 'harbor-rewardkit==0.2.3' rewardkit /tests

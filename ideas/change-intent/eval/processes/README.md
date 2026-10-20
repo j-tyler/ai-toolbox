@@ -1,8 +1,10 @@
 # Process versions
 
 A process version is one experimental condition: everything the agent is told beyond the brief.
-Each is a directory with a `process.json` and the files it names. The driver reads only
-`process.json`; nothing process-specific is hard-coded in the harness.
+Each is a directory with a `process.json` and the files it names. The harness owns the stage
+prompts, the stand-in author, and the fixed reviewer, and keeps their wording neutral;
+process-specific wording enters only through `process.json` fields (the files it names and
+`intent.noun`, the word the harness uses for the artifact).
 
 ```json
 {
@@ -13,7 +15,7 @@ Each is a directory with a `process.json` and the files it names. The driver rea
   "implement": { "system_append": "implementation-guidance.md", "prompt_file": null,
                  "include_brief": true, "custom_instructions": true },
   "review":    { "system_append": "review-guidance.md", "prompt_file": null, "custom_instructions": true },
-  "intent":    { "dir": "change-intent",
+  "intent":    { "dir": "change-intent", "noun": "change intent",
                  "claim_sections": ["Acceptance criteria", "Invariants"],
                  "required_sections": ["Outcomes", "Why", "Constraints", "Acceptance criteria", "Invariants", "Out of scope"] }
 }
@@ -29,7 +31,8 @@ Each is a directory with a `process.json` and the files it names. The driver rea
 | `*.custom_instructions` | Whether that session loads `AGENTS.md` and the like from the workspace. |
 | `implement.include_brief` | Attach the brief alongside the intent. `false` makes the intent the implementer's only source. |
 | `review` | Null for no process-owned review pass. The fixed harness reviewer runs regardless. |
-| `intent` | Where the intent lives and which sections hold claims; the verifier reads this from the copied `process.json`. |
+| `intent.dir`, `intent.noun` | Where the artifact lives, and what the harness calls it in its prompts and the stand-in's replies ("change intent", "spec", "plan"; default "description document"). |
+| `intent.claim_sections`, `intent.required_sections` | Which `## ` sections hold claims and which must be present. Used only by the weight-zero diagnostics; the verifier reads them from the copied `process.json`. |
 
 ## Versions here
 

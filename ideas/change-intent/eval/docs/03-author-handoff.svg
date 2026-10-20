@@ -38,7 +38,7 @@
     <rect x="600" y="80" width="250" height="64" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
     <text x="725" y="102" text-anchor="middle" font-weight="600" fill="#ea580c">Turn ends (session idle)</text>
     <text x="725" y="120" text-anchor="middle">driver looks at the repo:</text>
-    <text x="725" y="136" text-anchor="middle" fill="#6b7280">file in change-intent/?   HEAD past h0?</text>
+    <text x="725" y="136" text-anchor="middle" fill="#6b7280">file in intent dir?  committed since h0?</text>
     <line x1="520" y1="112" x2="598" y2="112" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
 
     <!-- branch A: committed -> END -->
@@ -78,8 +78,8 @@
     <rect x="910" y="270" width="306" height="100" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
     <text x="1063" y="292" text-anchor="middle" font-weight="600" fill="#ea580c">After the author stage (driver)</text>
     <g font-size="11">
-      <text x="922" y="312">1  revert edits outside change-intent/, flag them</text>
-      <text x="922" y="328">2  commit leftovers as "eval: change intent"</text>
+      <text x="922" y="312">1  revert edits outside intent dir (even committed)</text>
+      <text x="922" y="328">2  commit leftovers as "eval: description document"</text>
       <text x="922" y="344">3  outcome: approved / unapproved_file / no_file</text>
       <text x="922" y="360" fill="#6b7280">    approved = the stand-in actually said so</text>
     </g>
@@ -97,7 +97,7 @@
     <path d="M 1063 370 L 1063 396 L 757 396 L 757 408" fill="none" stroke="#1f2937" stroke-width="1.5" marker-end="url(#arrow)"/>
     <rect x="300" y="410" width="916" height="116" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
     <text x="758" y="432" text-anchor="middle" font-weight="600">HAND-OFF: implement stage (a fresh session; nothing carries over except the repository)</text>
-    <text x="312" y="454">prompt:  "Implement the change described in the approved change intent at `change-intent/&lt;file&gt;.md`."   + the brief, if include_brief</text>
+    <text x="312" y="454">prompt:  "Implement the change described in the {noun} at `&lt;intent.dir&gt;/&lt;file&gt;.md`."   + the brief, if include_brief</text>
     <text x="312" y="472">system prompt:  implementation-guidance.md appended, if the process has one.   AGENTS.md block loaded, if the process has one.</text>
     <text x="312" y="490" fill="#6b7280">The intent travels by path inside the repo. The dialogue transcript does not travel: it stays in the sealed work dir.</text>
     <text x="312" y="506" fill="#6b7280">No intent file at all → the prompt names the brief instead, and the trial is labelled by author_outcome.</text>

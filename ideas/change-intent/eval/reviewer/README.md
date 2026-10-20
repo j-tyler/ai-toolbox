@@ -18,15 +18,26 @@ fresh, and say so:
   clarity.
 
 The schema is in `driver/run_process.py` (`REVIEW_SCHEMA`). The driver passes it as the SDK's
-`response_schema`, saves the parsed result to `.eval/review.json`, and the raw final message to
-`.eval/review_raw.md`. The reviewer model is pinned separately from the implementer
-(`--reviewer-model`, or `EVAL_REVIEWER_MODEL` in Harbor runs) so it can come from a different
-vendor.
+`response_schema`, asks once more for JSON only if the first answer does not parse, validates the
+result, and saves it to `review.json` with the raw final message in `review_raw.md`. The reviewer
+model must differ from the implementer's (`--reviewer-model`, or `EVAL_REVIEWER_MODEL` in Harbor
+runs); the driver refuses a same-model reviewer unless told otherwise.
 
-What the reviewer sees is the repository after the change plus `.eval/change_description.md`,
-which holds whatever the process produced to describe the change: the approved intent file for
-change-intent processes, the implementer's final summary for the baseline. That is deliberate:
-reviewability is judged with the description the process actually leaves behind.
+What the reviewer sees, and only this:
+
+- the repository, checked out at the implementation commit, with workspace custom instructions
+  (`AGENTS.md` and the like) turned off for the session and a read-only tool set (grep, glob,
+  view, bash for running tests, no edit or create tools);
+- a sealed temporary directory, outside the harness work directory, holding exactly two files:
+  `diff.patch` and `change_description.md`. The description holds whatever the process produced to
+  describe the change under a neutral heading: the artifact file, if there is one, and the
+  implementer's final summary.
+
+It is not given the dialogue log, the transcripts, or the process's own review. The harness's git
+commit messages are condition-neutral (`eval: setup`, `eval: description document`,
+`eval: implementation`), so `git log` does not name the condition. After the stage the working
+tree is reset to the implementation commit and anything that moved is recorded. Reviewability is
+judged with the description the process actually leaves behind; that is deliberate.
 
 The reviewer is not the same thing as the change-intent **process review** (the review-guidance
 instrument in `../mechanics`), which belongs to the process under test and runs only for

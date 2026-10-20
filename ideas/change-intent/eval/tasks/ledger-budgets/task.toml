@@ -11,7 +11,7 @@ description = "Extend a small stdlib CLI with budgets, recurring transactions, C
 timeout_sec = 900.0
 
 [agent]
-timeout_sec = 7200.0
+timeout_sec = 9000.0  # sum of default stage caps (7800 via --deadline-epoch) plus margin for start-up, abort, git, copy
 
 [environment]
 build_timeout_sec = 900.0

@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import subprocess
 from pathlib import Path
 
 from harbor.agents.installed.copilot_cli import CopilotCli
@@ -43,6 +44,9 @@ class CopilotProcessAgent(CopilotCli):
 
     PROCESS: str = ""  # name of a directory under eval/processes/
     STAND_IN: str = "scripted"
+    FROZEN_INTENT: str | None = None  # local path to an intent file for author.mode = frozen
+    REMOTE_INTENT: str | None = None
+    DRIVER_BUDGET_SEC: int = 7800
 
     @staticmethod
     def name() -> str:
@@ -86,13 +90,24 @@ class CopilotProcessAgent(CopilotCli):
             env.update(connection.env)
         for key in ("COPILOT_PROVIDER_TYPE", "COPILOT_PROVIDER_BASE_URL", "COPILOT_PROVIDER_API_KEY", "COPILOT_PROVIDER_WIRE_API",
                     "EVAL_REVIEWER_MODEL", "EVAL_STAND_IN_MODEL", "EVAL_CAP_AUTHOR", "EVAL_CAP_IMPLEMENT", "EVAL_CAP_REVIEW",
-                    "EVAL_CAP_FIXED_REVIEW"):
+                    "EVAL_CAP_FIXED_REVIEW", "EVAL_LABELS"):
             if key in os.environ and key not in env:
                 env[key] = os.environ[key]
+        # Provenance computed on the host, where the harness checkout is; the container has no .git.
+        try:
+            env["EVAL_HARNESS_SHA"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=EVAL_ROOT, text=True, capture_output=True).stdout.strip()
+            env["EVAL_HARNESS_DIRTY"] = "1" if subprocess.run(["git", "status", "--porcelain", "--", "."], cwd=EVAL_ROOT, text=True, capture_output=True).stdout.strip() else "0"
+        except Exception:
+            pass
 
         await self._upload_tree(environment, EVAL_ROOT / "driver", f"{REMOTE_EVAL}/driver")
         await self._upload_tree(environment, EVAL_ROOT / "processes" / self.PROCESS, f"{REMOTE_EVAL}/processes/{self.PROCESS}")
         await self._upload_tree(environment, EVAL_ROOT / "reviewer", f"{REMOTE_EVAL}/reviewer")
+        if self.FROZEN_INTENT:
+            src = Path(self.FROZEN_INTENT).expanduser().resolve()
+            self.REMOTE_INTENT = f"{REMOTE_EVAL}/intent/{src.name}"
+            await self.exec_as_root(environment, command=f"mkdir -p {REMOTE_EVAL}/intent")
+            await environment.upload_file(src, self.REMOTE_INTENT)
         await self._upload_config_text(environment, content=instruction, remote_path=REMOTE_BRIEF, filename="brief.md")
 
         model_flag = ""
@@ -111,16 +126,19 @@ class CopilotProcessAgent(CopilotCli):
             provider_flag = f"--provider-json {shlex.quote(json.dumps(provider))}"
 
         same_reviewer_flag = "--allow-same-reviewer" if os.environ.get("EVAL_ALLOW_SAME_REVIEWER") == "1" else ""
-        # One shell command: run the driver, then ALWAYS copy artifacts next to Harbor's agent logs, then
-        # exit with the driver's code (Harbor raises on non-zero and would otherwise skip the copy).
+        intent_flag = f"--intent-file {shlex.quote(self.REMOTE_INTENT)}" if self.REMOTE_INTENT else ""
+        # One shell command: run the driver with an absolute deadline inside Harbor's agent timeout
+        # (task.toml: 9000 s; driver budget 7800 s leaves margin for start-up, abort, git, and the copy),
+        # then ALWAYS copy artifacts next to Harbor's agent logs, then exit with the driver's code.
         await self.exec_as_agent(
             environment,
             command=(
-                'export PATH="$HOME/.local/bin:$PATH"; mkdir -p /logs/agent/eval; cd /app && '
+                'export PATH="$HOME/.local/bin:$PATH"; mkdir -p /logs/agent/eval; start=$(date +%s); cd /app && '
                 f"python3 {REMOTE_EVAL}/driver/run_process.py --workspace /app "
                 f"--process {REMOTE_EVAL}/processes/{self.PROCESS} --brief {REMOTE_BRIEF} --out {REMOTE_OUT} "
                 f"--work-dir /logs/agent/eval-work --backend copilot --stand-in {self.STAND_IN} {model_flag} {provider_flag} "
-                f"{same_reviewer_flag} > /logs/agent/driver.log 2>&1; rc=$?; "
+                f"{same_reviewer_flag} {intent_flag} --deadline-epoch $((start + {self.DRIVER_BUDGET_SEC})) "
+                f"> /logs/agent/driver.log 2>&1; rc=$?; "
                 f"cp -r {REMOTE_OUT}/. /logs/agent/eval/ 2>/dev/null; exit $rc"
             ),
             env=env,
@@ -164,6 +182,18 @@ class ChangeIntentV1(CopilotProcessAgent):
     @staticmethod
     def name() -> str:
         return "copilot-process-change-intent-v1"
+
+
+class ChangeIntentV1Frozen(CopilotProcessAgent):
+    """change-intent-v1 guidance with a pre-authored intent. Set the file with --ae EVAL_INTENT_FILE=/path or
+    subclass with FROZEN_INTENT set; the file is uploaded into the container and passed as --intent-file."""
+
+    PROCESS = "change-intent-v1-frozen"
+    FROZEN_INTENT = os.environ.get("EVAL_INTENT_FILE")
+
+    @staticmethod
+    def name() -> str:
+        return "copilot-process-change-intent-v1-frozen"
 
 
 class ChangeIntentV1ModelAuthor(ChangeIntentV1):

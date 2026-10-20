@@ -19,6 +19,7 @@
   },
   "intent": {
     "dir": "change-intent",
+    "noun": "change intent",
     "claim_sections": [
       "Acceptance criteria",
       "Invariants"

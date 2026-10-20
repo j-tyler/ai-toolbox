@@ -39,7 +39,7 @@ python3 "$EVAL/driver/run_process.py" --workspace "$WORK/app" --process "$EVAL/p
 
 echo "--- grading with Reward Kit"
 export LEDGER_PYTHON="$(command -v python3)"
-if command -v rewardkit >/dev/null; then RK=(rewardkit); else RK=(uvx --from 'harbor-rewardkit==0.2.*' rewardkit); fi
+if command -v rewardkit >/dev/null; then RK=(rewardkit); else RK=(uvx --from 'harbor-rewardkit==0.2.3' rewardkit); fi
 "${RK[@]}" --workspace "$WORK/app" --output "$RUN/reward.json" "$TASK/tests" || echo "rewardkit failed"
 
 cp -r "$WORK/app" "$RUN/app"

@@ -42,7 +42,9 @@ def find_summary(reward_path: Path) -> Path | None:
 
 
 def load_trials(root: Path) -> tuple[list[dict], list[str]]:
+    """One trial per summary.json. A trial has a reward when a reward.json resolves to the same summary."""
     trials, unknown = [], []
+    rewarded: dict[Path, dict] = {}
     for reward_path in sorted(root.rglob("reward.json")):
         try:
             reward = json.loads(reward_path.read_text(encoding="utf-8"))
@@ -50,27 +52,29 @@ def load_trials(root: Path) -> tuple[list[dict], list[str]]:
             unknown.append(f"{reward_path}: unreadable reward.json")
             continue
         summary_path = find_summary(reward_path)
-        summary = {}
-        if summary_path:
-            try:
-                summary = json.loads(summary_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                pass
+        if summary_path is None:
+            unknown.append(f"{reward_path}: no summary.json next to it")
+            continue
+        rewarded[summary_path.resolve()] = reward
+    for summary_path in sorted(root.rglob("summary.json")):
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            unknown.append(f"{summary_path}: unreadable summary.json")
+            continue
         process = summary.get("process")
         if not process:
-            unknown.append(f"{reward_path}: no summary.json with a process name")
+            unknown.append(f"{summary_path}: no process name")
             continue
-        trials.append({"process": process, "reward": reward, "summary": summary, "path": str(reward_path)})
-    # trials that ran but never got a reward (harness failure)
-    for summary_path in sorted(root.rglob("summary.json")):
-        if not any(t["summary"] is not None and str(summary_path).startswith(str(Path(t["path"]).parent.parent)) for t in trials):
-            try:
-                s = json.loads(summary_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                continue
-            if s.get("process") and not any(Path(t["path"]).parent in summary_path.parents for t in trials):
-                trials.append({"process": s["process"], "reward": None, "summary": s, "path": str(summary_path)})
+        reward = rewarded.get(summary_path.resolve())
+        trials.append({"process": process, "reward": reward, "summary": summary, "path": str(summary_path)})
     return trials, unknown
+
+
+def is_per_protocol(summary: dict) -> bool:
+    """Per-protocol = the author stage, if any, ended approved (frozen counts as approved)."""
+    author = (summary.get("stages") or {}).get("author")
+    return author is None or author.get("author_outcome") == "approved"
 
 
 def bootstrap_ci(values: list[float], n: int = 2000, seed: int = 0) -> tuple[float, float]:
@@ -112,22 +116,30 @@ def main() -> int:
     procs = sorted(by_proc)
     ref = args.ref or procs[0]
 
-    def values(proc: str, dim: str) -> list[float]:
-        return [float(t["reward"][dim]) for t in by_proc[proc] if t["reward"] and isinstance(t["reward"].get(dim), (int, float))]
+    def values(proc: str, dim: str, per_protocol: bool = False) -> list[float]:
+        return [
+            float(t["reward"][dim]) for t in by_proc[proc]
+            if t["reward"] and isinstance(t["reward"].get(dim), (int, float)) and (not per_protocol or is_per_protocol(t["summary"]))
+        ]
 
-    print("== headline (mean, sd, bootstrap 95% CI)")
-    print(f"{'process':30} {'n':>3} {'miss':>4}  " + "  ".join(f"{d:>26}" for d in DIMS_HEADLINE))
-    for p in procs:
-        n = len(by_proc[p]); miss = sum(1 for t in by_proc[p] if not t["reward"])
+    def row(label: str, proc: str, per_protocol: bool) -> str:
+        trials_ = [t for t in by_proc[proc] if not per_protocol or is_per_protocol(t["summary"])]
+        n = len(trials_); miss = sum(1 for t in trials_ if not t["reward"])
         cells = []
         for d in DIMS_HEADLINE:
-            v = values(p, d)
+            v = values(proc, d, per_protocol)
             if not v:
                 cells.append(f"{'-':>26}"); continue
             lo, hi = bootstrap_ci(v)
             sd = statistics.pstdev(v) if len(v) > 1 else 0.0
             cells.append(f"{statistics.mean(v):5.3f} ±{sd:5.3f} [{fmt(lo)},{fmt(hi)}]")
-        print(f"{p:30} {n:>3} {miss:>4}  " + "  ".join(cells))
+        return f"{label:30} {n:>3} {miss:>4}  " + "  ".join(cells)
+
+    print("== headline (mean, sd, bootstrap 95% CI); ITT = every trial, PP = author stage approved or absent")
+    print(f"{'process':30} {'n':>3} {'miss':>4}  " + "  ".join(f"{d:>26}" for d in DIMS_HEADLINE))
+    for p in procs:
+        print(row(p + "  [ITT]", p, False))
+        print(row(p + "  [PP]", p, True))
 
     print(f"\n== differences vs {ref} (mean diff, bootstrap 95% CI)")
     for p in procs:
@@ -139,18 +151,22 @@ def main() -> int:
             cells.append(f"{d}: {fmt(diff)} [{fmt(lo)},{fmt(hi)}]")
         print(f"{p:30} " + "  ".join(cells))
 
-    print("\n== cost and author outcome")
-    print(f"{'process':30} {'tokens_in':>10} {'tokens_out':>10} {'seconds':>8}  author outcomes (ITT counts; per-protocol = approved only)")
+    print("\n== cost per stage (mean per trial) and author outcomes")
+    print(f"{'process':30} {'stage':14} {'tokens_in':>10} {'tokens_out':>10} {'seconds':>8}")
     for p in procs:
-        tin = tout = secs = 0.0; outcomes: dict[str, int] = defaultdict(int)
+        per_stage: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+        outcomes: dict[str, int] = defaultdict(int)
         for t in by_proc[p]:
             for name, st in (t["summary"].get("stages") or {}).items():
                 u = st.get("usage") or {}
-                tin += u.get("input_tokens", 0) or 0; tout += u.get("output_tokens", 0) or 0; secs += st.get("seconds", 0) or 0
+                acc = per_stage[name]
+                acc[0] += u.get("input_tokens", 0) or 0; acc[1] += u.get("output_tokens", 0) or 0; acc[2] += st.get("seconds", 0) or 0
             a = (t["summary"].get("stages") or {}).get("author") or {}
             outcomes[a.get("author_outcome", "n/a")] += 1
         n = max(1, len(by_proc[p]))
-        print(f"{p:30} {tin / n:10.0f} {tout / n:10.0f} {secs / n:8.0f}  {dict(outcomes)}")
+        for name, (tin, tout, secs) in per_stage.items():
+            print(f"{p:30} {name:14} {tin / n:10.0f} {tout / n:10.0f} {secs / n:8.0f}")
+        print(f"{p:30} {'author outcomes':14} {dict(outcomes)}")
 
     print("\n== diagnostics (not in the headline reward)")
     for p in procs:

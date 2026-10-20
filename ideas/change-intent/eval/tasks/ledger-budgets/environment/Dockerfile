@@ -12,5 +12,8 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY seed/ /app/
+# Warm the verifier's uvx cache so grading needs no network inside the 900 s verifier window.
+RUN uvx --from 'harbor-rewardkit==0.2.3' rewardkit --help > /dev/null
+
 RUN git config --system user.name eval && git config --system user.email eval@example.invalid \
     && git init -q && git add -A && git commit -q -m "seed"

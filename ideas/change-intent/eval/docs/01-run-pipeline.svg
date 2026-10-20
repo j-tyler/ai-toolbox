@@ -20,9 +20,9 @@
     <line x1="60" y1="190" x2="1180" y2="190" stroke="#1f2937" stroke-width="1.5"/>
     <g>
       <circle cx="100" cy="190" r="6" fill="#1f2937"/><text x="100" y="212" text-anchor="middle">seed</text>
-      <circle cx="300" cy="190" r="6" fill="#1f2937"/><text x="300" y="212" text-anchor="middle">install process files</text>
-      <text x="300" y="226" text-anchor="middle" fill="#6b7280">AGENTS.md block, intent dir</text>
-      <circle cx="560" cy="190" r="6" fill="#2563eb"/><text x="560" y="212" text-anchor="middle" fill="#2563eb">eval: change intent</text>
+      <circle cx="300" cy="190" r="6" fill="#1f2937"/><text x="300" y="212" text-anchor="middle">eval: setup</text>
+      <text x="300" y="226" text-anchor="middle" fill="#6b7280">process files installed</text>
+      <circle cx="560" cy="190" r="6" fill="#2563eb"/><text x="560" y="212" text-anchor="middle" fill="#2563eb">eval: description document</text>
       <circle cx="820" cy="190" r="6" fill="#1f2937"/><text x="820" y="212" text-anchor="middle">eval: implementation</text>
       <text x="820" y="226" text-anchor="middle" fill="#6b7280">HEAD is reset here after each review</text>
       <text x="1100" y="212" text-anchor="middle" fill="#6b7280">baseline..HEAD = diff.patch</text>
@@ -36,7 +36,7 @@
       <text x="175" y="292" text-anchor="middle" font-weight="600">1  Author</text>
       <text x="175" y="310" text-anchor="middle">SDK session + authoring skill</text>
       <text x="175" y="326" text-anchor="middle" fill="#6b7280">custom instructions on</text>
-      <text x="175" y="342" text-anchor="middle" fill="#2563eb">writes change-intent/*.md</text>
+      <text x="175" y="342" text-anchor="middle" fill="#2563eb">writes + commits intent.dir/*.md</text>
       <text x="175" y="358" text-anchor="middle" fill="#6b7280">only for author.mode = skill</text>
 
       <rect x="340" y="270" width="230" height="96" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
@@ -55,7 +55,7 @@
 
       <rect x="900" y="270" width="230" height="96" rx="6" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
       <text x="1015" y="292" text-anchor="middle" font-weight="600">4  Fixed review</text>
-      <text x="1015" y="310" text-anchor="middle">read-only, custom instructions OFF</text>
+      <text x="1015" y="310" text-anchor="middle">read-only tools, custom instructions OFF</text>
       <text x="1015" y="326" text-anchor="middle" fill="#6b7280">reviewer/fixed_reviewer.md, own model</text>
       <text x="1015" y="342" text-anchor="middle">returns JSON (schema-checked)</text>
       <text x="1015" y="358" text-anchor="middle" fill="#6b7280">identical for every condition</text>
@@ -84,7 +84,7 @@
 
     <!-- Sealed artifact dir -->
     <rect x="340" y="400" width="790" height="118" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5"/>
-    <text x="352" y="420" font-weight="600" fill="#ea580c">Sealed work dir (outside the workspace; copied to /app/.eval only at the very end)</text>
+    <text x="352" y="420" font-weight="600" fill="#ea580c">Work dir, outside the workspace (copied to /app/.eval at the very end)</text>
     <g fill="#1f2937">
       <rect x="352" y="432" width="200" height="72" rx="4" fill="#ffffff" stroke="#9ca3af"/>
       <text x="452" y="450" text-anchor="middle" font-weight="600">driver writes after stage 2</text>
@@ -93,9 +93,9 @@
       <text x="452" y="500" text-anchor="middle" fill="#6b7280">intent (if any) + implementer summary</text>
 
       <rect x="570" y="432" width="200" height="72" rx="4" fill="#ffffff" stroke="#9ca3af"/>
-      <text x="670" y="450" text-anchor="middle" font-weight="600">review-input/</text>
+      <text x="670" y="450" text-anchor="middle" font-weight="600">sealed temp dir (elsewhere)</text>
       <text x="670" y="468" text-anchor="middle">copies of the two files above</text>
-      <text x="670" y="484" text-anchor="middle" fill="#6b7280">the ONLY extra thing stage 4 sees</text>
+      <text x="670" y="484" text-anchor="middle" fill="#6b7280">the ONLY path stage 4 is given</text>
 
       <rect x="788" y="432" width="330" height="72" rx="4" fill="#ffffff" stroke="#9ca3af"/>
       <text x="953" y="450" text-anchor="middle" font-weight="600">per-stage records</text>
