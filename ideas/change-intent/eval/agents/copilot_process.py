@@ -10,20 +10,22 @@ EVAL_REVIEWER_MODEL set to a model from another vendor (the driver refuses a sam
 otherwise). Harbor imports `module:Class` with importlib and does not add the current directory to
 sys.path, so PYTHONPATH=. is required:
 
-    export COPILOT_GITHUB_TOKEN=... EVAL_REVIEWER_MODEL=claude-sonnet-4.5
+    export COPILOT_GITHUB_TOKEN=... EVAL_REVIEWER_MODEL=<reviewer model from another vendor>
     # plumbing pilot, one arm (k=3 cannot show a difference: the minimum permutation p is 0.10)
-    PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline -m gpt-5.4 -k 3
+    PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline -m <model> -k 3
 
     # a comparison: every arm in ONE job so trials interleave (Harbor nests agents innermost in its plan),
     # rather than one arm per run where server-side drift between runs would be confounded with the arm
     cat > job.yaml <<'YAML'
     agents:
       - import_path: agents.copilot_process:Baseline
-        model_name: gpt-5.4
+        model_name: <model>
       - import_path: agents.copilot_process:ChangeIntentV1
-        model_name: gpt-5.4
+        model_name: <model>
     datasets:
-      - path: tasks/ledger-budgets
+      - path: tasks/ledger-budgets    # one entry per task; the agent finds each trial's task itself
+      - path: tasks/cloudbill-report
+      - path: tasks/cloudbill-sqlite
     n_attempts: 20
     YAML
     PYTHONPATH=. harbor run -c job.yaml
@@ -51,16 +53,25 @@ from harbor.agents.installed.copilot_cli import CopilotCli
 from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
+from .task_select import resolve_task, task_config_path
+
 EVAL_ROOT = Path(__file__).resolve().parents[1]  # .../eval
 REMOTE_EVAL = "/eval"
 REMOTE_BRIEF = "/eval/brief.md"
+REMOTE_TASK_CONFIG = "/eval/task_config.json"  # next to the driver, never inside the workspace
 REMOTE_OUT = "/app/.eval"
 
 
 class CopilotProcessAgent(CopilotCli):
-    """Base class: Copilot CLI install from Harbor's own agent, plus the SDK and our driver."""
+    """Base class: Copilot CLI install from Harbor's own agent, plus the SDK and our driver.
+
+    The task is the class's TASK, else EVAL_TASK in the host environment, else the one task whose
+    instruction.md the trial's instruction contains (agents/task_select.py). Its task_config.json is
+    uploaded next to the driver, so one class serves every task and one job can mix tasks; pin a task
+    with a subclass (``class BaselineReport(Baseline): TASK = "cloudbill-report"``) if you prefer."""
 
     PROCESS: str = ""  # name of a directory under eval/processes/
+    TASK: str | None = None  # name of a directory under eval/tasks/; None: EVAL_TASK, else matched from the instruction
     STAND_IN: str = "scripted"
     FROZEN_INTENT: str | None = None  # local path to an intent file for author.mode = frozen
     REMOTE_INTENT: str | None = None
@@ -100,6 +111,7 @@ class CopilotProcessAgent(CopilotCli):
     async def run(self, instruction: str, environment: BaseEnvironment, context: AgentContext) -> None:
         if not self.PROCESS:
             raise ValueError("subclass must set PROCESS")
+        task = resolve_task(instruction, self.TASK or os.environ.get("EVAL_TASK"))  # refuses a mismatch
         # Same precedence Harbor's own Copilot agent uses; written out so it works across Harbor versions.
         token = os.environ.get("COPILOT_GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
         env: dict[str, str] = {"COPILOT_GITHUB_TOKEN": token} if token else {}
@@ -121,6 +133,7 @@ class CopilotProcessAgent(CopilotCli):
         await self._upload_tree(environment, EVAL_ROOT / "driver", f"{REMOTE_EVAL}/driver")
         await self._upload_tree(environment, EVAL_ROOT / "processes" / self.PROCESS, f"{REMOTE_EVAL}/processes/{self.PROCESS}")
         await self._upload_tree(environment, EVAL_ROOT / "reviewer", f"{REMOTE_EVAL}/reviewer")
+        await environment.upload_file(task_config_path(task), REMOTE_TASK_CONFIG)
         frozen = self.FROZEN_INTENT or os.environ.get("EVAL_INTENT_FILE")  # HOST environment, read at run time
         process_cfg = json.loads((EVAL_ROOT / "processes" / self.PROCESS / "process.json").read_text(encoding="utf-8"))
         if process_cfg.get("author", {}).get("mode") == "frozen" or frozen:
@@ -137,7 +150,7 @@ class CopilotProcessAgent(CopilotCli):
 
         model_flag = ""
         if self.model_name:
-            # Copilot uses bare model ids; strip a Harbor-style provider prefix ("openai/gpt-5.4" -> "gpt-5.4").
+            # Copilot uses bare model ids; strip a Harbor-style provider prefix ("vendor/name" -> "name").
             model_flag = f"--model {shlex.quote(self.model_name.rsplit('/', 1)[-1])}"
         provider_flag = ""  # providers travel in the environment, never on the command line (the key would land in logs)
         if env.get("COPILOT_PROVIDER_BASE_URL") and "EVAL_PROVIDER_JSON" not in env:
@@ -164,7 +177,8 @@ class CopilotProcessAgent(CopilotCli):
                 'export PATH="$HOME/.local/bin:$PATH"; mkdir -p /logs/agent/eval; start=$(date +%s); cd /app && '
                 f"timeout --kill-after=60 {self.DRIVER_BUDGET_SEC + 600} "
                 f"python3 {REMOTE_EVAL}/driver/run_process.py --workspace /app "
-                f"--process {REMOTE_EVAL}/processes/{self.PROCESS} --brief {REMOTE_BRIEF} --out {REMOTE_OUT} "
+                f"--process {REMOTE_EVAL}/processes/{self.PROCESS} --task-config {REMOTE_TASK_CONFIG} "
+                f"--brief {REMOTE_BRIEF} --out {REMOTE_OUT} "
                 f"--work-dir /logs/agent/eval-work --backend copilot --stand-in {self.STAND_IN} {model_flag} {provider_flag} "
                 f"{same_reviewer_flag} {intent_flag} --deadline-epoch $((start + {self.DRIVER_BUDGET_SEC})) "
                 f"> /logs/agent/driver.log 2>&1; rc=$?; "

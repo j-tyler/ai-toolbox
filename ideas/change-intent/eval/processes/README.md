@@ -60,10 +60,22 @@ directory does not yet hold: a process per shape whose guidance is shape-neutral
 produced by the same skill and stand-in, or by authors who have not seen `tests/__hidden`, analysed
 by artifact cluster rather than pooled as trials. One document per shape is an anecdote.
 
-Run order for any comparison: a baseline pilot at about five attempts first. If its mean
-correctness is at least 0.95, or nine in ten trials pass every hidden test, this task cannot
-discriminate on the primary endpoint; add a task or a lighter-brief variant before the full run.
-Put every arm in one Harbor job so trials interleave (the agent docstring shows the config).
+## Tasks
+
+A process version is task-independent: the same directory runs against every task in
+[`../tasks`](../tasks/README.md) (ledger-budgets, an extension under a precise contract;
+cloudbill-report, a greenfield tool from a lighter ticket; cloudbill-sqlite, a migration of that
+tool onto SQLite). Nothing in `process.json` names a task; what differs between tasks (code
+directories, visible test command, seed tests) is in each task's `tests/task_config.json`, which the
+driver and grader read. Guidance that only makes sense for one kind of change (say, migration
+advice) is a separate process version, not a task setting. Conditions are keyed by task in the
+analyzer, and every comparison is within a task.
+
+Run order for any comparison: a baseline pilot at about five attempts per task first. If on a task
+its mean correctness is at least 0.95, or nine in ten trials pass every hidden test, that task
+cannot discriminate on the primary endpoint; drop it from the comparison, or add a lighter-brief
+variant, before the full run. Put every arm and every task in one Harbor job so trials interleave
+(the agent docstring shows the config).
 
 Regenerate the generated versions after editing the mechanics; copy a directory to make a variant;
 add a two-line subclass in `agents/copilot_process.py` to run it under Harbor.

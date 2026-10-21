@@ -5,8 +5,9 @@
     scripts/analyze.py ~/jobs/<job> [--ref baseline]
 
 A trial is a summary.json; it has a reward when a reward.json resolves to the same summary. The
-condition is (process, labels, frozen-intent hash, model, reviewer model, brief hash): trials that
-differ in any of these are never pooled. Within a condition the process files, harness commit,
+condition is (process, task, labels, frozen-intent hash, model, reviewer model, brief hash): trials
+that differ in any of these are never pooled, so `--ref baseline` compares arms within a task and
+each task gets its own rows. Within a condition the process files, harness commit,
 stand-in and dirty flag must agree; a mixed condition stops the analysis unless --allow-mixed.
 
 Trials with a harness error, a driver that never finished, no model calls in the implement stage,
@@ -82,12 +83,23 @@ def flatten_criteria(details: dict | None) -> dict[str, float]:
     return out
 
 
+def task_of(summary: dict) -> str | None:
+    """The task the trial ran (summary.json `task`, else the manifest's task block). Trials from before the
+    task config existed carry neither; they ran ledger-budgets and their brief hash still separates them."""
+    task = summary.get("task") or ((summary.get("manifest") or {}).get("task") or {}).get("name")
+    return str(task) if task else None
+
+
 def condition_of(summary: dict) -> str:
     """Everything that defines an experimental condition; two trials pool only if this matches."""
     manifest = summary.get("manifest") or {}
     process = summary.get("process") or "?"
     labels = summary.get("labels") or {}
-    parts = [process] + [f"{k}={v}" for k, v in sorted(labels.items())]
+    parts = [process]
+    task = task_of(summary)
+    if task:
+        parts.append(f"task={task}")
+    parts += [f"{k}={v}" for k, v in sorted(labels.items())]
     src = (manifest.get("intent_source") or {}).get("sha256")
     if src:
         parts.append(f"artifact={src[:8]}")
@@ -169,6 +181,17 @@ def load_trials(root: Path, keep_model_mismatch: bool = False) -> tuple[list[dic
             "review_missing": bool(fixed.get("missing")) or (reward is not None and fixed.get("status") == "missing"),
         })
     return trials, unknown
+
+
+def reference_conditions(conds: list[str], cond_task: dict[str, str | None], ref: str | None) -> dict[str, str]:
+    """For every condition, the reference condition of the same task: the one named by --ref (a full
+    condition or its process), else that task's alphabetically first condition. Tasks are never crossed."""
+    out: dict[str, str] = {}
+    for c in conds:
+        same_task = [d for d in conds if cond_task.get(d) == cond_task.get(c)]
+        named = [d for d in same_task if d == ref or d.split(" ")[0] == ref]
+        out[c] = (named or same_task)[0]
+    return out
 
 
 def is_per_protocol(summary: dict) -> bool:
@@ -269,7 +292,8 @@ def main() -> int:
     for t in trials:
         by_cond[t["condition"]].append(t)
     conds = sorted(by_cond)
-    ref = next((c for c in conds if c == args.ref or c.split(" ")[0] == args.ref), None) or conds[0]
+    cond_task = {c: task_of(by_cond[c][0]["summary"]) for c in conds}
+    refs = reference_conditions(conds, cond_task, args.ref)
     width = max(44, min(96, max(len(c) for c in conds) + 8))
 
     mixed = {c: heterogeneity(by_cond[c]) for c in conds if heterogeneity(by_cond[c])}
@@ -318,13 +342,15 @@ def main() -> int:
                 cells.append(f"{statistics.mean(v):8.3f} ±{(statistics.pstdev(v) if len(v) > 1 else 0.0):5.3f}" if v else f"{'-':>18}")
             print(f"{c + '  [' + tag + ']':{width}} {len(ts):>3}  " + "  ".join(cells))
 
-    print(f"\n== differences vs {ref} (valid, ITT): mean diff, Welch 95% interval, permutation p")
+    print(f"\n== differences vs {', '.join(sorted(set(refs.values())))} (valid, ITT): mean diff, Welch 95% interval, permutation p")
+    print("   each condition is compared with the reference arm of its own task; tasks are never compared with each other")
     print("   min p = smallest two-sided p attainable for these arm sizes; MDE = effect detectable with 80% power at 5%")
     for c in conds:
-        if c == ref:
+        ref = refs.get(c)
+        if ref is None or c == ref:
             continue
         na, nb = len(valid(c)), len(valid(ref))
-        print(f"{c:{width}} n={na} vs {nb}; min p={min_permutation_p(na, nb):.3f}")
+        print(f"{c:{width}} n={na} vs {nb} ({ref.split(' ')[0]}); min p={min_permutation_p(na, nb):.3f}")
         for d in DIMS_HEADLINE:
             a, b = vals(valid(c), d), vals(valid(ref), d)
             diff, lo, hi = welch(a, b)

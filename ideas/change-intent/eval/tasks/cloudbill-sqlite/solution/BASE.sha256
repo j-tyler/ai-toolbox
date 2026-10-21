@@ -1,0 +1,6 @@
+# sha256 of each cloudbill-sqlite seed file its reference overlay replaces (scripts/build_tasks.py --accept-base)
+5ec7f87f89612ad84c5f29cb3efc0d50a2f0e7ee5e11166a1167503c93248de7  CHANGELOG.md
+e98d6946cfe867b91b7e795110dcf8ec46363b129cb93c6d9194b43ddba03223  README.md
+cdd55a9480795b3abbd879ad9a3b57fdd3b3c4166edefada15087a338f1ba707  cloudbill/cli.py
+1e0efc98af945c59f5bdf5ab65ce56f3c2d336e272a7b9c6990354627dd2aec6  cloudbill/render.py
+f6419bae21592fe8670cf62aa2d57646f4ae731c5ae482f58ed25b97d0cf36a8  pyproject.toml

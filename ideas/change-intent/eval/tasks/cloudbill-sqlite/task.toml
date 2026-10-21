@@ -1,0 +1,20 @@
+version = "1.0"
+
+[metadata]
+difficulty = "medium"
+category = "programming"
+tags = ["change-intent", "process-eval", "rewardkit", "python", "stdlib", "migration", "sqlite"]
+author = "ai-toolbox change-intent eval"
+description = "Move a working streaming stdlib CLI onto SQLite: idempotent loads, restatements across files, provenance, byte-identical answers. Migration; the seed is cloudbill-report's reference. Used to compare code-generation processes, not models."
+
+[verifier]
+timeout_sec = 1800.0  # cloudbill-report's hidden suite plus database tests, three runs over the 1,500,000-row export (reference: about 85 s in all; each run capped at 240 s); the criteria cap each suite at hidden_timeout_sec (900)
+
+[agent]
+timeout_sec = 10500.0  # driver budget 9600 (caps 1800+3600+900+3x900 = 9000 plus overhead) plus margin for start-up, abort, git, copy
+
+[environment]
+build_timeout_sec = 900.0
+cpus = 2
+memory = "4G"
+storage = "10G"

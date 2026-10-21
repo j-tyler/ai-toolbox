@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Re-run the fixed reviewer on a saved trial, for test-retest of the judge.
 
-    scripts/rerun_fixed_review.py runs/<trial>/app --reviewer-model claude-sonnet-4.5 [--out dir] [--repeat 3]
+    scripts/rerun_fixed_review.py runs/<trial>/app --reviewer-model <model from another vendor> [--out dir] [--repeat 3]
 
 Uses the trial's own review-input/ (requirements.md, diff.patch, change_description.md) and its
 workspace at the implementation commit, with the same reviewer instructions and schema the driver

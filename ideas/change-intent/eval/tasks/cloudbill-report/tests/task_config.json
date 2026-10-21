@@ -1,0 +1,15 @@
+{
+  "name": "cloudbill-report",
+  "type": "greenfield",
+  "language": "python",
+  "package": "cloudbill",
+  "code_dirs": ["cloudbill"],
+  "visible_test_command": ["python", "-m", "pytest", "tests"],
+  "seed_tests": [],
+  "seed_test_count": 0,
+  "hidden_timeout_sec": 900,
+  "fake_reference": "solution/repo",
+  "build": [
+    {"generate": "tests/__hidden/billing_gen.py", "args": ["sample"], "to": "environment/seed/sample"}
+  ]
+}

@@ -1,0 +1,285 @@
+{
+ "pass": "fifth review pass: the three-task generalisation (cloudbill-report, cloudbill-sqlite, task_config.json, shared grading code)",
+ "date": "2026-10-20",
+ "roles": "one reviewer over the merged, uncommitted change; one adjudicator who reproduced each finding before ruling and made the changes",
+ "reviewer_verdict": "The merged change is sound enough to run a pilot on. Everything I reproduced matches what the documentation claims: offline suites 52 passed (driver/test_author_stage.py, scripts/test_analyze.py, scripts/test_build_tasks.py); hidden tests 0/54 on the cloudbill-report seed and 54/54 on its reference, 2/74 on the cloudbill-sqlite seed and 74/74 on its reference, 5/37 and 37/37 on ledger-budgets; all seven fake runs through scripts/run_local.sh (both cloudbill tasks x baseline/change-intent-v1, ledger x baseline/change-intent-v1/frozen) grade 0.961 headline with correctness 1.0 and review 0.865, and the ledger baseline's reward-details.json is value-for-value identical to the pre-change run; Reward Kit through uvx (harbor-rewardkit==0.2.3, EVAL_PYTHON/EVAL_WORKSPACE set as test.sh does) gives the same numbers for one saved run per task (36 s, 68 s, 4 s); build_tasks --check is clean, task.toml files validate against Harbor's TaskConfig, the agent module imports under Harbor and resolves every task from its brief; the two references print byte-identical output on the sample for 16 question variants x 3 formats, so the migration oracle really is the report task's suite answered through load/--db. The sample carries every edge case in the scope without naming any, and nothing in either seed names the experiment. No condition-dependent behaviour was found in the driver or grader. The two findings worth fixing before a pilot both add noise to the primary endpoint on the greenfield task rather than bias: the memory cap sits on a knife edge for the most natural two-pass design (measured 98.3 MB against a 100 MB cap), and one property test pins a display choice (service spelling) the brief leaves open. The rest are small gaps in hidden-test coverage, a timeout cliff, cosmetic fake-backend fixtures and repository housekeeping.",
+ "reviewer_findings": [
+  {
+   "id": "F1",
+   "severity": "major",
+   "file": "ideas/change-intent/eval/tasks/cloudbill-report/tests/__hidden/conftest.py",
+   "claim": "The peak-memory test (CAP_MB = 100 on a 600,000-row export) is a knife edge for the most natural streaming design: a two-pass tool that keeps one dict entry per line item id mapping to its latest last_updated string peaks at 98.3 MB, i.e. inside the cap by 1.7 MB. Whether such a tool passes depends on interning, Python version (3.12 in the image vs 3.13 here) and allocator behaviour, none of which the brief distinguishes. Because hidden_tests_all_pass (weight 1 of 4 in the acceptance group) flips on any single failure, this one test can move correctness by 0.1875 and the headline by about 0.11, which is noise unrelated to the process. tasks/README.md acknowledges that a per-id design at about 80 MB passes, but understates it: the common design straddles the cap rather than clearing it. The same test runs twice more in cloudbill-sqlite.",
+   "evidence": "Generated the large export with billing_gen.write_large(rows=600_000) (602,867 rows, 152,887,937 bytes) and measured ru_maxrss of a minimal csv pass that holds one dict keyed by line_item_id: 'set 599874 peak MB 61.59', 'str (id -> last_updated str) peak MB 98.35', 'intern peak MB 61.70', 'tuple (id -> (last_updated, cost)) peak MB 162.71'. The reference under the suite's own MEASURE wrapper: report-ref costs --by service: '0 peak MB 35.45 sec 10.8'; sqlite-ref load: 'peak MB 25.68'; query: 'peak MB 24.25'; bare interpreter: 12.1 MB. conftest.py: CAP_MB = 100, LARGE_ROWS = 600_000; grading/correctness/acceptance.py: hidden_tests_pass_fraction(weight=3.0), hidden_tests_all_pass(weight=1.0).",
+   "proposed_fix": "Widen the gap between the cap and the per-id designs without touching the measurement method: raise LARGE_ROWS (for example 1,500,000 rows, about 380 MB; per-id dicts then land at roughly 150 to 250 MB while the streaming reference stays near 35 MB), and raise hidden_timeout_sec / task.toml verifier timeout for both cloudbill tasks to match the longer generation and passes (reference is about 11 s per pass at 600k). Record the measured numbers (set 62 MB, str-dict 98 MB, tuple-dict 163 MB, reference 35 MB) in tasks/README.md in place of the 'about 80 MB' estimate, and re-run build_tasks.py so cloudbill-sqlite's mirrored conftest follows."
+  },
+  {
+   "id": "F2",
+   "severity": "major",
+   "file": "ideas/change-intent/eval/tasks/cloudbill-report/tests/__hidden/test_properties.py",
+   "claim": "test_file_order_does_not_change_the_answer compares the raw JSON rows of costs --by service for the two file orders, which includes the display spelling of the service key. The brief says only that a service is the same service however it is capitalised and leaves the shown spelling open; an implementation that shows the first spelling it meets gives 'Object Storage' for (aug, sep) and 'object storage' for (sep, aug) and fails this test even though every number is identical. That is a hidden test checking something the brief does not state, and it also flips hidden_tests_all_pass.",
+   "evidence": "Copied the reference, changed Labels to first-seen spelling (two-line edit in questions.py: spellings.setdefault(key, item.service) and return self.spellings[key]) and ran the hidden suite with -k 'not large': 'FAILED tasks/cloudbill-report/tests/__hidden/test_properties.py::test_file_order_does_not_change_the_answer; 1 failed, 52 passed, 1 deselected'. In the scenario the two spellings alternate by day (build_scenario: \"object storage \" if d % 2 else \"Object Storage\"), so the first row seen differs with file order. test_properties.py: `assert cli_json(*q, *paths)[\"rows\"] == cli_json(*q, *reversed(paths))[\"rows\"]`.",
+   "proposed_fix": "Compare the two orders after normalising keys the way the suite does elsewhere (by_key(rows, by) with norm(), then compare the money fields with close()), for costs --by service, mom --by account and daily-stats; keep the exact-equality comparison only where the brief fixes the value (account ids, dates, months). Alternatively drop the service case from this test and keep account and daily-stats, which have no open display choice."
+  },
+  {
+   "id": "F3",
+   "severity": "minor",
+   "file": "ideas/change-intent/eval/tasks/cloudbill-report/tests/__hidden/conftest.py",
+   "claim": "The per-run timeout inside measured() is 900 s, larger than the whole-suite budget the grader enforces (hidden_timeout_sec = 600 in both cloudbill task configs). A tool that is merely slow on the 150 MB export therefore cannot fail just the memory test: the grader's subprocess timeout fires first and _pytest_run returns (0, 1, 'timeout'), scoring the whole hidden suite 0.0. The cloudbill-sqlite suite makes four passes over the large file (file-mode scale test, load, query, plus generation) and about 300 small subprocess invocations, so the margin is set by the slowest large-file pass on a 2-CPU container.",
+   "evidence": "conftest.py: `measured(...)` uses `subprocess.run([...], timeout=900)`; task_config.json for both cloudbill tasks: \"hidden_timeout_sec\": 600; grading/criteria.py _pytest_run: `except subprocess.TimeoutExpired: return 0, 1, \"timeout\"`. Reference timings with --durations on cloudbill-sqlite: test_load_and_query_a_large_export 16.55 s, test_large_export_streams 16.19 s, test_same_input_same_bytes 4.88 s, suite total 60.84 s; the uvx grade of the sqlite run took 68 s wall. A tool 10x slower than the reference on the large file alone would exceed 600 s.",
+   "proposed_fix": "Lower the per-run timeout in measured() to something like 180 s (and fail that one test with a clear message when it fires), so a slow large-file pass costs one test rather than the suite; and give the cloudbill tasks more suite budget than the ledger task (for example hidden_timeout_sec 900 with task.toml verifier timeout 1500), since they spend their time in subprocesses the grader cannot see."
+  },
+  {
+   "id": "F4",
+   "severity": "minor",
+   "file": "ideas/change-intent/eval/tasks/cloudbill-report/tests/__hidden/test_inputs.py",
+   "claim": "One stated rejection rule has no hidden test: the brief says to reject a row whose line item type is 'other than the five', but no scenario row and no test exercises an unknown type, and billing_gen.Item.bad has no mode that produces one (its modes are short, long, cost, start, id). An implementation that counts a 'Discount' line as a charge passes every hidden test.",
+   "evidence": "grep over tests/__hidden/*.py for an unknown type found nothing beyond case variants (TAX, refund). billing_gen.py: `bad: str | None = None  # short | long | cost | start | id` and `rejected` is `self.bad is not None or currency != USD`. The reference does reject it: `python -m cloudbill rejects --format json kind.csv` -> `\"reason\": \"unknown line item type: 'Discount'\"`, rejected_rows 1.",
+   "proposed_fix": "Add a `bad=\"kind\"` mode to billing_gen.Item (render the type as e.g. 'Discount'), put one such row in build_scenario so the oracle's rejected_count covers it, and add a one-rule test in test_inputs.py next to test_other_currency_is_rejected_not_converted. Re-run build_tasks.py so the mirror in cloudbill-sqlite follows."
+  },
+  {
+   "id": "F5",
+   "severity": "minor",
+   "file": "ideas/change-intent/eval/tasks/cloudbill-report/tests/__hidden/test_inputs.py",
+   "claim": "test_header_only_file_answers_with_nothing requires exit 0 with empty rows for a file that has a valid header and no data rows. The brief does not say whether such a file is a usable export; 'can't be used at all (... not a billing export)' with exit 1 is also a defensible reading. This is a judgement the brief leaves open being graded as if stated.",
+   "evidence": "test_inputs.py: `_, path = write(tmp_path, [])` then `doc = cli_json(\"costs\", \"--by\", \"service\", path)`; cli_json asserts exit 0 and `doc[\"rows\"] == [] and doc[\"rejected_rows\"] == 0`. instruction.md names only 'missing, unreadable, or not a billing export' for exit 1 and says nothing about empty exports.",
+   "proposed_fix": "Either state in the brief that an export with a header and no rows is a valid (empty) input, or make the test accept both outcomes (exit 0 with no rows and net 0, or exit 1 with empty stdout and a message on stderr)."
+  },
+  {
+   "id": "F6",
+   "severity": "minor",
+   "file": "ideas/change-intent/eval/driver/backends.py",
+   "claim": "The fake backend's fixtures are still ledger-specific for every task: the intent template FAKE_INTENT ('Change intent: ledger budgets, recurring, import, report'), the ask_user brief ('turn ledger into a budgeting tool'), the fake fixed-review table (AC3 import de-duplication, 'ledger/importer.py' line 50) and the fake review findings. On a cloudbill fake run these artifacts describe a different project. It does not affect the headline (review is 0.865 and the headline 0.961 on every task, as documented) but the saved artifacts of cloudbill fake runs are misleading to anyone inspecting them, and the frozen-intent fake draft is named from a ledger slug.",
+   "evidence": "backends.py lines 496, 554-567, 577-601 (grep -n ledger driver/backends.py); only the draft filename was parametrised (`slug=task_cfg[\"name\"]`). Fake runs: cloudbill-report baseline {'correctness': 1.0, 'diagnostics': 0.5, 'review': 0.865, 'reward': 0.961}; cloudbill-sqlite baseline {'diagnostics': 0.362, 'review': 0.865, 'reward': 0.961}.",
+   "proposed_fix": "Either state in the FakeBackend docstring and README that the fake artifacts are ledger-shaped placeholders whatever the task, or derive the few task-visible strings (the intent title and the ask_user brief) from task_cfg name/type so a fake cloudbill run reads as one."
+  },
+  {
+   "id": "F7",
+   "severity": "minor",
+   "file": ".claude/worktrees",
+   "claim": "Two implementer worktrees are still registered and live under the repository root (.claude/worktrees/wf_57f872a9-7f9-1 and -2, 31 MB), and the untracked `.claude/` directory shows in `git status`. They are not part of the change but would be easy to commit by accident with `git add -A`, and one of them points at a stale commit.",
+   "evidence": "`git worktree list`: /home/user/ai-toolbox 5dae12d [claude/sharp-keller-fuokt0]; .claude/worktrees/wf_57f872a9-7f9-1 f1e487b [worktree-wf_57f872a9-7f9-1]; .claude/worktrees/wf_57f872a9-7f9-2 5dae12d [worktree-wf_57f872a9-7f9-2]. `du -sh .claude/worktrees` = 31M. `git status --short` lists `?? .claude/`.",
+   "proposed_fix": "Before committing: `git worktree remove` both (or `git worktree prune` after deleting the directories), and add `.claude/` to the repository's .gitignore if the tooling will recreate it."
+  },
+  {
+   "id": "F8",
+   "severity": "minor",
+   "file": "ideas/change-intent/eval/README.md",
+   "claim": "Two small documentation inaccuracies: the verification paragraph says the three ledger fake runs leave 'every one of the 23 criterion values unchanged' (reward-details.json flattens to 15 values; they are indeed all unchanged), and the diagnostics figure for cloudbill-sqlite baseline is given as 0.363 where the grader prints 0.362. Neither changes a conclusion.",
+   "evidence": "Comparison of runs/20261020T225304Z-baseline/reward-details.json with runs/20261021T011506Z-ledger-budgets-baseline/reward-details.json: '15 15 differences: 0'. reward.json of both cloudbill-sqlite baseline runs: 'diagnostics': 0.362.",
+   "proposed_fix": "Change '23 criterion values' to the number actually compared (or say 'every criterion value') and 0.363 to 0.362."
+  }
+ ],
+ "rulings": [
+  {
+   "finding_id": "F1",
+   "ruling": "upheld",
+   "reproduced": "Measured ru_maxrss of one-dict passes over the 600,000-row export (602,867 rows, 153 MB): set of ids 62.9 MB, id -> last_updated string 98.3 MB, interned 76.4 MB, id -> (last_updated, cost) 162.7 MB, int(id) 57.8 MB; the report reference 35.5 MB in 11.0 s; the sqlite reference load 25.9 MB, query 24.6 MB. The id-to-string design is inside the 100 MB cap by 1.7 MB, which is less than the difference between two interpreters or allocators, so whether it passes is noise in the primary endpoint.",
+   "change": "LARGE_ROWS is 1,500,000 (382 MB, 1,507,129 rows, written in about 10 s). Measured at that size: set 183.2 MB, id -> last_updated 269.5 MB, interned 242.7 MB, tuple 419.4 MB, int(id) 194.5 MB; report reference 35.7 MB in 28.7 s; sqlite reference load 26.5 MB in 31.9 s, query 24.6 MB in 13.4 s, file mode 26.6 MB in 43.9 s. Every per-id design now fails by at least 83 MB and the references pass by at least 64 MB. hidden_timeout_sec is 900 for both cloudbill tasks and task.toml's verifier timeout 1800 (the grader runs the hidden suite and the visible one, each capped at 900). The measurements are recorded in the hidden conftest and tasks/README.md in place of the 'about 80 MB' estimate; scripts/build_tasks.py re-run so cloudbill-sqlite's mirror follows.",
+   "note": "Raising the row count exposed a defect in the generator's oracle (own finding 1 below); the reviewer's proposed fix would have hit it too."
+  },
+  {
+   "finding_id": "F2",
+   "ruling": "upheld",
+   "reproduced": "A copy of the reference with first-seen service spelling (two-line edit to Labels) failed test_file_order_does_not_change_the_answer and nothing else: 1 failed, 52 passed, 1 deselected. The brief fixes service identity, not the shown spelling.",
+   "change": "The test compares mom --by account and daily-stats exactly (account ids, months and statistics have no open display choice) and costs --by service by normalised key (by_key with norm, as the suite does elsewhere) and money to the cent with close(). The first-seen copy now passes the whole suite without the large test (54 passed), and so does the reference."
+  },
+  {
+   "finding_id": "F3",
+   "ruling": "upheld",
+   "reproduced": "conftest.measured() ran the tool with timeout=900 while both cloudbill configs gave the whole suite 600 s, and grading/criteria.py returns (0, 1, 'timeout') on a suite timeout, so a tool slow on the large export lost the entire hidden suite rather than one test.",
+   "change": "MEASURE_TIMEOUT = 240 per run, with pytest.fail naming the command and the row count when it fires, and a clear failure when the measuring process reports nothing; hidden_timeout_sec 900 (three measured runs plus generation and about 300 small subprocess calls fit); task.toml verifier timeout 1800 for both cloudbill tasks. A new offline test, scripts/test_build_tasks.py::test_the_time_boxes_nest, fails if any *TIMEOUT constant in a hidden conftest does not fit three times into hidden_timeout_sec or if task.toml's verifier timeout is under twice the suite budget."
+  },
+  {
+   "finding_id": "F4",
+   "ruling": "upheld",
+   "reproduced": "grep over tests/__hidden for an unknown line item type found only case variants; billing_gen.Item.bad had no such mode. The reference rejects such a row ('unknown line item type: Discount', rejected_rows 1) but no test would have noticed a tool that counted it.",
+   "change": "billing_gen.Item gains bad='kind' (renders the type as 'Discount'); its docstring names the rule; build_scenario carries one such row, so every rejected-count assertion in the suite now covers it; test_inputs.py::test_unknown_line_item_type_is_rejected checks the rule on its own. The seed's sample is unchanged (the build check is clean). Both cloudbill suites grow by one test (55 and 75)."
+  },
+  {
+   "finding_id": "F5",
+   "ruling": "upheld in part",
+   "reproduced": "test_header_only_file_answers_with_nothing required exit 0; instruction.md names only 'missing, unreadable, or not a billing export' for exit 1 and does not say whether a header-only export is usable.",
+   "change": "The test (now test_header_only_file_is_an_empty_answer_or_unusable) accepts either an empty answer (exit 0, no rows, nothing rejected, net 0) or exit 1 with a message on stderr and nothing on stdout. The brief is not changed: it is an open decision and the suite's rule is that open decisions accept every reasonable answer. The reviewer's lenient form alone would have let the untouched seed pass this test (no package: exit 1 and a message), so the test first checks that the tool answers a one-row export at all, as test_not_a_billing_export_exits_1 does; the seed still fails all 55."
+  },
+  {
+   "finding_id": "F6",
+   "ruling": "upheld in part",
+   "reproduced": "driver/backends.py: FAKE_INTENT, the ask_user brief, FAKE_PROCESS_REVIEW and FAKE_REVIEW are ledger-shaped on every task; only the draft file name takes the task's name.",
+   "change": "The FakeBackend docstring now says so: the fixtures are placeholders that exercise the pipeline and the grader's parsing, not the task, nothing in them reaches a hidden test, and they score the same on every task. They are not derived from the task config: that would change the ledger fake artifacts the parity check compares value for value, for no gain in what the fake runs measure."
+  },
+  {
+   "finding_id": "F7",
+   "ruling": "rejected",
+   "reason": "Out of scope. .claude/worktrees/ holds the checkouts of the two implementer sessions of the workflow that produced this change; nothing under ideas/change-intent/eval refers to them, they are not part of the reviewed change, and removing another process's worktrees from inside one of its steps is not this step's to do. The repository's root has no .gitignore and adding one is a repository-level change outside the eval. Listed under remaining gaps as housekeeping before the commit: `git worktree remove` both, or `git worktree prune` after deleting the directories."
+  },
+  {
+   "finding_id": "F8",
+   "ruling": "upheld",
+   "reproduced": "Flattening reward-details.json of runs/20261020T225304Z-baseline and runs/20261021T011506Z-ledger-budgets-baseline gives 15 values each, 0 differences; reward.json of both cloudbill-sqlite baseline runs says diagnostics 0.3625, printed 0.362.",
+   "change": "README: 'every one of the 23 criterion values' is now 'every value in reward-details.json'; 0.363 is 0.362."
+  }
+ ],
+ "own_findings": [
+  {
+   "title": "The large-export oracle assumed the export ends before 20 September",
+   "what": "billing_gen.write_large stamped its early corrections '2026-09-20T09:00:00Z' and its late restatements '2026-09-21T09:00:00Z', while every row's own last_updated is its usage start plus five hours. At 600,000 rows the export ends on 20 September 01:00 and the assumption held by eight hours; at 1,500,000 rows (3,001 hourly rows per resource) it runs into December, so for rows after 20 September the original version is the later one and the reference, correctly, kept it: compute engine net 376,660.13 from the tool against 376,223.81 from the oracle, and the reference failed its own memory test.",
+   "fix": "Corrections are stamped relative to the end of the export (last row's last_updated plus seven and eight days), so the oracle holds at any row count. Reference 55 of 55 and 75 of 75 after the fix."
+  },
+  {
+   "title": "The lenient header-only test would have been a free pass for the untouched seed",
+   "what": "With no package installed, `python -m cloudbill` exits 1 with a message on stderr and nothing on stdout, which is exactly the 'unusable' outcome F5 asked the test to accept; the seed's score would have gone from 0 of 55 to 1 of 55 for nothing.",
+   "fix": "The test first checks that the tool answers a one-row export with exit 0, the pattern test_not_a_billing_export_exits_1 already uses."
+  },
+  {
+   "title": "No test tied the three time boxes together",
+   "what": "F3 was a mismatch between a per-run timeout, a per-suite budget and the Harbor verifier timeout that nothing checked.",
+   "fix": "scripts/test_build_tasks.py::test_the_time_boxes_nest, parametrised over the tasks."
+  },
+  {
+   "title": "Test counts in the documentation",
+   "what": "The suites grew by one test each (F4), so '0 / 54 of 54' and '2 / 74 of 74' are now 0 / 55 of 55 and 2 / 75 of 75 in README.md and tasks/README.md."
+  }
+ ],
+ "verification": {
+  "environment": "offline: no Docker daemon, no Copilot-entitled token; Python 3.13 in the test venv, 4 CPUs; Reward Kit 0.2.3 through uvx",
+  "hidden_tests": {
+   "cloudbill-report": {
+    "seed": "0 of 55 (55 failed, 11.5 s)",
+    "reference": "55 of 55 (54.7 s; large-export test 28.7 s call plus 11.5 s generation)"
+   },
+   "cloudbill-sqlite": {
+    "seed": "2 of 75 (60 failed, 13 errors, 2 passed: an exit-code check and the file-mode memory test the seed satisfies by construction; 45 s)",
+    "reference": "75 of 75 (130.8 s)"
+   },
+   "ledger-budgets": {
+    "seed": "5 of 37 (32 failed)",
+    "reference": "37 of 37",
+    "note": "unchanged; the conftest reads LEDGER_WORKSPACE"
+   }
+  },
+  "peak_memory_mb_ru_maxrss": {
+   "rows_600000": {
+    "file_mb": 153,
+    "set_of_ids": 62.9,
+    "id_to_last_updated_str": 98.3,
+    "interned": 76.4,
+    "id_to_tuple": 162.7,
+    "int_id": 57.8,
+    "report_reference_costs": 35.5,
+    "sqlite_reference_load": 25.9,
+    "sqlite_reference_query": 24.6
+   },
+   "rows_1500000": {
+    "file_mb": 382,
+    "rows_written": 1507129,
+    "generation_s": 9.9,
+    "set_of_ids": 183.2,
+    "id_to_last_updated_str": 269.5,
+    "interned": 242.7,
+    "id_to_tuple": 419.4,
+    "int_id": 194.5,
+    "report_reference_costs": 35.7,
+    "report_reference_s": 28.7,
+    "sqlite_reference_load": 26.5,
+    "sqlite_reference_load_s": 31.9,
+    "sqlite_reference_query": 24.6,
+    "sqlite_reference_query_s": 13.4,
+    "sqlite_reference_file_mode": 26.6,
+    "sqlite_reference_file_mode_s": 43.9,
+    "database_mb": 383
+   },
+   "cap_mb": 100
+  },
+  "offline_suites": "python -m pytest driver/test_author_stage.py scripts/test_analyze.py scripts/test_build_tasks.py -q: 55 passed in 17.0 s (52 before this pass; test_the_time_boxes_nest adds 3)",
+  "build_check": "scripts/build_tasks.py --check: up to date",
+  "rewardkit_uvx": {
+   "command": "EVAL_WORKSPACE=<run>/app EVAL_PYTHON=$(command -v python3) uvx --from 'harbor-rewardkit==0.2.3' rewardkit --workspace <run>/app --output <file> tasks/<task>/tests, as tests/test.sh does",
+   "cloudbill-report (runs/20261021T011134Z-cloudbill-report-baseline)": {
+    "wall_s": 57,
+    "correctness": 1.0,
+    "diagnostics": 0.5,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "cloudbill-sqlite (runs/20261021T011245Z-cloudbill-sqlite-baseline)": {
+    "wall_s": 133,
+    "correctness": 1.0,
+    "diagnostics": 0.3625,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "ledger-budgets (runs/20261021T011506Z-ledger-budgets-baseline)": {
+    "wall_s": 5,
+    "correctness": 1.0,
+    "diagnostics": 0.2625,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   }
+  },
+  "fake_runs_run_local": {
+   "command": "scripts/run_local.sh <task> <process> --backend fake (the frozen variant with --intent-file <the intent the earlier frozen run committed>)",
+   "cloudbill-report baseline (runs/20261021T013704Z)": {
+    "correctness": 1.0,
+    "diagnostics": 0.5,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "cloudbill-report change-intent-v1 (runs/20261021T013803Z)": {
+    "correctness": 1.0,
+    "diagnostics": 0.9861,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "cloudbill-sqlite baseline (runs/20261021T013904Z)": {
+    "correctness": 1.0,
+    "diagnostics": 0.3625,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "cloudbill-sqlite change-intent-v1 (runs/20261021T014114Z)": {
+    "correctness": 1.0,
+    "diagnostics": 0.8486,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "ledger-budgets baseline (runs/20261021T014329Z)": {
+    "correctness": 1.0,
+    "diagnostics": 0.2625,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "ledger-budgets change-intent-v1 (runs/20261021T014335Z)": {
+    "correctness": 1.0,
+    "diagnostics": 0.7486,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "ledger-budgets change-intent-v1-frozen (runs/20261021T014420Z)": {
+    "correctness": 1.0,
+    "diagnostics": 0.7486,
+    "handoff": 1.0,
+    "review": 0.8646,
+    "reward": 0.9613
+   },
+   "ledger parity": "reward-details.json of the new ledger baseline run flattens to 15 values, 0 differences from runs/20261020T225304Z-baseline (the pre-change run); every cloudbill and ledger figure equals the pre-change run's",
+   "wall time per run here (4 CPUs)": "cloudbill-report about 1 min, cloudbill-sqlite about 2.5 to 3 min, ledger about 6 s"
+  }
+ },
+ "remaining_gaps": [
+  "The two implementer worktrees under .claude/worktrees/ are still registered (F7); remove or prune them before committing, and do not `git add -A` from the repository root.",
+  "The hidden suites' wall time on a 2-CPU Harbor container is not measured; here (4 CPUs) the references take about 55 s (report) and about three minutes (sqlite) for the whole hidden suite, against budgets of 900 s per suite and 1800 s for the verifier. The first Harbor run should confirm the margin.",
+  "The memory test still measures peak RSS on one machine at one size; a design that spills to disk and one that merely fits at 1.5 million rows are not distinguished (stated in the README limitations).",
+  "Whether a header-only export is usable remains unstated in the brief; the test accepts both answers.",
+  "The fake backend's intent and reviews remain ledger-shaped on every task (documented, not derived).",
+  "Nothing has been run through a real model or a real Harbor job; that is unchanged from the fourth pass."
+ ]
+}

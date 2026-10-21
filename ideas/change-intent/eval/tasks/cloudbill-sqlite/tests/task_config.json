@@ -1,0 +1,19 @@
+{
+  "name": "cloudbill-sqlite",
+  "type": "migration",
+  "language": "python",
+  "package": "cloudbill",
+  "code_dirs": ["cloudbill"],
+  "visible_test_command": ["python", "-m", "pytest", "tests"],
+  "seed_tests": ["tests/test_cli.py", "tests/test_export.py", "tests/test_questions.py", "tests/test_resolve.py"],
+  "seed_test_count": 54,
+  "hidden_timeout_sec": 900,
+  "fake_reference": "solution/repo",
+  "hidden_answers_from": "database",
+  "build": [
+    {"copy": "cloudbill-report/environment/seed", "to": "environment/seed", "mode": "mirror"},
+    {"copy": "cloudbill-report/solution/repo", "to": "environment/seed", "mode": "overlay"},
+    {"copy": "cloudbill-report/solution/repo/tests", "to": "tests/__seed", "mode": "mirror"},
+    {"copy": "cloudbill-report/tests/__hidden", "to": "tests/__hidden", "mode": "mirror", "keep": ["test_database.py"]}
+  ]
+}

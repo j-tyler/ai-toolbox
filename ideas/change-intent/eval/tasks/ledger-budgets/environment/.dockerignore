@@ -1,0 +1,4 @@
+# Caches a local test run can leave in the seed must never reach the image (the model would see them).
+**/.pytest_cache
+**/__pycache__
+**/*.pyc

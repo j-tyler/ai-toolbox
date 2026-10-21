@@ -1,0 +1,3 @@
+[[reward]]
+aggregation = "weighted-mean"
+weights = { fixed_reviewer = 1.0, reviewability = 1.0 }

@@ -2,8 +2,8 @@
 """Run one process version against one workspace and leave gradable artifacts behind.
 
     python run_process.py --workspace /app --process ../processes/change-intent-v1 \
-        --brief /path/to/instruction.md --out /app/.eval --model gpt-5.4 --reviewer-model claude-sonnet-4.5 \
-        [--backend copilot|fake] [--intent-file path] [--label key=value ...]
+        --brief /path/to/instruction.md --out /app/.eval --model <model> --reviewer-model <other model> \
+        [--task-config tasks/<task>/tests/task_config.json] [--backend copilot|fake] [--intent-file path] [--label key=value ...]
 
 Stages, in order (which run is decided by the process's process.json; see processes/README.md):
   author        mode "skill": the authoring skill runs in a Copilot SDK session and a stand-in author
@@ -55,7 +55,16 @@ from stand_in import ModelStandIn, ScriptedStandIn  # noqa: E402
 
 EVAL_ROOT = Path(__file__).resolve().parents[1]
 FIXED_REVIEWER_PROMPT_PATH = EVAL_ROOT / "reviewer" / "fixed_reviewer.md"
-CODE_DIRS = ("ledger",)  # where "the implementation" lives for the continuation rule
+# The per-task contract (tasks/<task>/tests/task_config.json). Harbor uploads it next to the driver as
+# /eval/task_config.json and run_local.sh copies it to the same place in its private harness copy; it is
+# never inside the model's workspace. Without one the driver falls back to the ledger task's settings and
+# records that in the manifest.
+DEFAULT_TASK_CONFIG_PATH = EVAL_ROOT / "task_config.json"
+LEDGER_TASK_DEFAULTS: dict = {
+    "name": "ledger-budgets", "type": "extension", "language": "python", "package": "ledger",
+    "code_dirs": ["ledger"], "visible_test_command": ["python", "-m", "pytest", "tests"],
+}
+CODE_DIRS = tuple(LEDGER_TASK_DEFAULTS["code_dirs"])  # ledger defaults; run() uses the task config's code_dirs
 CODE_PREFIXES = tuple(d.rstrip("/") + "/" for d in CODE_DIRS)  # "ledger/" so that ./ledger.csv is not a code change
 
 # ---- harness-neutral prompt templates. Process-specific wording belongs in the process directory. ----
@@ -426,11 +435,43 @@ def model_mismatch(res: StageResult, expected: str | None) -> list[str]:
     return [m for m in res.models_seen if m and m != expected and m.rsplit("/", 1)[-1] != expected.rsplit("/", 1)[-1]]
 
 
-def visible_suite_green(ws: Path) -> bool | None:
-    """Run the workspace's own test suite; None if it could not run."""
+def load_task_config(path: Path | None) -> tuple[dict, str]:
+    """(config, source). ``path`` None means: the file next to the driver if present, else the ledger defaults."""
+    if path is None and DEFAULT_TASK_CONFIG_PATH.is_file():
+        path = DEFAULT_TASK_CONFIG_PATH
+    if path is None:
+        return dict(LEDGER_TASK_DEFAULTS), "builtin-ledger-defaults"
     try:
-        proc = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--no-header", "tests"],
-                              cwd=ws, text=True, capture_output=True, timeout=300)
+        cfg = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"cannot read task config {path}: {exc}")
+    missing = [k for k in ("name", "code_dirs", "visible_test_command") if k not in cfg]
+    if missing:
+        raise SystemExit(f"task config {path} lacks {missing}")
+    if not cfg["code_dirs"] or not isinstance(cfg["visible_test_command"], list) or not cfg["visible_test_command"]:
+        raise SystemExit(f"task config {path}: code_dirs and visible_test_command must be non-empty lists")
+    return cfg, str(Path(path).resolve())
+
+
+def code_prefixes(task_cfg: dict) -> tuple[str, ...]:
+    """Directory prefixes ("ledger/") so that a data file such as ./ledger.csv is not a code change."""
+    return tuple(d.strip("/") + "/" for d in task_cfg["code_dirs"])
+
+
+def visible_test_argv(task_cfg: dict | None = None) -> list[str]:
+    """The task's visible test command with `python` bound to this interpreter, quiet and cache-free."""
+    cmd = list((task_cfg or LEDGER_TASK_DEFAULTS)["visible_test_command"])
+    if cmd[0] in ("python", "python3"):
+        cmd[0] = sys.executable
+    if cmd[1:3] == ["-m", "pytest"]:
+        cmd[3:3] = ["-q", "-p", "no:cacheprovider", "--no-header"]
+    return cmd
+
+
+def visible_suite_green(ws: Path, task_cfg: dict | None = None) -> bool | None:
+    """Run the workspace's own test suite (the task's visible test command); None if it could not run."""
+    try:
+        proc = subprocess.run(visible_test_argv(task_cfg), cwd=ws, text=True, capture_output=True, timeout=300)
     except Exception:
         return None
     return proc.returncode == 0
@@ -455,6 +496,10 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
     intent_cfg = process["intent"]
     intent_dir = intent_cfg["dir"]
     noun = intent_cfg.get("noun", "description document")
+    task_config = getattr(args, "task_config", None)  # absent in callers that predate the task config
+    task_cfg, task_cfg_source = load_task_config(Path(task_config) if task_config else None)
+    task_code_prefixes = code_prefixes(task_cfg)
+    summary["task"] = task_cfg["name"]
 
     for k, v in {"GIT_AUTHOR_NAME": "eval", "GIT_AUTHOR_EMAIL": "eval@example.invalid",
                  "GIT_COMMITTER_NAME": "eval", "GIT_COMMITTER_EMAIL": "eval@example.invalid"}.items():
@@ -468,7 +513,7 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
 
     # Backend and stand-in
     if args.backend == "fake":
-        backend: Backend = FakeBackend(Path(args.fake_reference) if args.fake_reference else None, intent_dir)
+        backend: Backend = FakeBackend(Path(args.fake_reference) if args.fake_reference else None, intent_dir, slug=task_cfg["name"])
     else:
         if not args.model:
             raise SystemExit("--model is required for the copilot backend so every stage runs on a known model")
@@ -524,6 +569,9 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
 
     # ---- manifest -------------------------------------------------------------------------------
     manifest: dict = {
+        "task": {"name": task_cfg["name"], "type": task_cfg.get("type"), "source": task_cfg_source,
+                 "config_sha256": sha256_text(json.dumps(task_cfg, sort_keys=True)),
+                 "code_dirs": list(task_cfg["code_dirs"]), "visible_test_command": list(task_cfg["visible_test_command"])},
         "process_name": process["name"],
         "process_dir": str(process_dir),
         "process_files": {str(p.relative_to(process_dir)): sha256_file(p) for p in sorted(process_dir.rglob("*")) if p.is_file()},
@@ -693,8 +741,8 @@ async def run(args: argparse.Namespace, summary: dict) -> None:
         async def next_impl_turn(message: str) -> str | None:
             """One objective continuation rule for every condition: continue while the visible suite is
             red or nothing in the code tree changed, up to --max-implement-nudges times."""
-            changed = [p for p in git_dirty_paths(ws) + git_committed_paths(ws, head_before_impl) if p.startswith(CODE_PREFIXES)]
-            green = visible_suite_green(ws)
+            changed = [p for p in git_dirty_paths(ws) + git_committed_paths(ws, head_before_impl) if p.startswith(task_code_prefixes)]
+            green = visible_suite_green(ws, task_cfg)
             done = bool(changed) and green is True
             reason = "complete" if done else ("suite_red" if changed else "no_code_change")
             if not done and nudges["n"] < args.max_implement_nudges:
@@ -883,6 +931,8 @@ def main() -> int:
     p.add_argument("--provider-json", default=os.environ.get("EVAL_PROVIDER_JSON"), help="BYOK ProviderConfig (JSON) for the implementer's sessions")
     p.add_argument("--reviewer-provider-json", default=os.environ.get("EVAL_REVIEWER_PROVIDER_JSON"), help="route for the fixed reviewer: provider JSON, or '{}' for the Copilot API; required when --provider-json is set")
     p.add_argument("--stand-in-provider-json", default=os.environ.get("EVAL_STAND_IN_PROVIDER_JSON"), help="route for the model stand-in (default: Copilot API)")
+    p.add_argument("--task-config", default=os.environ.get("EVAL_TASK_CONFIG"),
+                   help="the task's task_config.json (default: task_config.json next to driver/, else the ledger task's settings)")
     p.add_argument("--backend", choices=["copilot", "fake"], default="copilot")
     p.add_argument("--fake-reference", help="fake backend: directory copied in as the implementation")
     p.add_argument("--stand-in", choices=["scripted", "model"], default="scripted")

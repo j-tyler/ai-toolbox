@@ -1,0 +1,20 @@
+version = "1.0"
+
+[metadata]
+difficulty = "medium"
+category = "programming"
+tags = ["change-intent", "process-eval", "rewardkit", "python", "stdlib", "greenfield"]
+author = "ai-toolbox change-intent eval"
+description = "Build a streaming stdlib CLI that answers cost-review questions from a messy cloud billing export. Greenfield. Used to compare code-generation processes, not models."
+
+[verifier]
+timeout_sec = 1800.0  # the hidden suite generates a 1,500,000-row export and runs the tool over it (reference: about 40 s; each run capped at 240 s); the criteria cap each suite at hidden_timeout_sec (900), and the grader runs the hidden suite and the visible one
+
+[agent]
+timeout_sec = 10500.0  # driver budget 9600 (caps 1800+3600+900+3x900 = 9000 plus overhead) plus margin for start-up, abort, git, copy
+
+[environment]
+build_timeout_sec = 900.0
+cpus = 2
+memory = "4G"
+storage = "10G"

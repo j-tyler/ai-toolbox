@@ -138,7 +138,7 @@ def test_heterogeneous_condition_is_flagged(tmp_path: Path):
 
 
 def test_model_mismatch_is_invalid_unless_kept(tmp_path: Path):
-    _write(tmp_path, "20260101T000000Z-x", _summary("x", model_mismatch_any=["implement: wanted gpt-5.4 got gpt-4.1"]), {"reward": 0.5})
+    _write(tmp_path, "20260101T000000Z-x", _summary("x", model_mismatch_any=["implement: wanted model-a got model-b"]), {"reward": 0.5})
     trials, _ = analyze.load_trials(tmp_path)
     assert trials[0]["invalid"] == "model_mismatch"
     trials, _ = analyze.load_trials(tmp_path, keep_model_mismatch=True)
@@ -157,3 +157,34 @@ def test_main_stops_on_mixed_conditions_and_reports_otherwise(tmp_path: Path, mo
     out = capsys.readouterr().out
     assert "primary endpoint: correctness" in out and out.index("primary endpoint") < out.index("== trials per condition")
     assert "PP  = biased" in out and "reviewer calibration" in out
+
+
+def test_condition_key_includes_task(tmp_path: Path):
+    a = _summary("baseline", task="ledger-budgets")
+    b = _summary("baseline", task="cloudbill-report")
+    c = _summary("baseline", manifest={"task": {"name": "cloudbill-report"}})  # manifest-only form
+    old = _summary("baseline")  # written before the task config existed
+    for i, s in enumerate([a, b, c, old]):
+        _write(tmp_path, f"2026010{i}T000000Z-x", s)
+    trials, _ = analyze.load_trials(tmp_path)
+    conds = sorted({t["condition"] for t in trials})
+    assert conds == ["baseline", "baseline task=cloudbill-report", "baseline task=ledger-budgets"]
+
+
+def test_differences_use_the_reference_arm_of_the_same_task(tmp_path: Path, monkeypatch, capsys):
+    conds = ["baseline task=a", "baseline task=b", "v1 task=a", "v1 task=b"]
+    tasks = {c: c.split("task=")[1] for c in conds}
+    assert analyze.reference_conditions(conds, tasks, "baseline") == {
+        "baseline task=a": "baseline task=a", "baseline task=b": "baseline task=b",
+        "v1 task=a": "baseline task=a", "v1 task=b": "baseline task=b"}
+    # no --ref: each task's alphabetically first condition, never another task's
+    assert analyze.reference_conditions(["x task=b", "y task=a", "z task=b"], {"x task=b": "b", "y task=a": "a", "z task=b": "b"}, None) == {
+        "x task=b": "x task=b", "y task=a": "y task=a", "z task=b": "x task=b"}
+    for i, (proc, task, corr) in enumerate([("baseline", "a", 1.0), ("v1", "a", 0.5), ("baseline", "b", 0.2), ("v1", "b", 0.2)]):
+        _write(tmp_path, f"2026010{i}T000000Z-x", _summary(proc, task=task), {"reward": corr, "correctness": corr, "review": 0.5, "handoff": 1.0})
+    monkeypatch.setattr(sys, "argv", ["analyze", str(tmp_path), "--ref", "baseline"])
+    assert analyze.main() == 0
+    out = capsys.readouterr().out
+    diffs = out[out.index("== differences"):out.index("== decomposition")]
+    assert "v1 task=a" in diffs and "v1 task=b" in diffs
+    assert "correctness  (primary    ) -0.500" in diffs and "correctness  (primary    )  0.000" in diffs

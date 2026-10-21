@@ -23,8 +23,8 @@ UserInputFn = Callable[[str, list[str] | None, str], Awaitable[tuple[str, bool]]
 USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens")
 READ_ONLY_TOOLS = ("grep", "glob", "view", "bash", "read_bash", "stop_bash", "lsp")
 # Built-in sub-agents of the pinned runtime (cli 1.0.100 definitions/*.agent.yaml). Some are pinned to
-# other models (explore: gpt-5.6-luna/gpt-5.4-mini; research: claude-sonnet-5), which would break the
-# "same model for every condition" premise, so every stage excludes all of them.
+# models of their own (the explore and research agents, among others), which would break the "same
+# model for every condition" premise, so every stage excludes all of them.
 BUILTIN_AGENTS = ("code-review", "explore", "rem-agent", "research", "rubber-duck", "security-review", "task")
 STRUCTURED_OUTPUT_MISSING = "Run completed without a structured assistant response"
 # Session isolation: no cross-session store, memory, embedding retrieval or file hooks, so nothing from
@@ -460,11 +460,18 @@ class CopilotBackend(Backend):
 
 class FakeBackend(Backend):
     """Offline stand-in for the model. Writes a template intent, asks one question, and, when given a
-    directory of reference files, copies them in as the "implementation"."""
+    directory of reference files, copies them in as the "implementation".
 
-    def __init__(self, reference_dir: Path | None, intent_dir: str = "change-intent"):
+    The fixtures below (FAKE_INTENT, the ask_user brief, FAKE_PROCESS_REVIEW, FAKE_REVIEW) are
+    ledger-shaped placeholders and are used unchanged for every task; only the draft's file name takes
+    the task's name. They exercise the pipeline and the grader's parsing, not the task: on a cloudbill
+    fake run the saved intent and reviews describe the ledger task, by design. Nothing in them reaches a
+    hidden test, and the review they produce scores the same on every task (README, "Offline check")."""
+
+    def __init__(self, reference_dir: Path | None, intent_dir: str = "change-intent", slug: str = "ledger-budgets"):
         self.reference_dir = reference_dir
         self.intent_dir = intent_dir
+        self.slug = slug  # the task name; names the fake draft file
 
     def versions(self) -> dict[str, str]:
         return {"backend": "fake"}
@@ -496,7 +503,7 @@ class FakeBackend(Backend):
             events.append({"type": "fake.ask_user", "data": {"answer": ans}})
             target = workspace / self.intent_dir
             target.mkdir(parents=True, exist_ok=True)
-            draft = target / f"{time.strftime('%Y-%m-%d')}-ledger-budgets.md"
+            draft = target / f"{time.strftime('%Y-%m-%d')}-{self.slug}.md"
             draft.write_text(FAKE_INTENT, encoding="utf-8")
             script = [
                 "I explored the code and drafted a file. Should I also refactor the CLI while I am here?",
@@ -525,7 +532,11 @@ class FakeBackend(Backend):
                     if src.is_file():
                         dst = workspace / src.relative_to(self.reference_dir)
                         dst.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(src, dst)
+                        # copy, not copy2: the file gets a fresh mtime, as an agent's edit would. copy2 kept the
+                        # reference's mtime, and a replaced seed file of the same size and second-stamp was then
+                        # invisible to `git add -A` (git trusts a matching stat), so the commit lacked it.
+                        shutil.copy(src, dst)
+                (workspace / "tests").mkdir(exist_ok=True)  # a greenfield seed has no tests/ yet
                 (workspace / "tests" / "test_fake_added.py").write_text(
                     "def test_fake_added():\n    assert True\n", encoding="utf-8"
                 )

@@ -1,0 +1,9 @@
+[project]
+name = "cloudbill"
+version = "0.2.0"
+description = "Answers for the monthly cloud cost review, from the billing export"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -25,35 +25,52 @@ and no Docker daemon.
 | Outer harness: containers, repeated trials, logs, viewer | [Harbor](https://github.com/harbor-framework/harbor), Apache-2.0 | yes |
 | Grader: multi-dimension verifier with audit details | [Reward Kit](https://docs.harborframework.com/rewardkit/quick-start), part of Harbor | yes |
 | Agent runtime | [GitHub Copilot SDK](https://github.com/github/copilot-sdk), MIT, Python | yes |
-| The exercise: seed project, brief, hidden tests, reference solution | `tasks/ledger-budgets/` | ours |
+| The exercises: seed project, brief, hidden tests, reference solution, one `task_config.json` each | `tasks/` (see [`tasks/README.md`](tasks/README.md)) | ours |
+| Grading code shared by every task, copied into each task's `tests/` by `scripts/build_tasks.py` | `grading/` | ours |
 | Process versions, generated from `../mechanics`; schema in `processes/README.md` | `processes/` | ours |
 | Driver: author → implement → review → fixed review, with a stand-in author | `driver/` | ours |
 | Fixed reviewer instructions, assembled from published sources | `reviewer/` | ours, cited |
-| Harbor agent classes, one per condition | `agents/copilot_process.py` | ours |
+| Harbor agent classes, one per condition (the task is found from the instruction) | `agents/copilot_process.py` | ours |
 
 Everything "ours" is small and meant to be read. The claim to neutrality rests on the hidden
 tests being objective, the grader being someone else's, and the process files being the only
 thing that differs between conditions.
 
-## The exercise
+## The tasks
 
-`ledger` is a 300-line stdlib Python CLI that records and lists transactions. The brief
+Three Python tasks of three types, all pure standard library ([`tasks/README.md`](tasks/README.md)
+has the detail, the config schema, and how to add one):
+
+| Task | Type | In one line | Hidden tests: seed / reference |
+| --- | --- | --- | --- |
+| `ledger-budgets` | extension | add budgets, recurring transactions, import and a report to a 300-line CLI, under a precise interface contract | 5 / 37 of 37 |
+| `cloudbill-report` | greenfield | build a streaming cost-review CLI over a messy cloud billing export from a lighter ticket that leaves encodings, duplicates, rounding and the percentile method open, under a 100 MB memory cap | 0 / 55 of 55 |
+| `cloudbill-sqlite` | migration | move that tool onto SQLite with idempotent loads, restatements across loads, provenance and byte-identical answers; the seed is the report task's reference | 2 / 75 of 75 |
+
+`ledger` is a 300-line stdlib Python CLI that records and lists transactions. Its brief
 ([`tasks/ledger-budgets/instruction.md`](tasks/ledger-budgets/instruction.md)) asks for budgets,
 recurring transactions, bank-CSV import with de-duplication, and a monthly report, with an
 interface contract precise enough to test and open enough to leave real decisions. The reference
-solution is about 500 lines of implementation; with the tests the brief demands, a complete
-answer lands in the 1,000 to 2,000 line range.
+solution is about 500 lines of implementation. Its hidden tests keep the ledger in a `data/`
+subdirectory with a different working directory, so "files next to the ledger file" is checked,
+not assumed, and the seed's own 17 tests still pass on the reference.
 
-Hidden acceptance tests (32, under `tests/__hidden/`) are never visible to the agent. On the
-untouched seed they fail 28 of 32; on the reference solution all pass, and the seed's own 17 tests
-still pass. The tests keep the ledger in a `data/` subdirectory with a different working directory,
-so "files next to the ledger file" is checked, not assumed.
+The two `cloudbill` tasks are black box: the hidden tests run `python -m cloudbill` in a
+subprocess against exports a seeded generator writes, and check standard output, exit codes and
+files, plus properties (determinism, every view adding up, rejected counts consistent) and the
+child's peak memory on a 1,500,000-row export under the brief's 100 MB cap. The migration task's
+hidden suite is the report task's suite asked of a database loaded from the same files, plus
+database tests. Each task's specifics (code directories, visible test command, seed tests, fake
+reference) live in its `tests/task_config.json`, which the driver and the grader both read, so the
+rest of the harness is the same for every task.
 
 ## How a run works
 
 1. Harbor builds the task image (seed repo, Python, pytest, uv, a git identity) and installs the
-   Copilot CLI and pinned SDK in it, then uploads `driver/`, `reviewer/`, and the chosen
-   `processes/<name>/`.
+   Copilot CLI and pinned SDK in it, then uploads `driver/`, `reviewer/`, the chosen
+   `processes/<name>/`, and the task's `task_config.json` (next to the driver, never in the
+   workspace). The agent finds the task from the instruction Harbor passes it (or `EVAL_TASK`, or
+   a `TASK` class attribute) and refuses to start on a mismatch.
 2. `driver/run_process.py` turns the workspace into a git repo, installs the process files
    (appends the agents-file block to `AGENTS.md`, creates the intent directory), and commits a
    baseline. Every artifact it produces lives **outside the workspace** until the end, so no stage
@@ -78,8 +95,8 @@ so "files next to the ledger file" is checked, not assumed.
    ("implement the change described in the {noun} at {path}", or "in the brief below"), with the
    brief attached when `implement.include_brief` is true. The noun comes from `intent.noun` in
    `process.json`, so a spec or a plan is named as such. Continuation is one objective rule for every
-   condition: the driver nudges while the visible test suite is red or nothing under the code tree
-   changed, at most twice, and records why each turn ended. Every turn's summary is kept. Everything process-specific
+   condition: the driver nudges while the visible test suite (the task's `visible_test_command`) is
+   red or nothing under the task's `code_dirs` changed, at most twice, and records why each turn ended. Every turn's summary is kept. Everything process-specific
    arrives through `implement.system_append` and the agents-file block, never through the harness
    prompt. The result is committed as `eval: implementation` (an empty marker commit if the agent
    already committed), and that commit is recorded.
@@ -129,9 +146,16 @@ Process-specific artifacts are diagnostics with weight zero, so a process that p
 is not penalised for honesty and a process that produces change-intent-shaped files gains
 nothing for the shape alone. `reward-details.json` lists every criterion's value.
 
-Offline check, fake backend, same grader, same fake output for every condition: baseline,
-change-intent-v1, and change-intent-v1-frozen all score 0.961 on the headline, and differ only in
-diagnostics (0.017 vs 0.665). That parity is the property that makes a real difference
+The correctness group is the same file in every task, but `correctness/regression.py` registers
+the seed-regression criterion only when `task_config.json` lists seed tests, so on the greenfield
+task it is absent (regression is the agent's own suite and the stdlib constraint) rather than a
+free 1.0.
+
+Offline check, fake backend, same grader, same fake output for every condition: on ledger-budgets,
+baseline, change-intent-v1 and change-intent-v1-frozen all score 0.961 on the headline (diagnostics
+0.263, 0.749, 0.749); on cloudbill-report and cloudbill-sqlite, baseline and change-intent-v1 both
+score 0.961 with correctness 1.0 (diagnostics 0.500 and 0.986; 0.362 and 0.849). That parity is
+the property that makes a real difference
 attributable to the process. In real runs the review dimension is where conditions are expected
 to separate: the fixed reviewer rates description adequacy and verifiability from the artifacts
 each process leaves behind, and `verified_claims_ratio` is a ratio so a description that claims
@@ -139,23 +163,30 @@ less cannot win by claiming less.
 
 ## Running
 
-### Offline pipeline check (no model, no Docker, ~5 s)
+### Offline pipeline check (no model, no Docker; ledger ~5 s, cloudbill-report about 1.5 min, cloudbill-sqlite about 3 min)
 
 ```bash
 cd ideas/change-intent/eval
 pip install -r requirements.txt            # or use uv
-scripts/run_local.sh change-intent-v1 --backend fake
-scripts/run_local.sh baseline --backend fake
-scripts/analyze.py runs/
+scripts/run_local.sh change-intent-v1 --backend fake                       # the task defaults to ledger-budgets
+scripts/run_local.sh ledger-budgets baseline --backend fake
+scripts/run_local.sh cloudbill-report baseline --backend fake
+scripts/run_local.sh cloudbill-sqlite change-intent-v1 --backend fake
+scripts/analyze.py runs/                                                   # conditions are keyed by task
+python -m pytest driver/test_author_stage.py scripts/test_analyze.py scripts/test_build_tasks.py -q
 ```
+
+`scripts/build_tasks.py` regenerates the grading code in every task and the files one task derives
+from another; run it after editing `grading/` or the report task's reference or hidden tests
+(`scripts/test_build_tasks.py` fails when anything is stale).
 
 ### Real run without Harbor (needs a Copilot-entitled token)
 
 ```bash
 export COPILOT_GITHUB_TOKEN=...            # a token for a user with Copilot access
-scripts/run_local.sh change-intent-v1 --model gpt-5.4 --reviewer-model claude-sonnet-4.5
-scripts/run_local.sh baseline         --model gpt-5.4 --reviewer-model claude-sonnet-4.5
-scripts/run_local.sh change-intent-v1-frozen --intent-file path/to/intent.md --model gpt-5.4 --reviewer-model claude-sonnet-4.5
+scripts/run_local.sh ledger-budgets change-intent-v1 --model <model> --reviewer-model <model from another vendor>
+scripts/run_local.sh ledger-budgets baseline         --model <model> --reviewer-model <model from another vendor>
+scripts/run_local.sh change-intent-v1-frozen --intent-file path/to/intent.md --model <model> --reviewer-model <model from another vendor>
 scripts/analyze.py runs/ --ref baseline
 ```
 
@@ -173,15 +204,19 @@ premium-request quota.
 ```bash
 cd ideas/change-intent/eval
 uv tool install harbor                      # or pip install harbor
-export COPILOT_GITHUB_TOKEN=... EVAL_REVIEWER_MODEL=claude-sonnet-4.5
-PYTHONPATH=. harbor run -p tasks/ledger-budgets -a oracle -k 1                                    # task sanity check: correctness 1.0
-PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1 -m gpt-5.4 -k 3
-PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline        -m gpt-5.4 -k 3
+export COPILOT_GITHUB_TOKEN=... EVAL_REVIEWER_MODEL=<model from another vendor>
+PYTHONPATH=. harbor run -p tasks/cloudbill-report -a oracle -k 1                                  # task sanity check: correctness 1.0
+PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1 -m <model> -k 3
+PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:Baseline        -m <model> -k 3
 EVAL_INTENT_FILE=path/to/intent.md EVAL_LABELS=intent=A \
-PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1Frozen -m gpt-5.4 -k 3
+PYTHONPATH=. harbor run -p tasks/ledger-budgets -a agents.copilot_process:ChangeIntentV1Frozen -m <model> -k 3
 harbor view jobs
 scripts/analyze.py ~/jobs/<job> --ref baseline
 ```
+
+The same agent classes serve every task: each trial's task is found from its instruction and that
+task's `task_config.json` is uploaded with the driver. A frozen intent is task-specific, so run the
+frozen arm one task at a time.
 
 The stage caps sum to 9000 s (author 1800, implement 3600, process review 900, three fixed-review
 attempts of 900). The driver is given a 9600 s deadline and the task's agent timeout is 10500 s, so
@@ -197,13 +232,18 @@ whatever the model service was doing that hour:
 # job.yaml
 agents:
   - import_path: agents.copilot_process:Baseline
-    model_name: gpt-5.4
+    model_name: <model>
   - import_path: agents.copilot_process:ChangeIntentV1
-    model_name: gpt-5.4
+    model_name: <model>
 datasets:
   - path: tasks/ledger-budgets
+  - path: tasks/cloudbill-report
+  - path: tasks/cloudbill-sqlite
 n_attempts: 20
 ```
+
+`analyze.py` keys every condition by task and compares each arm with the reference arm of the
+same task only.
 
 ```bash
 PYTHONPATH=. harbor run -c job.yaml
@@ -242,6 +282,13 @@ variant, copy a generated directory to a new name, edit the copy, add a two-line
   separate experiment, not a tweak.
 - **Hidden tests live under `tests/__hidden/`.** Reward Kit imports every `.py` under a criteria
   directory, and skips directories whose names start with `__` or `.`.
+- **One contract per task, one copy of the grader.** Everything task-specific is in
+  `tests/task_config.json`, read by the driver (uploaded next to it, never into the workspace) and
+  by the grader. The grading code exists once, in `grading/`, and `scripts/build_tasks.py` mirrors
+  it into each task's `tests/` (Harbor copies only `tests/`); `--check` fails on drift. A task
+  derived from another (the migration task's seed and oracle tests) is built the same way, never
+  copied by hand. The driver falls back to the ledger task's settings when it finds no config and
+  records `builtin-ledger-defaults` in the manifest.
 - **Harbor copies `tests/` into the container only at verification time**, so the agent never
   sees the hidden tests or the criteria.
 - **Verifier interpreter.** Reward Kit runs under `uvx` with its own virtualenv; the criteria run
@@ -283,7 +330,7 @@ variant, copy a generated directory to a new name, edit the copy, add a two-line
 
 ## What the review changed
 
-A workflow of two independent Opus reviewers (defects; swappability of intent and guidance) and
+A workflow of two independent model reviewers (defects; swappability of intent and guidance) and
 one adjudicator reviewed the harness. The adjudicator verified each finding against the code or by
 running it. Changes made as a result, in its priority order:
 
@@ -356,7 +403,7 @@ hidden tests.
 
 ## Third review pass
 
-A third pass, two fresh Opus reviewers with no knowledge of the earlier reviews and two new frames
+A third pass, two fresh model reviewers with no knowledge of the earlier reviews and two new frames
 (a realistic agent trying to break the harness; a methodologist vetting the measurement), plus an
 adjudicator, is saved as `docs/adjudication-2026-10-20-pass3.json`. Both reviewers rated the
 harness not yet sound for the inference; the adjudicator reproduced the mechanical claims and
@@ -402,7 +449,7 @@ not a comparison.
 
 ## Fourth review pass
 
-The fourth pass used four fresh Opus reviewers, each with one lens and no knowledge of the earlier
+The fourth pass used four fresh model reviewers, each with one lens and no knowledge of the earlier
 passes (realistic agent behaviour against the harness; the exercise and grader; the SDK, Harbor
 and Reward Kit integration contract; measurement validity), plus an adjudicator who reproduced the
 claims before ruling. It is saved as `docs/adjudication-2026-10-20-pass4.json`. Verdict: sound
@@ -455,11 +502,59 @@ small pools).
 9. **How to run a comparison** so it can be interpreted: one job for all arms, the pilot gate,
    and what artifact comparisons can and cannot say (`processes/README.md`).
 
+## Fifth review pass
+
+The fifth pass reviewed the three-task generalisation (the two cloudbill tasks, `task_config.json`,
+the shared grading code and the build script) with one reviewer and one adjudicator who reproduced
+each finding before ruling and made the changes. It is saved as
+`docs/adjudication-2026-10-20-tasks.json`. Verdict: sound enough to run a pilot on; the two findings
+worth fixing first both added noise to the primary endpoint on the greenfield task rather than bias.
+Six findings were upheld (two in part), one rejected as out of scope (the workflow's own worktrees
+under `.claude/`), and three defects the reviewer did not see were found and fixed on the way.
+
+1. **The memory test was a knife edge.** On the 600,000-row export the natural two-pass design (one
+   dict entry per line item id holding its latest `last_updated`) peaked at 98.3 MB against the
+   100 MB cap, inside it by less than an interpreter or allocator difference, so one test worth 0.11
+   of the headline could flip on noise. The export is now 1,500,000 rows (about 380 MB): a bare set
+   of ids measures 183 MB, the id-to-`last_updated` map 270 MB, and the references 25 to 36 MB, so
+   the test is 80 MB clear of the cap on both sides. The numbers are in the hidden conftest and
+   `tasks/README.md`.
+2. **Raising the size exposed a generator defect.** `write_large` stamped its corrections with fixed
+   September dates while each row's own `last_updated` is its start plus five hours; past 20
+   September the original was the later version and the reference, correctly, kept it, so the
+   reference failed its own memory test on the larger export. Corrections are now stamped relative to
+   the end of the export and the oracle holds at any size.
+3. **Time boxes nest.** One run of the tool inside the hidden suite is capped at 240 s and fails that
+   test with a message; the cloudbill suites have 900 s and their `task.toml` verifier 1800 s (the
+   grader runs the hidden suite and the visible one). Before, a per-run timeout of 900 s sat inside a
+   600 s suite budget, so a slow tool lost the whole hidden suite rather than one test.
+   `scripts/test_build_tasks.py::test_the_time_boxes_nest` keeps it that way.
+4. **Hidden tests check stated rules, not display choices.** The file-order property compares the
+   service view by normalised key and money, since which spelling of a service name is shown is the
+   implementer's; accounts, months and statistics are still compared exactly. An unknown line item
+   type (a stated rejection rule) now has a generator mode, a scenario row and a test. A header-only
+   export, which the brief does not classify, may be answered empty or refused with exit 1, but the
+   test first checks that the tool answers a one-row export at all, so the untouched seed still fails
+   it. Both cloudbill suites grew by one test: 0 / 55 and 2 / 75 on the seeds, all passing on the
+   references.
+5. **Documentation.** The fake backend's docstring says its intent and reviews are ledger-shaped
+   placeholders on every task; two figures in this file were corrected.
+
+Verified after the changes: offline suites 55 passed; hidden tests 0 / 55 and 55 / 55
+(cloudbill-report, 55 s for the reference suite here), 2 / 75 and 75 / 75 (cloudbill-sqlite, 131 s),
+5 / 37 and 37 / 37 (ledger-budgets); the seven fake runs through `run_local.sh` all grade 0.961 with
+correctness 1.0; Reward Kit through `uvx` on one saved run per task gives the same numbers in 57 s,
+133 s and 5 s; `scripts/build_tasks.py --check` is clean.
+
 ### Limitations to state in any write-up
 
-- One task, with a fully specified interface contract. Every hidden test checks a stated item, so
-  correctness can only move through slips against a spec-grade brief and may sit at the ceiling in
-  every arm. Results do not generalise beyond this task.
+- Three tasks, all Python, two of them on one domain (the migration task's seed is the greenfield
+  task's reference). ledger-budgets has a fully specified interface contract, so correctness there
+  can only move through slips against a spec-grade brief and may sit at the ceiling in every arm;
+  the cloudbill briefs are lighter and leave real decisions open (encodings, duplicates, rounding,
+  the percentile method, the text layout), but every hidden test still checks a stated item or a
+  property. Report results per task; do not pool tasks. Results do not
+  generalise beyond these tasks or beyond Python.
 - The scripted stand-in adds no information beyond the brief, so the authoring dialogue's main
   mechanism (eliciting decisions the author holds) is not exercised. A null or negative result is
   not evidence against change intents where the author knows things the brief does not say.
@@ -481,8 +576,16 @@ small pools).
   confirmatory.
 - The headline weights (4:2:1) are a design choice. Per-criterion means are reported so readers
   can re-weight.
-- The task is medium-sized (about 435 reference lines, low coupling), at or below the intended
-  1000 to 2000 line range.
+- The tasks are medium-sized: ledger-budgets about 435 reference lines with low coupling;
+  cloudbill-report about 1,160 lines of package and tests; cloudbill-sqlite about 600 changed or new
+  lines on top of it.
+- The memory cap of the cloudbill tasks is measured as the child's peak RSS on the grading machine,
+  on a 1,500,000-row export (about 380 MB) rather than the 2 GB the brief names. The reference
+  peaks at about 36 MB under the 100 MB cap and the smallest per-line-item design (a bare set of
+  ids) at about 183 MB, so the test is robust to ordinary interpreter and allocator differences in
+  both directions; at 600,000 rows a per-id map sat at 98 MB and would have passed or failed by
+  noise. A design that passes here would still need to be streaming at 2 GB; the test cannot tell
+  a design that spills to disk from one that happens to fit.
 - Only Harbor runs count. Local real-model runs are not sandboxed from the repository.
 - Server-side model behaviour (default reasoning effort, A/B treatments, alias updates) is outside
   the harness's control. Arms are interleaved in one job and the recorded signals are checked for
@@ -504,6 +607,16 @@ verifier survival on malformed reviewer output; the Harbor agent classes import 
 creates a session; `create_session` accepts `excluded_tools`, `skip_custom_instructions`,
 `additional_directories`, `on_event`, per-session `model`; `send_and_wait` accepts
 `response_schema`; `get_events` is a coroutine and is awaited.
+
+For the three-task generalisation, also verified offline: ledger-budgets grades exactly as before
+(the three fake runs score 0.961 with every value in `reward-details.json` unchanged); for each
+cloudbill task the hidden tests against the seed (0 of 55, 2 of 75) and the reference (55 of 55,
+75 of 75); fake runs of baseline and change-intent-v1 on both new tasks (correctness 1.0, headline
+0.961); Reward Kit through `uvx` via each task's `test.sh`; every `task.toml` validates against
+Harbor's `TaskConfig`, the agent classes import against Harbor and resolve each task from its
+instruction; and `scripts/test_build_tasks.py` (generated files in sync, every task config valid
+and read by both the driver and the grader, the greenfield task without the seed criterion, the
+agent's task selection, the continuation rule on the task's code directories, the overlay guard).
 
 Not verified: a real model turn through the SDK (the environment's GitHub token has no Copilot
 entitlement, the failure is `Session was not created with authentication info or custom

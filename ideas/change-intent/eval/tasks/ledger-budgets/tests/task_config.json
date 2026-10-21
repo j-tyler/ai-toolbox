@@ -1,0 +1,12 @@
+{
+  "name": "ledger-budgets",
+  "type": "extension",
+  "language": "python",
+  "package": "ledger",
+  "code_dirs": ["ledger"],
+  "visible_test_command": ["python", "-m", "pytest", "tests"],
+  "seed_tests": ["tests/test_money.py", "tests/test_cli.py"],
+  "seed_test_count": 17,
+  "hidden_timeout_sec": 240,
+  "fake_reference": "solution"
+}

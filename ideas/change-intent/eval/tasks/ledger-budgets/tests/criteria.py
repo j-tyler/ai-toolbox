@@ -1,9 +1,17 @@
-"""Custom Reward Kit criteria for the ledger-budgets task.
+"""Custom Reward Kit criteria, shared by every task under tasks/.
 
-Every criterion receives the workspace path (``/app`` in Harbor) and returns a float in [0, 1] or a
-bool. Nothing here imports the workspace's code; test runs happen in a subprocess under the
-workspace's own interpreter (``LEDGER_PYTHON``, set by tests/test.sh before uvx changes PATH), so a
-broken workspace cannot break the verifier and a missing pytest fails loudly instead of scoring 0.
+GENERATED COPY when you read this under tasks/<task>/tests/: the source is eval/grading/criteria.py,
+and scripts/build_tasks.py copies it into each task's tests/ directory (Harbor copies only tests/ at
+verification time). Edit the source and re-run the build; scripts/test_build_tasks.py fails when a
+copy drifts.
+
+Everything task-specific comes from ``task_config.json`` next to this file (schema: tasks/README.md):
+the code directories, the visible test command, the seed's own test files and their count, and the
+hidden suite's time box. Every criterion receives the workspace path (``/app`` in Harbor) and
+returns a float in [0, 1] or a bool. Nothing here imports the workspace's code; test runs happen in
+a subprocess under the workspace's own interpreter (``EVAL_PYTHON``, or the older ``LEDGER_PYTHON``,
+set by tests/test.sh before uvx changes PATH), so a broken workspace cannot break the verifier and a
+missing pytest fails loudly instead of scoring 0.
 
 Groups (see the reward.toml files):
   correctness   hidden acceptance tests, regression, constraints      -> headline
@@ -29,11 +37,36 @@ from pathlib import Path
 
 from rewardkit import criterion
 
-HIDDEN = Path(__file__).resolve().parent / "__hidden"  # "__" prefix: Reward Kit skips it as a criteria group
-SEED = Path(__file__).resolve().parent / "__seed"  # pristine copies of the seed's own tests
-SEED_TESTS = ("tests/test_money.py", "tests/test_cli.py")
-SEED_TEST_COUNT = 17
-PYTEST_TIMEOUT_SEC = 240
+HERE = Path(__file__).resolve().parent
+HIDDEN = HERE / "__hidden"  # "__" prefix: Reward Kit skips it as a criteria group
+SEED = HERE / "__seed"  # pristine copies of the seed's own tests (absent for a greenfield task)
+TASK_CONFIG_PATH = HERE / "task_config.json"
+
+
+def load_task_config(path: Path = TASK_CONFIG_PATH) -> dict:
+    """The per-task contract shared with the driver. A missing or malformed file is a broken task, so it
+    fails loudly at import rather than grading against another task's settings."""
+    try:
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"cannot read the task configuration {path}: {exc}") from exc
+    for key in ("name", "code_dirs", "visible_test_command"):
+        if key not in cfg:
+            raise RuntimeError(f"{path} lacks required key {key!r}")
+    if list(cfg["visible_test_command"][1:3]) != ["-m", "pytest"]:
+        raise RuntimeError(f"{path}: visible_test_command must be `python -m pytest ...`, got {cfg['visible_test_command']}")
+    cfg.setdefault("seed_tests", [])
+    cfg.setdefault("seed_test_count", 0)
+    cfg.setdefault("hidden_timeout_sec", 240)
+    return cfg
+
+
+TASK = load_task_config()
+SEED_TESTS = tuple(TASK["seed_tests"])
+SEED_TEST_COUNT = int(TASK["seed_test_count"] or 0)
+CODE_DIRS = tuple(d.strip("/") for d in TASK["code_dirs"])
+VISIBLE_TEST_ARGS = list(TASK["visible_test_command"][3:])  # what follows `python -m pytest`
+PYTEST_TIMEOUT_SEC = float(TASK["hidden_timeout_sec"])
 _PYTEST_LOCKS: dict = {}
 
 
@@ -41,7 +74,7 @@ _PYTEST_LOCKS: dict = {}
 
 def _python() -> str:
     """The workspace's interpreter (has pytest). The verifier itself may run under uvx with its own venv."""
-    return os.environ.get("LEDGER_PYTHON") or shutil.which("python3") or sys.executable
+    return os.environ.get("EVAL_PYTHON") or os.environ.get("LEDGER_PYTHON") or shutil.which("python3") or sys.executable
 
 
 _PYTEST_RESULTS: dict = {}
@@ -69,7 +102,7 @@ def _throwaway_copy(workspace: str) -> str:
     handoff criteria inspect, and so concurrent criteria never race on the same files."""
     with _COPY_GUARD:
         if workspace not in _COPIES:
-            dst = tempfile.mkdtemp(prefix="ledger-grade-")
+            dst = tempfile.mkdtemp(prefix="eval-grade-")
             shutil.copytree(workspace, dst, dirs_exist_ok=True,
                             ignore=shutil.ignore_patterns(".git", ".eval", "__pycache__", ".pytest_cache"))
             _COPIES[workspace] = dst
@@ -80,7 +113,8 @@ def _pytest_run(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
     """Run pytest and count outcomes from its JUnit XML (never from the free-text output, which a failing
     assertion message such as '1 skipped' can corrupt). Falls back to the final summary line only."""
     copy = _throwaway_copy(cwd)
-    env = dict(os.environ, LEDGER_WORKSPACE=copy, PYTHONDONTWRITEBYTECODE="1")
+    # EVAL_WORKSPACE is the task-neutral name; LEDGER_WORKSPACE stays for the ledger task's hidden conftest.
+    env = dict(os.environ, EVAL_WORKSPACE=copy, LEDGER_WORKSPACE=copy, PYTHONDONTWRITEBYTECODE="1")
     with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as fh:
         junit = fh.name
     try:
@@ -93,7 +127,7 @@ def _pytest_run(args: tuple[str, ...], cwd: str) -> tuple[int, int, str]:
         return 0, 1, "timeout"
     out = proc.stdout + proc.stderr
     if "No module named pytest" in out:
-        raise RuntimeError(f"pytest is not installed for {_python()}; set LEDGER_PYTHON to the workspace interpreter")
+        raise RuntimeError(f"pytest is not installed for {_python()}; set EVAL_PYTHON to the workspace interpreter")
     try:
         root = ET.parse(junit).getroot()
         suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
@@ -139,14 +173,18 @@ def hidden_tests_all_pass(workspace: Path) -> bool:
 @criterion(shared=True)
 def existing_tests_still_pass(workspace: Path) -> bool:
     """The seed project's own tests, run from PRISTINE copies (tests/__seed), must still pass. The agent's
-    copies may have been edited to match changed behaviour; those edits are reported by seed_tests_modified."""
+    copies may have been edited to match changed behaviour; those edits are reported by seed_tests_modified.
+    A task whose seed has no tests (greenfield) does not register this criterion: correctness/regression.py
+    calls it only when task_config.json lists seed tests."""
+    if not SEED_TESTS:
+        return True
     if not all((workspace / t).exists() for t in SEED_TESTS):
         return False
     copy = Path(_throwaway_copy(str(workspace)))
     # Staged OUTSIDE tests/ so `pytest tests` (agent_tests_pass) never collects a second test_money.py.
     staged = copy / ".seed_pristine"
     staged.mkdir(exist_ok=True)
-    for src in SEED.glob("test_*.py"):
+    for src in SEED.glob("*.py"):  # every pristine file, so a seed conftest.py travels with its tests
         shutil.copy2(src, staged / src.name)
     passed, total, _ = _pytest([str(staged)], workspace)
     return total >= SEED_TEST_COUNT and passed == total
@@ -155,6 +193,8 @@ def existing_tests_still_pass(workspace: Path) -> bool:
 @criterion(shared=True)
 def seed_tests_modified(workspace: Path) -> bool:
     """Diagnostic: did the agent edit the seed's own test files?"""
+    if not SEED_TESTS:
+        return False
     out = _git(workspace, "log", "--format=%H", "--", *SEED_TESTS)
     commits = [c for c in out.splitlines() if c.strip()]
     return len(commits) > 1  # more than the seed commit touched them
@@ -162,17 +202,19 @@ def seed_tests_modified(workspace: Path) -> bool:
 
 @criterion(shared=True)
 def agent_tests_pass(workspace: Path) -> bool:
-    """Whatever tests the agent left in tests/ pass. A red suite at hand-off is a defect."""
-    passed, total, _ = _pytest(["tests"], workspace)
+    """Whatever tests the agent left behind pass, run as the task's visible test command (task_config.json).
+    A red suite at hand-off is a defect; no tests at all fails too."""
+    passed, total, _ = _pytest(VISIBLE_TEST_ARGS, workspace)
     return total > 0 and passed == total
 
 
 @criterion(shared=True)
 def stdlib_only(workspace: Path) -> bool:
-    """No third-party imports anywhere under ledger/ (a stated constraint of the brief). Parsed with ast, so
-    docstrings and comments cannot trip it; a file that does not parse fails the constraint."""
-    stdlib = set(sys.stdlib_module_names) | {"ledger"}
-    for path in (workspace / "ledger").rglob("*.py"):
+    """No third-party imports anywhere under the task's code directories (a stated constraint of every brief).
+    Parsed with ast, so docstrings and comments cannot trip it; a file that does not parse fails the constraint."""
+    local = {Path(d).parts[0] for d in CODE_DIRS} | ({TASK["package"]} if TASK.get("package") else set())
+    stdlib = set(sys.stdlib_module_names) | local
+    for path in (p for d in CODE_DIRS for p in sorted((workspace / d).rglob("*.py"))):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
         except SyntaxError:
